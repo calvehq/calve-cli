@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ✓ healthy                                                                 v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePacks ──────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1                           ││cpk_…mmj44nesmebyu3s65zi                   │
+│  Overview        5 ││                                                                                           ││Lint sweep                                 │
+│  Work              ││ID               State           Title                                 Changed    Updated  ││                                           │
+│  Change Graph      ││cpk_…byu3s65zi   ○ OPEN          Lint sweep                            0 files    1m       ││State       ○ OPEN                         │
+│› ChangePacks     6 ││cpk_…7sqtlkoba   ! QUARANTINED   Experimental transport                0 files    1m       ││Generation  2                              │
+│  Baselines         ││cpk_…z75ayzoee   ○ OPEN          Refactor verification rules           1 files    1m       ││Created     1m ago                         │
+│  Evidence          ││cpk_…ljusoarca   ◆ SEALED        Fix daemon race condition             1 files    1m       ││Changed     0 files  +0 -0                 │
+│  Events            ││cpk_…x2ltg27pa   ◆ SEALED        Add remote conformance runner         2 files    1m       ││Evidence    0                              │
+│                    ││cpk_…yscuttedq   ✓ PROMOTED      Update protocol schemas               2 files    1m       ││                                           │
+│ SYSTEM             ││                                                                                           ││! Promote: pack is OPEN; seal and qualify  │
+│  Projects          ││                                                                                           ││it first                                   │
+│  Inbox           2 ││                                                                                           ││x explain                                  │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Seal candidate                           │
+│                    ││                                                                                           ││  Abandon                                  │
+│                    ││                                                                                           ││  Quarantine                               │
+│                    ││                                                                                           ││  a all actions                            │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ ↑↓ select  enter open  a actions  x explain  / filter  ^P commands  : command  ? help

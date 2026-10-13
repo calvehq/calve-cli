@@ -1,0 +1,1559 @@
+//! Application use cases behind the versioned API; the CLI, daemon and console all call
+//! [`execute`].
+
+use std::path::PathBuf;
+use std::{fs::OpenOptions, path::Path};
+
+use openaevc_protocol::{Digest, ResourceRef, RevisionRelation};
+use openaevc_sdk::OpenAevcClient;
+use serde_json::{Value, json};
+
+pub use calve_api::*;
+
+use crate::compatibility;
+use crate::config::{ConfigPaths, Scope};
+use crate::registry::Registry;
+use crate::{Error, Project, Result};
+
+/// Maps product errors onto stable API fault codes.
+pub fn fault(error: Error) -> Fault {
+    match error {
+        Error::Protocol(protocol) => Fault {
+            code: protocol.code.as_str().into(),
+            message: protocol.message.clone(),
+            retryable: protocol.retryable,
+            detail: serde_json::to_value(&protocol).ok(),
+        },
+        Error::Message(message) => Fault {
+            code: "PRODUCT_ERROR".into(),
+            message,
+            retryable: false,
+            detail: None,
+        },
+        Error::Busy(message) => Fault {
+            code: "PROJECT_BUSY".into(),
+            message,
+            retryable: true,
+            detail: None,
+        },
+        Error::Io(error) => Fault {
+            code: "IO_ERROR".into(),
+            message: error.to_string(),
+            retryable: false,
+            detail: None,
+        },
+        Error::Database(error) => Fault {
+            code: "DATABASE_ERROR".into(),
+            message: error.to_string(),
+            retryable: false,
+            detail: None,
+        },
+        other => Fault {
+            code: "INVALID_CONFIGURATION".into(),
+            message: other.to_string(),
+            retryable: false,
+            detail: None,
+        },
+    }
+}
+
+fn workspace_command(registry: &mut Registry, command: WorkspaceCommand) -> Result<Value> {
+    Ok(match command {
+        WorkspaceCommand::List => json!(registry.list()?),
+        WorkspaceCommand::Show { workspace } => json!(match workspace {
+            Some(name) => registry.show(&name)?,
+            None => registry.selected()?,
+        }),
+        WorkspaceCommand::Create { name } => json!(registry.create(&name)?),
+        WorkspaceCommand::Rename { workspace, name } => json!(registry.rename(&workspace, &name)?),
+        WorkspaceCommand::Select { workspace } => json!(registry.select(&workspace)?),
+        WorkspaceCommand::AddProject { workspace, project } => {
+            json!(registry.add_project(&workspace, &project)?)
+        }
+        WorkspaceCommand::RemoveProject { workspace, project } => {
+            json!(registry.remove_project(&workspace, &project)?)
+        }
+        WorkspaceCommand::SetDefaultProject { workspace, project } => {
+            json!(registry.set_default_project(&workspace, &project)?)
+        }
+        WorkspaceCommand::Delete { workspace } => {
+            registry.delete(&workspace)?;
+            json!({"deleted":workspace})
+        }
+    })
+}
+
+fn project_command(
+    registry: &mut Registry,
+    command: ProjectCommand,
+    workspace: Option<&str>,
+) -> Result<Value> {
+    Ok(match command {
+        ProjectCommand::List => json!(registry.projects()?),
+        ProjectCommand::Show { project } => json!(registry.project(&project)?),
+        ProjectCommand::Register { path } => {
+            let project = Project::peek(&path)?;
+            json!(registry.register_project(&project, workspace)?)
+        }
+        ProjectCommand::Unregister { project } => {
+            registry.unregister(&project)?;
+            json!({"unregistered":project})
+        }
+        ProjectCommand::Relocate { project, path } => json!(registry.relocate(&project, &path)?),
+        ProjectCommand::AdoptCopy { .. } => unreachable!("adopt-copy is dispatched asynchronously"),
+        ProjectCommand::Rename { project, name } => {
+            let entry = registry.project(&project)?;
+            let _writer = project_writer(&entry.path)?;
+            evict_project(&entry.path);
+            let mut opened = Project::open(&entry.path)?;
+            registry.ensure_project_path(&opened.identity, &opened.root)?;
+            let previous = entry.name;
+            registry.rename_project(&entry.project_id, &name)?;
+            if let Err(error) = opened.rename(&name) {
+                let _ = registry.rename_project(&entry.project_id, &previous);
+                return Err(error);
+            }
+            json!(registry.project(&entry.project_id)?)
+        }
+        ProjectCommand::Identity { project } => {
+            let entry = registry.project(&project)?;
+            json!(Project::peek(&entry.path)?.identity)
+        }
+        ProjectCommand::Health { project } => project_health(registry, &project)?,
+    })
+}
+
+fn project_health(registry: &Registry, identifier: &str) -> Result<Value> {
+    let supplied = Path::new(identifier);
+    let entry = if supplied.exists() {
+        match Project::peek(supplied) {
+            Ok(candidate) => {
+                let registered = registry.project(&candidate.identity.project_id).ok();
+                return Ok(match registered {
+                    Some(entry) => health_at_registered_path(registry, entry, candidate),
+                    None => {
+                        json!({"status":"unregistered","project_id":candidate.identity.project_id,
+                        "namespace_id":candidate.identity.namespace_id,"candidate_path":candidate.root,
+                        "findings":[{"code":"UNREGISTERED","message":"Project is not registered in a Workspace"}]})
+                    }
+                });
+            }
+            Err(error) => {
+                return Ok(json!({"status":"invalid_project","candidate_path":supplied,
+                    "findings":[{"code":"PROJECT_OPEN_FAILED","message":error.to_string()}]}));
+            }
+        }
+    } else {
+        registry.project(identifier)?
+    };
+    if !entry.path.exists() {
+        return Ok(
+            json!({"status":"missing_path","project_id":entry.project_id,
+            "namespace_id":entry.namespace_id,"registered_path":entry.path,
+            "findings":[{"code":"REGISTERED_PATH_MISSING","message":"Registered Project path does not exist; relocate the Project if it was moved"}]}),
+        );
+    }
+    match Project::peek(&entry.path) {
+        Ok(candidate) => Ok(health_at_registered_path(registry, entry, candidate)),
+        Err(error) => Ok(
+            json!({"status":"invalid_project","project_id":entry.project_id,
+            "registered_path":entry.path,"findings":[{"code":"PROJECT_OPEN_FAILED","message":error.to_string()}]}),
+        ),
+    }
+}
+
+fn health_at_registered_path(
+    registry: &Registry,
+    entry: crate::registry::ProjectEntry,
+    candidate: crate::ProjectInfo,
+) -> Value {
+    let same_identity = entry.project_id == candidate.identity.project_id
+        && entry.namespace_id == candidate.identity.namespace_id.to_string();
+    let same_path = entry.path == candidate.root;
+    let status = if !same_identity
+        || registry
+            .ensure_project_path(&candidate.identity, &candidate.root)
+            .is_err()
+            && same_path
+    {
+        "identity_conflict"
+    } else if !same_path && entry.path.exists() {
+        "duplicate_copy"
+    } else if !same_path {
+        "relocation_needed"
+    } else if entry.name != candidate.display_name {
+        "name_out_of_sync"
+    } else {
+        "healthy"
+    };
+    let findings = match status {
+        "identity_conflict" => vec![
+            json!({"code":"IDENTITY_CONFLICT","message":"Project identity or Namespace does not match its registration"}),
+        ],
+        "duplicate_copy" => vec![
+            json!({"code":"DUPLICATE_COPY","message":"Another live path is registered with this Project identity; writes to this copy are blocked"}),
+        ],
+        "relocation_needed" => vec![
+            json!({"code":"RELOCATION_NEEDED","message":"Registered path is missing; run project relocate after confirming this is the moved Project"}),
+        ],
+        "name_out_of_sync" => vec![
+            json!({"code":"NAME_OUT_OF_SYNC","message":"Registry and Project display names differ; run project rename to reconcile them"}),
+        ],
+        _ => vec![],
+    };
+    json!({"status":status,"project_id":candidate.identity.project_id,
+        "namespace_id":candidate.identity.namespace_id,"registered_path":entry.path,
+        "candidate_path":candidate.root,"name":candidate.display_name,"findings":findings})
+}
+
+/// Every project-scoped command takes the writer lock; queries never do.
+fn mutates_project(command: &Action) -> bool {
+    command.kind() == OperationKind::Command
+}
+
+fn resolve_project_path(
+    registry: &Registry,
+    requested: Option<PathBuf>,
+    workspace: Option<&str>,
+) -> Result<PathBuf> {
+    if let Some(value) = requested {
+        if value.exists() {
+            return Ok(value);
+        }
+        return Ok(registry.project(&value.to_string_lossy())?.path);
+    }
+    let cwd = std::env::current_dir()?;
+    if Project::discover(&cwd).is_ok() {
+        return Ok(cwd);
+    }
+    let selected = match workspace {
+        Some(name) => registry.show(name)?,
+        None => registry.selected()?,
+    };
+    let id = selected.workspace.default_project_id.ok_or_else(|| {
+        Error::Message("no project found and this workspace has no default project".into())
+    })?;
+    Ok(registry.project(&id)?.path)
+}
+
+fn config_command(
+    registry: &Registry,
+    command: ConfigCommand,
+    requested: Option<PathBuf>,
+    workspace: Option<&str>,
+    override_file: Option<PathBuf>,
+) -> Result<Value> {
+    let view = match workspace {
+        Some(name) => registry.show(name)?,
+        None => registry.selected()?,
+    };
+    let project_root = if requested.is_some() {
+        Some(Project::discover(&resolve_project_path(
+            registry, requested, workspace,
+        )?)?)
+    } else {
+        resolve_project_path(registry, None, workspace)
+            .ok()
+            .and_then(|path| Project::discover(&path).ok())
+    };
+    let paths =
+        ConfigPaths::for_context(&view.workspace.id, project_root.as_deref(), override_file)?;
+    let ensure_project_write = || -> Result<()> {
+        let root = project_root
+            .as_deref()
+            .ok_or_else(|| Error::Message("project scope requires a Project".into()))?;
+        let project = Project::peek(root)?;
+        registry.ensure_project_path(&project.identity, &project.root)
+    };
+    let mut _writer = None;
+    Ok(match command {
+        ConfigCommand::List => json!(paths.load()?),
+        ConfigCommand::Get { key } => paths.get(&key)?,
+        ConfigCommand::Set { key, value, scope } => {
+            let scope: Scope = scope.parse()?;
+            if scope == Scope::Project {
+                ensure_project_write()?;
+                _writer = Some(project_writer(
+                    project_root.as_deref().expect("checked project root"),
+                )?);
+            }
+            paths.set(scope, &key, &value)?;
+            json!({"key":key,"value":paths.get(&key)?,"scope":scope.to_string()})
+        }
+        ConfigCommand::Unset { key, scope } => {
+            let scope: Scope = scope.parse()?;
+            if scope == Scope::Project {
+                ensure_project_write()?;
+                _writer = Some(project_writer(
+                    project_root.as_deref().expect("checked project root"),
+                )?);
+            }
+            paths.unset(scope, &key)?;
+            json!({"unset":key,"scope":scope.to_string()})
+        }
+        ConfigCommand::Validate => {
+            let effective = paths.load()?;
+            json!({"valid":true,"warnings":effective.warnings,"sources":effective.sources})
+        }
+        ConfigCommand::EditPath { scope } => {
+            let scope: Scope = scope.parse()?;
+            json!({"path":paths.path(scope)?})
+        }
+    })
+}
+
+/// Package-cache and catalog commands are machine-wide; `list` is too unless it asks for a
+/// Project's registrations.
+fn extension_is_global(command: &ExtensionCommand, has_project: bool) -> bool {
+    match command {
+        ExtensionCommand::List { installed } => *installed || !has_project,
+        ExtensionCommand::Catalogs
+        | ExtensionCommand::CatalogTrust { .. }
+        | ExtensionCommand::CatalogUntrust { .. }
+        | ExtensionCommand::Search { .. }
+        | ExtensionCommand::Install { .. }
+        | ExtensionCommand::Uninstall { .. } => true,
+        _ => false,
+    }
+}
+
+/// Config paths for the selected Workspace and, when one resolves, the current Project.
+fn context_config(
+    registry: &Registry,
+    requested: Option<PathBuf>,
+    workspace: Option<&str>,
+    override_file: Option<PathBuf>,
+) -> Result<ConfigPaths> {
+    let view = match workspace {
+        Some(name) => registry.show(name)?,
+        None => registry.selected()?,
+    };
+    let root = if requested.is_some() {
+        Some(Project::discover(&resolve_project_path(
+            registry, requested, workspace,
+        )?)?)
+    } else {
+        resolve_project_path(registry, None, workspace)
+            .ok()
+            .and_then(|path| Project::discover(&path).ok())
+    };
+    ConfigPaths::for_context(&view.workspace.id, root.as_deref(), override_file)
+}
+
+fn provider_command(
+    registry: &Registry,
+    command: ProviderCommand,
+    requested: Option<PathBuf>,
+    workspace: Option<&str>,
+    override_file: Option<PathBuf>,
+) -> Result<Value> {
+    use crate::config::{ProviderKind, ProviderProfile};
+    use crate::providers;
+    let paths = context_config(registry, requested, workspace, override_file)?;
+    let config = paths.load()?;
+    let existing = |id: &str| -> Result<ProviderProfile> {
+        config
+            .providers
+            .get(id)
+            .cloned()
+            .ok_or_else(|| Error::Message(format!("provider {id} is not configured")))
+    };
+    let apply = |profile: &mut ProviderProfile, fields: ProviderFields| -> Result<()> {
+        if let Some(kind) = fields.kind {
+            profile.kind = if kind == "stdio-agent" {
+                ProviderKind::StdioAgent
+            } else {
+                ProviderKind::LocalProcess
+            };
+        }
+        if fields.name.is_some() {
+            profile.name = fields.name;
+        }
+        if fields.executable.is_some() {
+            profile.executable = fields.executable;
+        }
+        if !fields.args.is_empty() {
+            profile.args = fields.args;
+        }
+        if !fields.env.is_empty() {
+            profile.env = fields.env;
+        }
+        if !fields.secrets.is_empty() {
+            profile.secrets.clear();
+            for pair in fields.secrets {
+                let (name, reference) = pair.split_once('=').ok_or_else(|| {
+                    Error::Message(format!("secret {pair:?} must be NAME=REFERENCE"))
+                })?;
+                profile.secrets.insert(name.into(), reference.into());
+            }
+        }
+        if fields.default_harness.is_some() {
+            profile.default_harness = fields.default_harness;
+        }
+        if fields.timeout_ms.is_some() {
+            profile.timeout_ms = fields.timeout_ms;
+        }
+        if fields.max_output_bytes.is_some() {
+            profile.max_output_bytes = fields.max_output_bytes;
+        }
+        if !fields.projects.is_empty() {
+            profile.projects = fields.projects;
+        }
+        Ok(())
+    };
+    let set_enabled = |id: &str, enabled: bool| -> Result<Value> {
+        let mut profile = existing(id)?;
+        profile.enabled = enabled;
+        providers::put_provider(&paths, None, id, profile)?;
+        Ok(json!({"id":id,"enabled":enabled}))
+    };
+    match command {
+        ProviderCommand::List => Ok(providers::list_providers(&config)),
+        ProviderCommand::Show { id } => providers::show_provider(&config, &id),
+        ProviderCommand::Test { id } => providers::test_provider(&config, &id),
+        ProviderCommand::Add { id, fields, scope } => {
+            if config.providers.contains_key(&id) {
+                return Err(Error::Message(format!(
+                    "provider {id} already exists; use provider edit"
+                )));
+            }
+            let kind = fields
+                .kind
+                .clone()
+                .ok_or_else(|| Error::Message("provider add requires --kind".into()))?;
+            let mut profile = ProviderProfile {
+                name: None,
+                kind: if kind == "stdio-agent" {
+                    ProviderKind::StdioAgent
+                } else {
+                    ProviderKind::LocalProcess
+                },
+                enabled: true,
+                executable: None,
+                args: vec![],
+                env: vec![],
+                secrets: Default::default(),
+                default_harness: None,
+                timeout_ms: None,
+                max_output_bytes: None,
+                projects: vec![],
+            };
+            apply(&mut profile, fields)?;
+            providers::put_provider(&paths, Some(scope.parse()?), &id, profile)
+        }
+        ProviderCommand::Edit { id, fields } => {
+            let mut profile = existing(&id)?;
+            apply(&mut profile, fields)?;
+            providers::put_provider(&paths, None, &id, profile)
+        }
+        ProviderCommand::Enable { id } => set_enabled(&id, true),
+        ProviderCommand::Disable { id } => set_enabled(&id, false),
+        ProviderCommand::Remove { id } => {
+            let scope = paths.provider_scope(&id)?;
+            paths.remove_provider(scope, &id)?;
+            Ok(json!({"removed":id,"scope":scope.to_string()}))
+        }
+    }
+}
+
+thread_local! {
+    /// Daemon mode keeps one open Project, and so one OpenAEVC runtime, per root (PLAN §11.1),
+    /// letting queries proceed while a long execution runs. Embedded mode opens per request.
+    static PROJECTS: std::cell::RefCell<Option<std::collections::HashMap<PathBuf, std::rc::Rc<Project>>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Called once by the daemon on its request thread.
+pub fn enable_project_cache() {
+    PROJECTS.with(|cache| *cache.borrow_mut() = Some(std::collections::HashMap::new()));
+}
+
+fn open_project(root: &Path) -> Result<std::rc::Rc<Project>> {
+    PROJECTS.with(|cell| {
+        let mut cache = cell.borrow_mut();
+        let Some(map) = cache.as_mut() else {
+            return Ok(std::rc::Rc::new(Project::open(root)?));
+        };
+        if let Some(project) = map.get(root) {
+            if root.join(".calve/project.toml").is_file() {
+                return Ok(project.clone());
+            }
+            map.remove(root);
+        }
+        let project = std::rc::Rc::new(Project::open(root)?);
+        map.insert(root.to_path_buf(), project.clone());
+        Ok(project)
+    })
+}
+
+/// Releases the cached runtime so an exclusive operation can open the data root.
+pub fn evict_project(root: &Path) {
+    PROJECTS.with(|cell| {
+        if let Some(map) = cell.borrow_mut().as_mut() {
+            map.remove(root);
+        }
+    });
+}
+
+pub(crate) fn project_writer(root: &Path) -> Result<std::fs::File> {
+    let lock = root.join(".calve/writer.lock");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock)?;
+    file.try_lock().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => Error::Busy(root.display().to_string()),
+        std::fs::TryLockError::Error(error) => Error::Io(error),
+    })?;
+    Ok(file)
+}
+
+/// Executes one typed request. The envelope always returns a correlated response, including
+/// validation and protocol failures, so it can be carried over a local IPC connection unchanged.
+/// `pack.seal`-style name of an action, derived from its serialized shape.
+pub fn action_name(action: &Action) -> String {
+    let mut parts = Vec::new();
+    let mut value = serde_json::to_value(action).unwrap_or(Value::Null);
+    loop {
+        match value {
+            Value::String(name) => {
+                parts.push(name.to_lowercase());
+                break;
+            }
+            Value::Object(map) if !map.is_empty() => {
+                let (key, inner) = map.into_iter().next().expect("non-empty");
+                if key != "command" && key != "view" && key != "options" && key != "filter" {
+                    parts.push(key.to_lowercase());
+                }
+                value = match inner {
+                    Value::Object(fields) => fields
+                        .get("command")
+                        .or_else(|| fields.get("view"))
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                    other => other,
+                };
+            }
+            _ => break,
+        }
+    }
+    parts.join(".")
+}
+
+pub async fn execute(request: Request) -> Response {
+    let started = std::time::Instant::now();
+    let name = action_name(&request.action);
+    let project = request.scope.project.clone();
+    let response = execute_inner(request).await;
+    let (outcome, code) = match &response.outcome {
+        Outcome::Ok { .. } => ("ok", None),
+        Outcome::Error { error } => ("error", Some(error.code.clone())),
+    };
+    crate::observe::record(
+        "request",
+        json!({"request_id":response.request_id,"correlation_id":response.correlation_id,
+            "action":name,"project":project,"duration_ms":started.elapsed().as_millis() as u64,
+            "outcome":outcome,"code":code}),
+    );
+    response
+}
+
+async fn execute_inner(request: Request) -> Response {
+    let request_id = request.request_id;
+    let correlation_id = request.correlation_id;
+    let outcome = if request.api_version != API_VERSION {
+        Outcome::Error {
+            error: Fault {
+                code: "UNSUPPORTED_API_VERSION".into(),
+                message: format!(
+                    "API version {} is unsupported; expected {API_VERSION}",
+                    request.api_version
+                ),
+                retryable: false,
+                detail: None,
+            },
+        }
+    } else if request.payload_version != PAYLOAD_VERSION {
+        Outcome::Error {
+            error: Fault {
+                code: "UNSUPPORTED_PAYLOAD_VERSION".into(),
+                message: format!(
+                    "payload version {} is unsupported; expected {PAYLOAD_VERSION}",
+                    request.payload_version
+                ),
+                retryable: false,
+                detail: None,
+            },
+        }
+    } else if request.operation_kind != request.action.kind() {
+        Outcome::Error {
+            error: Fault {
+                code: "INVALID_OPERATION_KIND".into(),
+                message: "operation kind does not match action".into(),
+                retryable: false,
+                detail: None,
+            },
+        }
+    } else {
+        match dispatch(request).await {
+            Ok(value) => Outcome::Ok { value },
+            Err(error) => Outcome::Error {
+                error: fault(error),
+            },
+        }
+    };
+    Response {
+        api_version: API_VERSION,
+        request_id,
+        correlation_id,
+        outcome,
+    }
+}
+
+async fn dispatch(request: Request) -> Result<Value> {
+    let Request {
+        actor: Actor::LocalUser,
+        scope,
+        action,
+        ..
+    } = request;
+    if matches!(action, Action::Version) {
+        return Ok(json!({
+            "calve": env!("CARGO_PKG_VERSION"),
+            "openaevc_crate_version": compatibility::OPENAEVC_CRATE_VERSION,
+            "openaevc_revision": compatibility::OPENAEVC_REVISION,
+            "protocol": openaevc_protocol::PROTOCOL_VERSION.to_string(),
+            "api_version": API_VERSION,
+        }));
+    }
+    if matches!(action, Action::Daemon { .. } | Action::Console) {
+        return Err(Error::Message(
+            "console and daemon lifecycle are frontend actions".into(),
+        ));
+    }
+    let mut registry = Registry::open_default()?;
+    let workspace = scope.workspace.as_deref();
+    let action = match action {
+        Action::Version => unreachable!(),
+        Action::Init {
+            path,
+            name,
+            no_register,
+            nested,
+        } => {
+            let target = path.or(scope.project).unwrap_or(std::env::current_dir()?);
+            if target.exists() {
+                registry.assert_path_available(&std::fs::canonicalize(&target)?)?;
+            }
+            let project = Project::init_with(&target, name.as_deref(), nested).await?;
+            if !no_register {
+                registry.register_project(&project.info(), workspace)?;
+            }
+            return init_report(&project, !no_register);
+        }
+        Action::Workspace { command } => return workspace_command(&mut registry, command),
+        Action::Project {
+            command: ProjectCommand::AdoptCopy { path, name },
+        } => {
+            let (project, mut summary) = crate::adopt::adopt_copy(&path, name.as_deref()).await?;
+            summary["registration"] = json!(registry.register_project(&project.info(), workspace)?);
+            return Ok(summary);
+        }
+        Action::Project { command } => return project_command(&mut registry, command, workspace),
+        Action::Extension { command } if extension_is_global(&command, scope.project.is_some()) => {
+            use crate::extensions;
+            return match command {
+                ExtensionCommand::List { .. } => extensions::list_installed(),
+                ExtensionCommand::Catalogs => extensions::list_catalogs(),
+                ExtensionCommand::CatalogTrust {
+                    name,
+                    location,
+                    root_digest,
+                } => extensions::trust_catalog(&name, &location, root_digest.as_deref()),
+                ExtensionCommand::CatalogUntrust { name } => extensions::untrust_catalog(&name),
+                ExtensionCommand::Search { query } => extensions::search(query.as_deref()),
+                ExtensionCommand::Install { id, version } => {
+                    extensions::install(&id, version.as_deref())
+                }
+                ExtensionCommand::Uninstall { id, version } => {
+                    extensions::uninstall(&id, version.as_deref())
+                }
+                _ => unreachable!(),
+            };
+        }
+        Action::Provider { command } => {
+            return provider_command(
+                &registry,
+                command,
+                scope.project,
+                workspace,
+                scope.config_file,
+            );
+        }
+        Action::Harness { command } => {
+            let paths = context_config(&registry, scope.project, workspace, scope.config_file)?;
+            let config = paths.load()?;
+            return match command {
+                HarnessCommand::List => Ok(crate::providers::list_harnesses(&config)),
+                HarnessCommand::Show { id } => crate::providers::show_harness(&config, &id),
+                HarnessCommand::Test { id } => crate::providers::test_harness(&config, &id),
+            };
+        }
+        Action::Config { command } => {
+            return config_command(
+                &registry,
+                command,
+                scope.project,
+                workspace,
+                scope.config_file,
+            );
+        }
+        action => action,
+    };
+    let path = resolve_project_path(&registry, scope.project, workspace)?;
+    let root = match (Project::discover(&path), &action) {
+        (Ok(root), _) => root,
+        // An interrupted adoption can leave no `.calve`; recovery still needs to reach it.
+        (Err(_), Action::Recover { .. }) if path.is_dir() => std::fs::canonicalize(&path)?,
+        (Err(error), _) => return Err(error),
+    };
+    let _writer = if mutates_project(&action) && root.join(".calve").is_dir() {
+        Some(project_writer(&root)?)
+    } else {
+        None
+    };
+    if let Action::Recover { command } = &action {
+        return recover(&root, command);
+    }
+    // Store maintenance needs the runtime closed (one runtime per data root).
+    if matches!(
+        action,
+        Action::Maintenance {
+            command: MaintenanceCommand::VerifyStore
+                | MaintenanceCommand::Gc { .. }
+                | MaintenanceCommand::Check
+        }
+    ) {
+        evict_project(&root);
+    }
+    let store_report = match &action {
+        Action::Maintenance {
+            command: MaintenanceCommand::VerifyStore,
+        } => return crate::ops::verify_store(&root),
+        Action::Maintenance {
+            command:
+                MaintenanceCommand::Gc {
+                    dry_run,
+                    grace_secs,
+                },
+        } => return crate::ops::collect_garbage(&root, *grace_secs, *dry_run),
+        Action::Maintenance {
+            command: MaintenanceCommand::Check,
+        } => Some(crate::ops::verify_store(&root)?),
+        _ => None,
+    };
+    let project_handle = open_project(&root)?;
+    // A request acting as a local identity gets its own session on the shared runtime.
+    let acting = match scope.actor.as_deref() {
+        Some(name) => Some(project_handle.acting_as(name)?),
+        None => None,
+    };
+    let project: &Project = acting.as_ref().unwrap_or(&project_handle);
+    let workspace_id = match workspace {
+        Some(name) => registry.show(name)?.workspace.id,
+        None => registry.selected()?.workspace.id,
+    };
+    let settings =
+        ConfigPaths::for_context(&workspace_id, Some(&project.root), scope.config_file)?.load()?;
+    if mutates_project(&action) {
+        registry.ensure_project_path(&project.identity, &project.root)?;
+        compatibility::query(&project.client).await?;
+    }
+    match action {
+        Action::Version
+        | Action::Init { .. }
+        | Action::Workspace { .. }
+        | Action::Project { .. }
+        | Action::Config { .. }
+        | Action::Provider { .. }
+        | Action::Harness { .. } => unreachable!(),
+        Action::Status => project.status().await,
+        Action::Intent { command } => match command {
+            IntentCommand::Create {
+                title,
+                description,
+                tags,
+                actors,
+                graph_node,
+            } => Ok(
+                json!({"id":project.create_intent_with_references(&title,description.as_deref(),&tags,&actors,graph_node.as_deref()).await?}),
+            ),
+            IntentCommand::List => Ok(json!(project.list_intents()?)),
+            IntentCommand::Show { id } => project.intent_with_packs(&id).await,
+            IntentCommand::Edit {
+                id,
+                title,
+                description,
+                tags,
+                clear_tags,
+                actors,
+                clear_actors,
+                graph_node,
+                clear_graph_node,
+            } => {
+                let tags = if clear_tags {
+                    Some(Vec::new())
+                } else if tags.is_empty() {
+                    None
+                } else {
+                    Some(tags)
+                };
+                let actors = if clear_actors {
+                    Some(Vec::new())
+                } else if actors.is_empty() {
+                    None
+                } else {
+                    Some(actors)
+                };
+                let graph_node = if clear_graph_node {
+                    Some(None)
+                } else {
+                    graph_node.as_deref().map(Some)
+                };
+                project
+                    .update_intent_with_references(
+                        &id,
+                        title.as_deref(),
+                        description.as_deref(),
+                        tags.as_deref(),
+                        actors.as_deref(),
+                        graph_node,
+                    )
+                    .await?;
+                project.intent_with_packs(&id).await
+            }
+            IntentCommand::Close { id, cancelled } => {
+                project.set_intent_state(&id, if cancelled { "CANCELLED" } else { "COMPLETED" })?;
+                project.intent_with_packs(&id).await
+            }
+            IntentCommand::Reopen { id } => {
+                project.set_intent_state(&id, "OPEN")?;
+                project.intent_with_packs(&id).await
+            }
+            IntentCommand::LinkPack { intent, pack } => {
+                let generation = project.pack(&pack).await?.generation;
+                project.set_pack_intent(&pack, generation, &intent).await?;
+                Ok(json!(project.pack(&pack).await?))
+            }
+            IntentCommand::UnlinkPack { intent, pack } => {
+                let generation = project.pack(&pack).await?.generation;
+                project
+                    .unlink_pack_intent(&pack, generation, &intent)
+                    .await?;
+                Ok(json!(project.pack(&pack).await?))
+            }
+        },
+        Action::Task { command } => match command {
+            TaskCommand::Create {
+                intent,
+                title,
+                description,
+                priority,
+                assignee,
+            } => Ok(
+                json!({"id":project.create_task_with_metadata(&intent,&title,description.as_deref(),&priority,assignee.as_deref())?}),
+            ),
+            TaskCommand::List => Ok(json!(project.tasks_with_protocol().await?)),
+            TaskCommand::Show { id } => project.task_with_protocol(&id).await,
+            TaskCommand::Update {
+                id,
+                title,
+                description,
+                priority,
+                assignee,
+            } => {
+                project.update_task(
+                    &id,
+                    title.as_deref(),
+                    description.as_deref(),
+                    priority.as_deref(),
+                    assignee.as_deref(),
+                )?;
+                Ok(json!({"updated":id}))
+            }
+            TaskCommand::Complete { id } => {
+                project.complete_task(&id)?;
+                Ok(json!({"completed":id}))
+            }
+            TaskCommand::Start { id } => {
+                project.start_task(&id)?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::Block { id, reason } => {
+                project.block_task(&id, &reason)?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::Unblock { id } => {
+                project.unblock_task(&id)?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::Reopen { id } => {
+                project.reopen_task(&id)?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::LinkPack { id, pack } => {
+                project.link_task_pack(&id, &pack).await?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::LinkExecution { id, execution } => {
+                project.link_task_execution(&id, &execution).await?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::LinkWorkUnit { id, work_unit } => {
+                project.link_task_work_unit(&id, &work_unit).await?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::Assign { id, assignee } => {
+                project.update_task(&id, None, None, None, Some(&assignee))?;
+                project.task_with_protocol(&id).await
+            }
+            TaskCommand::Depend { id, on } => {
+                project.add_task_dependency(&id, &on)?;
+                Ok(json!({"task_id":id,"depends_on":on}))
+            }
+            TaskCommand::Undepend { id, on } => {
+                project.remove_task_dependency(&id, &on)?;
+                Ok(json!({"task_id":id,"removed_dependency":on}))
+            }
+        },
+        Action::Inbox { command } => match command {
+            InboxCommand::List { all } => Ok(json!(project.inbox(all).await?)),
+            InboxCommand::Show { source_key } => project.inbox_item(&source_key).await,
+            InboxCommand::Unack { source_keys } => {
+                for key in &source_keys {
+                    project.unacknowledge_inbox_item(key).await?;
+                }
+                Ok(json!({"unacknowledged":source_keys}))
+            }
+            InboxCommand::ClearResolved => project.clear_resolved_inbox().await,
+            InboxCommand::Read { source_key } => {
+                project.update_inbox_item(&source_key, "read", None).await?;
+                Ok(json!({"read":source_key}))
+            }
+            InboxCommand::Acknowledge { source_keys } => {
+                for key in &source_keys {
+                    project.update_inbox_item(key, "acknowledge", None).await?;
+                }
+                Ok(json!({"acknowledged":source_keys}))
+            }
+            InboxCommand::Snooze { source_key, until } => {
+                project
+                    .update_inbox_item(&source_key, "snooze", Some(until))
+                    .await?;
+                Ok(json!({"snoozed":source_key,"until":until}))
+            }
+            InboxCommand::Unsnooze { source_key } => {
+                project
+                    .update_inbox_item(&source_key, "unsnooze", None)
+                    .await?;
+                Ok(json!({"unsnoozed":source_key}))
+            }
+        },
+        Action::Pack { command } => match command {
+            PackCommand::Create {
+                title,
+                intent,
+                require_snapshot_verification,
+                require_review,
+                require_checks,
+                forbid_self_review,
+            } => {
+                let id = project
+                    .create_pack_with_policies(
+                        &title,
+                        intent.as_deref(),
+                        require_snapshot_verification,
+                        require_review,
+                        &require_checks,
+                    )
+                    .await?;
+                if forbid_self_review {
+                    project.forbid_self_review(&id.to_string())?;
+                }
+                Ok(json!({"id":id,"generation":1}))
+            }
+            PackCommand::List => Ok(json!(project.list_packs().await?)),
+            PackCommand::Show { id } => Ok(serde_json::to_value(project.pack(&id).await?)?),
+            PackCommand::SetIntent {
+                id,
+                intent,
+                generation,
+            } => project.set_pack_intent(&id, generation, &intent).await,
+            PackCommand::Edit { id, title } => project.edit_pack_title(&id, &title).await,
+            PackCommand::CaptureTree {
+                id,
+                directory,
+                generation,
+            } => project.capture_tree(&id, generation, &directory).await,
+            PackCommand::Lifecycle(command) => lifecycle(project, &settings, command).await,
+            PackCommand::Qualify { id, generation } => project.qualify(&id, generation).await,
+            PackCommand::Reopen { id, generation } => project.reopen(&id, generation).await,
+            PackCommand::Quarantine { id, reason } => project.quarantine_pack(&id, &reason).await,
+            PackCommand::Release { id } => project.release_quarantine(&id).await,
+            PackCommand::Abandon { id, generation } => project.abandon_pack(&id, generation).await,
+        },
+        Action::Revision { command } => match command {
+            RevisionCommand::Create {
+                title,
+                of,
+                relation,
+                intent,
+                require_review,
+            } => {
+                let targets = of
+                    .iter()
+                    .map(|text| {
+                        text.parse::<Digest>().map_err(|_| {
+                            Error::Message(format!("invalid promoted-pack digest {text}"))
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let relation = match relation.as_str() {
+                    "amends" => RevisionRelation::Amends,
+                    "supersedes" => RevisionRelation::Supersedes,
+                    "reverts" => RevisionRelation::Reverts,
+                    _ => return Err(Error::Message("invalid revision relation".into())),
+                };
+                let id = project
+                    .create_revision_pack_with_requirements(
+                        &title,
+                        intent.as_deref(),
+                        relation,
+                        targets,
+                        require_review,
+                    )
+                    .await?;
+                Ok(json!({"id":id,"generation":1}))
+            }
+            RevisionCommand::List => Ok(json!(project.list_revisions().await?)),
+            RevisionCommand::Show { id } => Ok(serde_json::to_value(project.revision(&id).await?)?),
+            RevisionCommand::Lifecycle(command) => {
+                let id = match &command {
+                    LifecycleCommand::Capture { id, .. }
+                    | LifecycleCommand::Diff { id, .. }
+                    | LifecycleCommand::Verify { id, .. }
+                    | LifecycleCommand::Evaluate { id, .. }
+                    | LifecycleCommand::Seal { id, .. }
+                    | LifecycleCommand::Check { id, .. }
+                    | LifecycleCommand::Review { id }
+                    | LifecycleCommand::Approve { id, .. }
+                    | LifecycleCommand::Reject { id, .. }
+                    | LifecycleCommand::Promote { id, .. } => id,
+                };
+                project.revision(id).await?;
+                lifecycle(project, &settings, command).await
+            }
+        },
+        Action::Evidence { command } => match command {
+            EvidenceCommand::Add {
+                pack,
+                generation,
+                kind,
+                file,
+                media_type,
+            } => {
+                let path = if file.is_absolute() {
+                    file
+                } else {
+                    project.root.join(file)
+                };
+                let path = std::fs::canonicalize(path)?;
+                if path.starts_with(project.root.join(".calve")) {
+                    return Err(Error::Message(
+                        "project internal state cannot be evidence input".into(),
+                    ));
+                }
+                if std::fs::metadata(&path)?.len() > 1024 * 1024 {
+                    return Err(Error::Message("evidence payload exceeds 1 MiB".into()));
+                }
+                let digest = project
+                    .register_evidence(&pack, generation, &kind, &media_type, std::fs::read(path)?)
+                    .await?;
+                Ok(json!({"digest":digest}))
+            }
+            EvidenceCommand::Show { digest } => project.evidence(digest).await,
+            EvidenceCommand::List {
+                pack,
+                after,
+                limit,
+                current,
+            } => project.list_evidence(&pack, after, limit, current).await,
+        },
+        Action::Receipt { command } => match command {
+            ReceiptCommand::List { after, limit } => project.list_receipts(after, limit).await,
+            ReceiptCommand::Show { digest } => project.receipt(digest).await,
+            ReceiptCommand::Verify { digest } => project.verify_receipt(digest).await,
+        },
+        Action::Execution { command } => match command {
+            ExecutionCommand::List { pack, state } => {
+                let state = state.as_deref().map(|name| match name {
+                    "pending" => openaevc_protocol::ExecutionState::Pending,
+                    "admitted" => openaevc_protocol::ExecutionState::Admitted,
+                    "starting" => openaevc_protocol::ExecutionState::Starting,
+                    "running" => openaevc_protocol::ExecutionState::Running,
+                    "succeeded" => openaevc_protocol::ExecutionState::Succeeded,
+                    "failed" => openaevc_protocol::ExecutionState::Failed,
+                    "cancelled" => openaevc_protocol::ExecutionState::Cancelled,
+                    "lost" => openaevc_protocol::ExecutionState::Lost,
+                    _ => unreachable!("clap validated execution state"),
+                });
+                project.list_executions(pack.as_deref(), state).await
+            }
+            ExecutionCommand::Show { id } => project.execution(&id).await,
+            ExecutionCommand::Wait { id, timeout_ms } => {
+                project.wait_execution(&id, timeout_ms).await
+            }
+            ExecutionCommand::Cancel { id, reason } => {
+                project.cancel_execution(&id, reason.as_deref()).await
+            }
+            ExecutionCommand::Logs { id } => project.execution_logs(&id).await,
+            ExecutionCommand::Retry { id } => project.retry_execution(&settings, &id).await,
+            ExecutionCommand::Start {
+                pack,
+                harness,
+                generation,
+                task,
+            } => {
+                project
+                    .start_harness_execution(
+                        &settings,
+                        &pack,
+                        generation,
+                        &harness,
+                        task.as_deref(),
+                        None,
+                    )
+                    .await
+            }
+        },
+        Action::Extension { command } => match command {
+            ExtensionCommand::List { .. } => project.list_extensions().await,
+            ExtensionCommand::Catalogs
+            | ExtensionCommand::CatalogTrust { .. }
+            | ExtensionCommand::CatalogUntrust { .. }
+            | ExtensionCommand::Search { .. }
+            | ExtensionCommand::Install { .. }
+            | ExtensionCommand::Uninstall { .. } => unreachable!("handled without a Project"),
+            ExtensionCommand::Info { id } => project.extension_info(&id).await,
+            ExtensionCommand::Disable { id } => project.disable_extension(&id).await,
+            ExtensionCommand::Permissions { id } => project.extension_permissions(&id).await,
+            ExtensionCommand::Health => project.extension_health().await,
+            ExtensionCommand::Grant { id, capabilities } => {
+                project.grant_extension(&id, &capabilities).await
+            }
+            ExtensionCommand::Revoke { id, capabilities } => {
+                project.revoke_extension(&id, &capabilities).await
+            }
+            ExtensionCommand::Update { id, grants } => project.update_extension(&id, &grants).await,
+            ExtensionCommand::EnableLocal { spec, grants } => {
+                let spec = match spec {
+                    Some(spec) => spec,
+                    None => std::env::current_exe()?
+                        .with_file_name(if cfg!(windows) {
+                            "calve_ext_software.exe"
+                        } else {
+                            "calve_ext_software"
+                        })
+                        .display()
+                        .to_string(),
+                };
+                project.enable_extension(&spec, &grants).await
+            }
+        },
+        Action::Resource { command } => match command {
+            ResourceCommand::List { domain } if domain == "general" => {
+                Ok(json!(project.general_resources().await?))
+            }
+            ResourceCommand::List { .. } => project.list_resources(),
+            ResourceCommand::Show { target } => {
+                let general = target
+                    .split_once(':')
+                    .is_some_and(|(kind, _)| crate::general::resource_kind(kind).is_some());
+                if general {
+                    project.general_resource(&target).await
+                } else {
+                    project.show_resource(Path::new(&target))
+                }
+            }
+            ResourceCommand::Materialize {
+                path,
+                pack,
+                discard,
+                apply,
+            } => {
+                project
+                    .materialize_resource(&pack, &path, discard, apply)
+                    .await
+            }
+            ResourceCommand::Set {
+                pack,
+                generation,
+                sets,
+                removes,
+            } => {
+                let sets = sets
+                    .iter()
+                    .map(|item| {
+                        let (reference, value) = item.split_once('=').ok_or_else(|| {
+                            Error::Message(format!("{item:?} must be kind:name=JSON"))
+                        })?;
+                        Ok((reference.to_owned(), serde_json::from_str(value)?))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                project
+                    .edit_general(&pack, generation, &sets, &removes)
+                    .await
+            }
+            ResourceCommand::Diff { pack, path } => project.diff_resource(&pack, &path).await,
+            ResourceCommand::Scan => project.scan_resources().await,
+            ResourceCommand::History { path } => project.resource_history(&path).await,
+        },
+        Action::Ignore { command } => match command {
+            IgnoreCommand::List => project.list_ignore(),
+            IgnoreCommand::Add { pattern } => project.add_ignore(&pattern),
+            IgnoreCommand::Remove { pattern } => project.remove_ignore(&pattern),
+            IgnoreCommand::Check { path } => project.check_ignore(&path),
+        },
+        Action::Review { command } => match command {
+            ReviewCommand::Approve {
+                pack,
+                generation,
+                reason,
+            } => Ok(json!({"id":project.review(&pack,generation,"APPROVE",&reason).await?})),
+            ReviewCommand::Reject {
+                pack,
+                generation,
+                reason,
+            } => Ok(json!({"id":project.review(&pack,generation,"REJECT",&reason).await?})),
+            ReviewCommand::Comment {
+                pack,
+                generation,
+                reason,
+            } => Ok(json!({"id":project.review(&pack,generation,"COMMENT",&reason).await?})),
+            ReviewCommand::List { pack } => {
+                project.refresh_pack_index().await?;
+                Ok(json!(project.reviews(&pack).await?))
+            }
+        },
+        Action::Baseline { command } => match command {
+            BaselineCommand::Create { label, members } => {
+                let digests: Vec<Digest> = members
+                    .iter()
+                    .map(|s| {
+                        s.parse()
+                            .map_err(|_| Error::Message(format!("invalid digest {s}")))
+                    })
+                    .collect::<Result<_>>()?;
+                let (id, digest) = project.create_baseline(&label, digests).await?;
+                Ok(json!({"id":id,"digest":digest}))
+            }
+            BaselineCommand::List => Ok(json!(project.list_baselines()?)),
+            BaselineCommand::Show { id } => project.baseline(&id).await,
+            BaselineCommand::Validate { id } => project.validate_baseline(&id).await,
+            BaselineCommand::Compare { left, right } => {
+                project.compare_baselines(&left, &right).await
+            }
+            BaselineCommand::Graph { id } => project.baseline_graph(&id).await,
+            BaselineCommand::Alias { command } => match command {
+                BaselineAliasCommand::List => Ok(json!(project.list_baseline_aliases()?)),
+                BaselineAliasCommand::Set { alias, baseline } => Ok(
+                    json!({"alias":alias,"baseline_id":project.set_baseline_alias(&alias,&baseline)?}),
+                ),
+                BaselineAliasCommand::Remove { alias } => {
+                    project.remove_baseline_alias(&alias)?;
+                    Ok(json!({"removed":alias}))
+                }
+            },
+            BaselineCommand::Materialize {
+                id,
+                discard,
+                apply,
+                activate,
+            } => {
+                project
+                    .materialize_baseline(&id, &discard, apply, activate)
+                    .await
+            }
+            BaselineCommand::Activate { id } => {
+                Ok(json!({"active_baseline":project.activate_baseline(&id).await?}))
+            }
+        },
+        Action::Activity { filter } => Ok(json!(
+            project
+                .activity_with_filter(settings.page_size, &filter)
+                .await?
+        )),
+        Action::Authority { command } => match command {
+            AuthorityCommand::Principals => Ok(json!(project.authority_principals().await?)),
+            AuthorityCommand::Grants => Ok(json!(project.authority_grants().await?)),
+            AuthorityCommand::Show { id } => project.authority_show(&id).await,
+            AuthorityCommand::Explain {
+                action,
+                principal,
+                resource_kind,
+                resource_locator,
+                extension,
+            } => {
+                let resource = match (resource_kind, resource_locator, extension) {
+                    (None, None, None) => None,
+                    (Some(kind), Some(locator), Some(extension)) => Some(ResourceRef {
+                        kind,
+                        locator,
+                        version: None,
+                        extension,
+                    }),
+                    _ => {
+                        return Err(Error::Message(
+                            "resource explanation requires --resource-kind, --resource-locator, and --extension together".into(),
+                        ));
+                    }
+                };
+                project
+                    .authority_explain(&action, principal.as_deref(), resource)
+                    .await
+            }
+            AuthorityCommand::Grant { options } => project.authority_grant(&options).await,
+            AuthorityCommand::Revoke { grant, reason } => {
+                project.authority_revoke(&grant, reason.as_deref()).await
+            }
+            AuthorityCommand::IdentityAdd {
+                name,
+                actions,
+                days,
+            } => project.add_identity(&name, &actions, days).await,
+            AuthorityCommand::Identities => project.list_identities(),
+            AuthorityCommand::IdentityRemove { name } => project.remove_identity(&name).await,
+        },
+        Action::Doctor { bundle, yes } => {
+            let namespace = project
+                .client
+                .query(openaevc_protocol::Query::GetNamespace {})
+                .await?;
+            let compatibility = compatibility::query(&project.client).await?;
+            let product_db = project.check_product_db()?;
+            let extensions = project.extension_health().await?;
+            let recovery = crate::ops::recovery_plan(&project.root)?;
+            let registration = registry.ensure_project_path(&project.identity, &project.root);
+            let mut findings = Vec::new();
+            if product_db["ok"] != true {
+                findings.push(json!({"code":"PRODUCT_DB","message":"product database integrity check failed",
+                    "remedy":"calve maintenance check; restore .calve/product.sqlite3 from backup"}));
+            }
+            for item in extensions
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|e| e["healthy"] != true)
+            {
+                findings.push(json!({"code":"EXTENSION","message":format!("extension {} is unhealthy", item["id"]),
+                    "remedy":format!("calve extension health; calve extension enable {}", item["id"].as_str().unwrap_or(""))}));
+            }
+            if !recovery.is_empty() {
+                findings.push(json!({"code":"RECOVERY","message":format!("{} disposable leftover(s) found", recovery.len()),
+                    "remedy":"calve recover plan"}));
+            }
+            if let Err(error) = &registration {
+                findings.push(json!({"code":"REGISTRATION","message":error.to_string(),
+                    "remedy":"calve project health <path>"}));
+            }
+            for warning in &settings.warnings {
+                findings.push(
+                    json!({"code":"CONFIG","message":warning,"remedy":"calve config validate"}),
+                );
+            }
+            let metrics = crate::observe::metrics(project.root.to_str());
+            let report = json!({"healthy":findings.is_empty(),"project_id":project.identity.project_id,
+                "root":project.root,"namespace":namespace,"product_db":product_db,
+                "compatibility":compatibility,"extensions":extensions,"findings":findings,
+                "metrics":metrics});
+            match bundle {
+                None => Ok(report),
+                Some(target) => {
+                    let config =
+                        ConfigPaths::for_context(&workspace_id, Some(&project.root), None)?
+                            .load()?;
+                    crate::observe::bundle(
+                        &target,
+                        vec![
+                            ("doctor", report),
+                            (
+                                "version",
+                                json!({"calve":env!("CARGO_PKG_VERSION"),"openaevc_revision":compatibility::OPENAEVC_REVISION}),
+                            ),
+                            ("config", serde_json::to_value(&config)?),
+                            ("status", project.status().await?),
+                            ("extensions-installed", crate::extensions::list_installed()?),
+                            ("recovery", json!(crate::ops::recovery_plan(&project.root)?)),
+                        ],
+                        yes,
+                    )
+                }
+            }
+        }
+        Action::Maintenance { command } => match command {
+            MaintenanceCommand::Check => {
+                project.maintenance_check(store_report.expect("store verified before open"))
+            }
+            MaintenanceCommand::Compact => project.compact_product_db(),
+            MaintenanceCommand::RebuildProjections => project.rebuild_projections().await,
+            MaintenanceCommand::VerifyStore | MaintenanceCommand::Gc { .. } => {
+                unreachable!("store maintenance runs before the Project is opened")
+            }
+        },
+        Action::Recover { .. } => unreachable!("recover runs before the Project is opened"),
+        Action::View { view } => match view {
+            ViewQuery::Overview => project.view_overview().await,
+            ViewQuery::Packs => project.view_packs().await,
+            ViewQuery::Pack { id } => project.view_pack(&id).await,
+            ViewQuery::PackDiff { id, path } => project.view_pack_diff(&id, &path).await,
+            ViewQuery::ChangeGraph { intent } => project.view_change_graph(intent.as_deref()).await,
+            ViewQuery::Baseline { id } => project.view_baseline(&id).await,
+            ViewQuery::Execution { id } => project.view_execution(&id).await,
+            ViewQuery::Evidence => project.view_evidence().await,
+            ViewQuery::Changes {
+                protocol,
+                product,
+                wait_ms,
+            } => project.view_changes(protocol, product, wait_ms).await,
+        },
+        Action::Console | Action::Daemon { .. } => Err(Error::Message(
+            "console and daemon lifecycle are frontend actions".into(),
+        )),
+    }
+}
+
+async fn lifecycle(
+    project: &Project,
+    settings: &crate::config::EffectiveConfig,
+    command: LifecycleCommand,
+) -> Result<Value> {
+    match command {
+        LifecycleCommand::Check {
+            id,
+            generation,
+            languages,
+            only,
+        } => {
+            project
+                .run_checks(settings, &id, generation, &languages, &only)
+                .await
+        }
+        LifecycleCommand::Capture {
+            id,
+            path,
+            generation,
+        } => project.capture_file(&id, generation, &path).await,
+        LifecycleCommand::Diff { id, path: None } => project.diff_pack(&id).await,
+        LifecycleCommand::Diff {
+            id,
+            path: Some(path),
+        } => project.diff_resource(&id, &path).await,
+        LifecycleCommand::Verify {
+            id,
+            generation,
+            path,
+            digest,
+        } => {
+            project
+                .verify_snapshots(&id, generation, path.as_deref().zip(digest))
+                .await
+        }
+        LifecycleCommand::Evaluate {
+            id,
+            generation,
+            warn_after_bytes,
+            warn_after_files,
+        } => {
+            project
+                .evaluate_change_size(&id, generation, warn_after_bytes, warn_after_files)
+                .await
+        }
+        LifecycleCommand::Seal { id, generation } => {
+            Ok(json!({"candidate_digest":project.seal(&id,generation).await?}))
+        }
+        LifecycleCommand::Review { id } => {
+            project.refresh_pack_index().await?;
+            Ok(json!(project.reviews(&id).await?))
+        }
+        LifecycleCommand::Approve {
+            id,
+            generation,
+            reason,
+        } => Ok(json!({"id":project.review(&id,generation,"APPROVE",&reason).await?})),
+        LifecycleCommand::Reject {
+            id,
+            generation,
+            reason,
+        } => Ok(json!({"id":project.review(&id,generation,"REJECT",&reason).await?})),
+        LifecycleCommand::Promote { id, generation } => {
+            Ok(json!({"promoted_digest":project.promote(&id,generation).await?}))
+        }
+    }
+}
+
+/// What `init` found and what to do next. Extensions are recommended, never enabled or granted.
+fn init_report(project: &Project, registered: bool) -> Result<Value> {
+    let files: Vec<String> = project
+        .list_resources()?
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item["path"].as_str().map(str::to_owned))
+        .collect();
+    let mut recommended = vec!["org.calve.software".to_owned()];
+    recommended.extend(
+        crate::domain::detect(&project.root, &files)
+            .into_iter()
+            .map(|language| language.extension_id()),
+    );
+    if files.is_empty() {
+        recommended = vec!["org.calve.general".into()];
+    }
+    let integrity = project.check_product_db()?;
+    let mut next = vec![format!("calve extension enable {}", recommended[0])];
+    next.extend(
+        recommended
+            .iter()
+            .skip(1)
+            .map(|id| format!("calve extension enable {id}")),
+    );
+    next.push("calve intent create \"<goal>\"".into());
+    next.push("calve pack create \"<change>\"".into());
+    Ok(
+        json!({"project_id":project.identity.project_id,"namespace_id":project.identity.namespace_id,
+        "root":project.root,"registered":registered,"integrity":integrity,
+        "recommended_extensions":recommended,"next_actions":next}),
+    )
+}
+
+/// Recovery must work when the Project cannot open, so it inspects before opening anything.
+fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
+    evict_project(root);
+    let open = Project::open(root)
+        .map(|_| ())
+        .map_err(|error| error.to_string());
+    let actions = crate::ops::recovery_plan(root)?;
+    match command {
+        RecoverCommand::Inspect => Ok(json!({"root":root,"opens":open.is_ok(),
+            "open_error":open.err(),"disposable_leftovers":actions.len()})),
+        RecoverCommand::Plan => Ok(json!({"root":root,"actions":actions,
+            "note":"recovery removes only disposable staging files; it never edits OpenAEVC state"})),
+        RecoverCommand::Apply { yes: false } => Err(Error::Message(format!(
+            "recover apply would perform {} action(s); rerun with --yes after reviewing `calve recover plan`",
+            actions.len()
+        ))),
+        RecoverCommand::Apply { yes: true } => crate::ops::recovery_apply(root),
+    }
+}

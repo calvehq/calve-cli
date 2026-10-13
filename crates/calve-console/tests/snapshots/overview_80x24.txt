@@ -1,0 +1,24 @@
+ Calve  project: openaevc  workspace: main  Overview   ✓ healthy
+┌ Overview ────────────────────────────────────────────────────────────────────┐
+│Needs attention ──────────────────────────────────────────────────────────────│
+│    Subject                                                                   │
+│×   exe_…kmvsvhf3a   Execution FAILED                                  1m     │
+│!   tsk_…c72093222   Daemon hardening is blocked                       1m     │
+│◆   cpk_…x2ltg27pa   Add remote conformance runner awaits verificatio… 1m     │
+│◆   cpk_…ljusoarca   Fix daemon race condition awaits verification an… 1m     │
+│!   cpk_…7sqtlkoba   Pack is quarantined                               1m     │
+│                                                                              │
+│Active work ──────────────────────────────────────────────────────────────────│
+│Intent                                           Tasks   Packs  State         │
+│HTTP conformance                                 1/4     2      ! BLOCKED     │
+│SDK compatibility                                0/1     1      ● RUNNING     │
+│                                                                              │
+│Recent activity ──────────────────────────────────────────────────────────────│
+│       Source    Event                                       Subject          │
+│1m     calve     execution.finished                          exe_…kmvsvhf3a   │
+│1m     openaevc  execution.failed                            exe_…kmvsvhf3a   │
+│1m     calve     pack.created                                cpk_…byu3s65zi   │
+│1m     openaevc  changepack.created                          cpk_…byu3s65zi   │
+│1m     openaevc  changepack.quarantined                      cpk_…7sqtlkob1/19│
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

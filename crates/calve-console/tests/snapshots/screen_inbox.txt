@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Inbox   ✓ healthy                                                                       v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Inbox ────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││Severity    Type               Message                                              Age    ││Select an item to inspect it.              │
+│  Overview        5 ││× danger    Execution          Execution FAILED                                     1m     ││                                           │
+│  Work              ││! warning   Quarantined pack   Pack is quarantined                                  1m     ││Actions                                    │
+│  Change Graph      ││                                                                                           ││  Acknowledge                              │
+│  ChangePacks       ││                                                                                           ││  Unacknowledge                            │
+│  Baselines         ││                                                                                           ││  Snooze                                   │
+│  Evidence          ││                                                                                           ││  Clear resolved                           │
+│  Events            ││                                                                                           ││  a all actions                            │
+│                    ││                                                                                           ││                                           │
+│ SYSTEM             ││                                                                                           ││                                           │
+│  Projects          ││                                                                                           ││                                           │
+│› Inbox           2 ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ ↑↓ navigate  enter open source  a actions  ^P commands  : command  ? help

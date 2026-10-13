@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Change Graph   ✓ healthy                                                                v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Change Graph ─────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││[✓ Write transport …] ─────▶[● Runtime HTTP sup…] ───┬─▶[! Daemon hardening]  ─────▶[◆ Fix ││Write transport spec                       │
+│  Overview        5 ││                                                     │                                     ││tsk_01a0ef14-0332-7631-a8b7-39ea36f9d120   │
+│  Work              ││[● Update SDK bindi…] ─────▶[✓ Update protocol …]    └─▶[○ Remote conforman…] ─────▶[◆ Add ││                                           │
+│› Change Graph      ││                                                                                           ││State       ✓ COMPLETE                     │
+│  ChangePacks       ││                                                                                           ││Kind        Task                           │
+│  Baselines         ││● running  ✓ complete  ! blocked  ◆ review  ○ pending                                      ││                                           │
+│  Evidence          ││                                                                                           ││Leads to                                   │
+│  Events            ││                                                                                           ││  → Runtime HTTP support (depends on)      │
+│                    ││                                                                                           ││                                           │
+│ SYSTEM             ││                                                                                           ││                                           │
+│  Projects          ││                                                                                           ││                                           │
+│  Inbox           2 ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ hjkl move  enter open  v list/graph  z fullscreen  ^P commands  : command  ? help

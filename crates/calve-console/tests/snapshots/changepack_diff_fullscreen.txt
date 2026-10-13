@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ✓ healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Calve / ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa / Diff ────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                                                                                         │
+│                                                                                                                                                              │
+│crates/runner/http.rs                                                                                                                                         │
+│@@ -1 +1 @@                                                                                                                                                   │
+│   1      -pub const DEFAULT_TIMEOUT: u64 = 10;                                                                                                               │
+│        1 +use std::time::Duration;                                                                                                                           │
+│        2 +                                                                                                                                                   │
+│        3 +pub const DEFAULT_TIMEOUT: u64 = 30;                                                                                                               │
+│   2    4                                                                                                                                                     │
+│   3      -pub fn run() {}                                                                                                                                    │
+│        5 +pub fn run() {                                                                                                                                     │
+│        6 +    retry(3, Duration::from_secs(1));                                                                                                              │
+│        7 +}                                                                                                                                                  │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+│                                                                                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ files  ]c/[c hunks  z fullscreen  w wrap  tab tabs  ^P commands  : command  ? help

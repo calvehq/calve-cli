@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ✓ healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…fbv2tzhmigx2ltg27pa    │
+│  Overview        5 ││                                                                  ││Add remote conformance      │
+│  Work              ││Review      ◆ WAITING                                             ││runner                      │
+│  Change Graph      ││Required    yes, by pack policy                                   ││                            │
+│› ChangePacks       ││                                                                  ││State       ◆ SEALED        │
+│  Baselines         ││D┌ Review ──────────────────────────────────────────────────────────────┐ation  2               │
+│  Evidence          ││N│Decision                                                              │ed     1m ago          │
+│  Events            ││ │  (•) Approve                                                         │ed     2 files  +7 -2  │
+│                    ││E│  ( ) Reject                                                          │s      1/1             │
+│ SYSTEM             ││✓│  ( ) Comment                                                         │nce    0               │
+│  Projects          ││✓│                                                                      │w      ◆ WAITING       │
+│  Inbox           2 ││×│Comment                                                               │                       │
+│  Doctor            ││ │>                                                                     │t                      │
+│  Extensions        ││r│                                                                      │conformance            │
+│                    ││ │Binds to generation 2 of cpk_…tzhmigx2ltg27pa                         │                       │
+│                    ││ │tab field  ↑↓/space choose  ctrl+s or enter (on comment) submit  esc  │mote: missing: approved│
+│                    ││ └──────────────────────────────────────────────────────────────────────┘w                      │
+│                    ││                                                                  ││x explain                   │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Actions                     │
+│                    ││                                                                  ││  Run snapshot verification │
+│                    ││                                                                  ││  Run language checks       │
+│                    ││                                                                  ││  Evaluate change size      │
+│                    ││                                                                  ││  Approve                   │
+│                    ││                                                                  ││  Reject                    │
+│                    ││                                                                  ││  Refresh qualification     │
+│                    ││                                                                  ││  a all actions             │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ r review  x explain  a actions  tab tabs  ^P commands  : command  ? help

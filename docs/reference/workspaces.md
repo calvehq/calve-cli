@@ -1,0 +1,15 @@
+# Workspaces and Project registration
+
+Calve creates a machine-local `default` Workspace on first CLI use. The registry database is stored under the platform data directory (`$XDG_DATA_HOME/calve/workspace.sqlite3` on Linux, or `$HOME/.local/share/calve/workspace.sqlite3` when XDG_DATA_HOME is unset). A Workspace stores an ordered set of Project IDs and one optional default Project. It never copies Project or OpenAEVC state.
+
+`calve init <path>` creates a Project and registers it in the selected Workspace. Use `calve workspace create <name>` and `calve workspace select <name>` to change the current organization. `calve workspace add-project <workspace> <project-id>` adds an existing registration to another Workspace. `calve workspace remove-project` and `delete` change only registry membership; Project data remains on disk.
+
+Calve discovers a Project by walking parent directories from the current path. When no Project is found, the selected Workspace's default Project is used. `--project <path-or-registered-id>` selects one explicitly, and `--workspace <name-or-id>` selects Workspace context for that command.
+
+The registry binds each Project ID to a canonical path and OpenAEVC Namespace ID. If a copied Project appears at a second live path, CLI writes are blocked with an identity conflict. After moving a Project directory, use `calve project relocate <project-id> <new-path>` while the old path no longer exists. Relocation checks both IDs before changing the registry. `calve project adopt-copy <path> [--name <name>]` turns a copied directory into a new Project instead: it creates a new ProjectId and Namespace, imports the copy's promoted packs and Baselines (with everything they reference) through OpenAEVC object exchange, verifies the store, and registers the result. Imported objects are inert by protocol design; they can be inspected and verified but cannot authorize, gate, or join new Baselines. Mutable executions are never copied. If any step fails, the copy's original state is restored; `calve recover plan` restores it after a crash mid-adoption.
+
+`calve project rename <project-id> <display-name>` updates the mutable Project display name in product metadata and the machine-local registry; it leaves ProjectId and NamespaceId unchanged. New Projects keep the display name out of `.calve/project.toml`. Older Project files that contain a name remain readable, and a later rename uses product metadata without rewriting the old identity file.
+
+`calve project health <project-id-or-path>` reports `healthy`, `missing_path`, `relocation_needed`, `duplicate_copy`, `identity_conflict`, `name_out_of_sync`, `unregistered`, or `invalid_project`, with a finding explaining the condition. Pass the copied or moved path to distinguish it from the registered path. Run `project rename` again to reconcile a display-name mismatch after an interrupted update.
+
+The registry schema and Project product schema are versioned independently. A newer unsupported schema stops startup rather than being modified.

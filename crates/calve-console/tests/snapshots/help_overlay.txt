@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fb73fzondjarz75ayzoee   ✓ healthy
+┌ Navigation ────────┐┌ ┌ ChangePack cpk_agqo6fb73fzondjarz75ayzoee shortcuts ─────────────────┐ector ─────────────────┐
+│ PROJECT            ││ │NAVIGATION                                                            │73fzondjarz75ayzoee    │
+│  Overview        5 ││ │  j / ↓       next                                                    │tor verification rules │
+│  Work              ││c│  k / ↑       previous                                                │                       │
+│  Change Graph      ││ │  h l         outward / inward                                        │       ○ OPEN          │
+│› ChangePacks       ││C│  enter       open                                                    │ation  2               │
+│  Baselines         ││ │  esc         back / close                                            │ed     1m ago          │
+│  Evidence          ││ │  tab         next pane or tab                                        │ed     1 files  +1 -0  │
+│  Events            ││ │  g           go to                                                   │nce    0               │
+│                    ││ │  alt+← →     history                                                 │                       │
+│ SYSTEM             ││ │                                                                      │mote: pack is OPEN;    │
+│  Projects          ││ │THIS SCREEN                                                           │and qualify it first   │
+│  Inbox           2 ││ │  tab         tabs                                                    │lain                   │
+│  Doctor            ││ │  a           actions                                                 │                       │
+│  Extensions        ││ │  x           explain                                                 │ns                     │
+│                    ││ │  esc         back                                                    │l candidate            │
+│                    ││ │  a           contextual actions                                      │ndon                   │
+│                    ││ │  x           explain state                                           │rantine                │
+│                    ││ │                                                                      │ll actions             │
+│                    ││ │GLOBAL                                                                │                       │
+│                    ││ │  ctrl+p      commands and objects                                    │                       │
+│                    ││ │  /           filter (field:value)                                    │                       │
+│                    ││ │  :           command mode                                            │                       │
+│                    ││ │  z           fullscreen                                              │                       │
+│                    ││ │  r           refresh                                                 │                       │
+│                    ││ │  y           copy ID                                                 │                       │
+│                    ││ │  ctrl+l      activity      ┌────────────────────────────────────────────────────────────────┐│
+│                    ││ │  q           quit          │ ● :pack abandon cpk_agqo6fb73fzondjarz75ayzoee --generation 2… ││
+│                    ││ │  ?           this help     └────────────────────────────────────────────────────────────────┘│
+│                    ││ │                             ┌───────────────────────────────────────────────────────────────┐│
+│                    ││ │esc close                    │ ✓ :pack abandon cpk_agqo6fb73fzondjarz75ayzoee --generation 2 ││
+│                    ││ └─────────────────────────────└───────────────────────────────────────────────────────────────┘│
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

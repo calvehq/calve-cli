@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  Baselines   ✓ healthy                           v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Baselines ───────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ID               Label                 Packs  State               ││Baseline                    │
+│  Overview        5 ││bsl_…vzah4boca   staging               1      ✓ VALID     active  ││bsl_…shn4crvzah4boca        │
+│  Work              ││                                                                  ││staging                     │
+│  Change Graph      ││                                                                  ││                            │
+│  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
+│› Baselines       1 ││                                                                  ││Members     1               │
+│  Evidence          ││                                                                  ││Heads       1               │
+│  Events            ││                                                                  ││Active      yes             │
+│                    ││                                                                  ││                            │
+│ SYSTEM             ││                                                                  ││Actions                     │
+│  Projects          ││                                                                  ││  Activate                  │
+│  Inbox           2 ││                                                                  ││  Validate                  │
+│  Doctor            ││                                                                  ││  Plan materialization      │
+│  Extensions        ││                                                                  ││  Set alias                 │
+│                    ││                                                                  ││  Graph                     │
+│                    ││                                                                  ││  a all actions             │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

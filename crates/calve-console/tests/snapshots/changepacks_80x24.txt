@@ -1,0 +1,24 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ✓ healthy
+┌ ChangePacks ─────────────────────────────────────────────────────────────────┐
+│ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1              │
+│                                                                              │
+│ID               State           Title                    Changed    Updated  │
+│cpk_…byu3s65zi   ○ OPEN          Lint sweep               0 files    1m       │
+│cpk_…7sqtlkoba   ! QUARANTINED   Experimental transport   0 files    1m       │
+│cpk_…z75ayzoee   ○ OPEN          Refactor verification r… 1 files    1m       │
+│cpk_…ljusoarca   ◆ SEALED        Fix daemon race conditi… 1 files    1m       │
+│cpk_…x2ltg27pa   ◆ SEALED        Add remote conformance … 2 files    1m       │
+│cpk_…yscuttedq   ✓ PROMOTED      Update protocol schemas  2 files    1m       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ select  enter open  a actions  x explain  / filter  ^P commands  : command

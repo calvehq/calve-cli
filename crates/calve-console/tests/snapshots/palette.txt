@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  Overview   ✓ healthy                            v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Overview ────────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││Needs attention ──────────────────────────────────────────────────││openaevc                    │
+│› Overview        5 ││    Subject                                                       ││prj_01a0ef13-e366-71a6-816c-│
+│  Work              ││×   exe_…kmvsvhf3a   Execution FAILED                      1m     ││8197620898db                │
+│  Change Graph      ││!   tsk_…c72093222   Daemon hardening is blocked           1m     ││                            │
+│  ChangePacks     6 ││◆   cpk_…x2ltg27pa   Add remote conformance runner awaits… 1m     ││ChangePacks 6               │
+│  Baselines       1 ││◆   cpk_…ljusoarca   Fix daemon race condition awaits ver… 1m     ││Intents     2               │
+│  Evidence          ││!   cpk_…7sqtlkoba   Pack is quarantined                   1m     ││Baselines   1               │
+│  Events            ││ ┌ Command Palette ─────────────────────────────────────────────────────┐tion   5               │
+│                    ││A│> cpk_agqo6fb73fzondjarz75ayzoee▏                                     │                       │
+│ SYSTEM             ││I│                                                                      │                       │
+│  Projects          ││H│Objects                                                               │                       │
+│  Inbox           2 ││S│  cpk_…arz75ayzoee · ChangePack   Refactor verification rules         │                       │
+│  Doctor            ││ │                                                                      │                       │
+│  Extensions        ││R│↑↓ select  enter run  esc close                                       │                       │
+│                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
+│                    ││1m     calve     execution.finished              exe_…kmvsvhf3a   ││                            │
+│                    ││1m     openaevc  execution.failed                exe_…kmvsvhf3a   ││                            │
+│                    ││1m     calve     pack.created                    cpk_…byu3s65zi   ││                            │
+│                    ││1m     openaevc  changepack.created              cpk_…byu3s65zi   ││                            │
+│                    ││1m     openaevc  changepack.quarantined          cpk_…7sqtlkoba   ││                            │
+│                    ││1m     calve     pack.created                    cpk_…7sqtlkoba   ││                            │
+│                    ││1m     openaevc  changepack.created              cpk_…7sqtlkoba   ││                            │
+│                    ││1m     calve     file.captured                   rules.txt        ││                            │
+│                    ││1m     openaevc  execution.succeeded             exe_…z2zkohuja   ││                            │
+│                    ││1m     openaevc  effect.applied                  exe_…z2zkohuja   ││                            │
+│                    ││1m     calve     pack.created                    cpk_…z75ayzoee   ││                            │
+│                    ││1m     openaevc  changepack.created              cpk_…z75ayzoee   ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

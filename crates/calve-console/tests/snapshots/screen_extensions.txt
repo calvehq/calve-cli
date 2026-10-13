@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Extensions   ✓ healthy                                                                  v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Extensions ───────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││Enabled in this Project ───────────────────────────────────────────────────────────────────││org.calve.rust                             │
+│  Overview        5 ││Extension                                        Version   Status       Granted            ││                                           │
+│  Work              ││org.calve.rust                                   0.1.0     ✓ ACTIVE                        ││Version     0.1.0                          │
+│  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Manifest    sha256:565497…c884b5ca29c7     │
+│  ChangePacks       ││                                                                                           ││Granted                                    │
+│  Baselines         ││Available ─────────────────────────────────────────────────────────────────────────────────││Active      yes                            │
+│  Evidence          ││Extension                                        Version   Source       Summary            ││                                           │
+│  Events            ││org.calve.general                                0.1.0     ○ bundled    Bundled with Calve ││Actions                                    │
+│                    ││org.calve.javascript-typescript                  0.1.0     ○ bundled    Bundled with Calve ││  Permissions                              │
+│ SYSTEM             ││org.calve.python                                 0.1.0     ○ bundled    Bundled with Calve ││  Update                                   │
+│  Projects          ││org.calve.shell                                  0.1.0     ○ bundled    Bundled with Calve ││  Disable                                  │
+│  Inbox           2 ││org.calve.hcl                                    0.1.0     ○ bundled    Bundled with Calve ││  a all actions                            │
+│  Doctor            ││org.calve.java                                   0.1.0     ○ bundled    Bundled with Calve ││                                           │
+│› Extensions        ││org.calve.c-cpp                                  0.1.0     ○ bundled    Bundled with Calve ││                                           │
+│                    ││org.calve.go                                     0.1.0     ○ bundled    Bundled with Calve ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

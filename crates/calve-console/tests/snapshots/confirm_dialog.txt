@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fb73fzondjarz75ayzoee   ✓ healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqo6fb73fzondjarz75ayzoee ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…73fzondjarz75ayzoee    │
+│  Overview        5 ││                                                                  ││Refactor verification rules │
+│  Work              ││cpk_…fzondjarz75ayzoee · Refactor verification rules   ○ OPEN     ││                            │
+│  Change Graph      ││                                                                  ││State       ○ OPEN          │
+│› ChangePacks       ││Changes                                                           ││Generation  2               │
+│  Baselines         ││  1 files   +1 -0                                                 ││Created     1m ago          │
+│  Evidence          ││                                                                  ││Changed     1 files  +1 -0  │
+│  Events            ││ ┌ Run command? ────────────────────────────────────────────────────────┐nce    0               │
+│                    ││ │This command changes authoritative state.                             │                       │
+│ SYSTEM             ││ │                                                                      │mote: pack is OPEN;    │
+│  Projects          ││ │calve pack abandon cpk_agqo6fb73fzondjarz75ayzoee --generation 2      │and qualify it first   │
+│  Inbox           2 ││ │                                                                      │lain                   │
+│  Doctor            ││ │Enter confirm     Esc cancel                                          │                       │
+│  Extensions        ││ └──────────────────────────────────────────────────────────────────────┘ns                     │
+│                    ││                                                                  ││  Seal candidate            │
+│                    ││                                                                  ││  Abandon                   │
+│                    ││                                                                  ││  Quarantine                │
+│                    ││                                                                  ││  a all actions             │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

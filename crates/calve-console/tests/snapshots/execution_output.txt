@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Execution exe_agqo6fcpwj26lfwyckmvsvhf3a   ✓ healthy                                    v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Execution exe_agqo6fcpwj26lfwyckmvsvhf3a ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqo6fcpwj26lfwyckmvsvhf3a   │
+│  Overview        5 ││                                                                                           ││                                           │
+│› Work              ││checking                                                                                   ││State       × FAILED                       │
+│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqo6fcmmj44nesmebyu3s65zi │
+│  ChangePacks       ││                                                                                           ││Harness     org.calve.harness.lint         │
+│  Baselines         ││                                                                                           ││Provider    org.calve.provider.shell       │
+│  Evidence          ││                                                                                           ││Actor       pri_agqo6e7aivznrhfxtdboetqnv4 │
+│  Events            ││                                                                                           ││Attempt     1 of 3                         │
+│                    ││                                                                                           ││Generation  2                              │
+│ SYSTEM             ││                                                                                           ││Retry of    —                              │
+│  Projects          ││                                                                                           ││Output      2 lines                        │
+│  Inbox           2 ││                                                                                           ││Effects     0                              │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Retry                                    │
+│                    ││                                                                                           ││  Open ChangePack                          │
+│                    ││                                                                                           ││  a all actions                            │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ tab tabs  f follow  a actions  esc back  ^P commands  : command  ? help

@@ -1,0 +1,23 @@
+[package]
+name = "calve-console"
+description = "Calve terminal console"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+calve-api.workspace = true
+calve-client.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+unicode-width.workspace = true

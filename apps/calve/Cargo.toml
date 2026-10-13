@@ -1,0 +1,86 @@
+[package]
+name = "calve"
+description = "Local-first change workflow built on OpenAEVC"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "calve"
+path = "src/main.rs"
+
+[[bin]]
+name = "calved"
+path = "../calved/src/main.rs"
+
+# Extension binaries ship with Calve; their sources live under extensions/ and may depend only
+# on calve-domain and OpenAEVC contract crates (enforced by `xtask check-architecture`).
+[[bin]]
+name = "calve_ext_software"
+path = "../../extensions/software-project/main.rs"
+
+[[bin]]
+name = "calve_ext_general"
+path = "../../extensions/general-project/main.rs"
+
+[[bin]]
+name = "calve_ext_rust"
+path = "../../extensions/rust/main.rs"
+
+[[bin]]
+name = "calve_ext_go"
+path = "../../extensions/go/main.rs"
+
+[[bin]]
+name = "calve_ext_python"
+path = "../../extensions/python/main.rs"
+
+[[bin]]
+name = "calve_ext_javascript_typescript"
+path = "../../extensions/javascript-typescript/main.rs"
+
+[[bin]]
+name = "calve_ext_java"
+path = "../../extensions/java/main.rs"
+
+[[bin]]
+name = "calve_ext_c_cpp"
+path = "../../extensions/c-cpp/main.rs"
+
+[[bin]]
+name = "calve_ext_shell"
+path = "../../extensions/shell/main.rs"
+
+[[bin]]
+name = "calve_ext_hcl"
+path = "../../extensions/hcl/main.rs"
+
+[dependencies]
+calve-api.workspace = true
+calve-app.workspace = true
+calve-client.workspace = true
+calve-console.workspace = true
+calve-domain.workspace = true
+calve-ipc.workspace = true
+clap.workspace = true
+openaevc-crypto.workspace = true
+openaevc-extension-contract.workspace = true
+openaevc-protocol.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+calve-testkit.workspace = true
+openaevc-crypto.workspace = true
+openaevc-protocol.workspace = true
+openaevc-sdk.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true
+toml.workspace = true
+uuid.workspace = true

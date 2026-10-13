@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   [ok] healthy                      v0.1.0  ^P Commands  ? Help
++ Navigation --------++ ChangePacks -----------------------------------------------------++ Inspector -----------------+
+| PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  ||cpk_...j44nesmebyu3s65zi    |
+|  Overview        5 ||                                                                  ||Lint sweep                  |
+|  Work              ||ID               State           Title                   Updated  ||                            |
+|  Change Graph      ||cpk_...u3s65zi   [ ] OPEN        Lint sweep              1m       ||State       [ ] OPEN        |
+|> ChangePacks     6 ||cpk_...qtlkoba   [!] QUARANTINED Experimental transport  1m       ||Generation  2               |
+|  Baselines         ||cpk_...5ayzoee   [ ] OPEN        Refactor verificatio... 1m       ||Created     1m ago          |
+|  Evidence          ||cpk_...usoarca   [?] SEALED      Fix daemon race cond... 1m       ||Changed     0 files  +0 -0  |
+|  Events            ||cpk_...ltg27pa   [?] SEALED      Add remote conforman... 1m       ||Evidence    0               |
+|                    ||cpk_...cuttedq   [ok] PROMOTED   Update protocol schemas 1m       ||                            |
+| SYSTEM             ||                                                                  ||[!] Promote: pack is OPEN;  |
+|  Projects          ||                                                                  ||seal and qualify it first   |
+|  Inbox           2 ||                                                                  ||x explain                   |
+|  Doctor            ||                                                                  ||                            |
+|  Extensions        ||                                                                  ||Actions                     |
+|                    ||                                                                  ||  Seal candidate            |
+|                    ||                                                                  ||  Abandon                   |
+|                    ||                                                                  ||  Quarantine                |
+|                    ||                                                                  ||  a all actions             |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||                            |
++--------------------++------------------------------------------------------------------++----------------------------+
+ ^v select  enter open  a actions  x explain  / filter  ^P commands  : command  ? help

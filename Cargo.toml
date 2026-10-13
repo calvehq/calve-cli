@@ -1,0 +1,52 @@
+[workspace]
+resolver = "3"
+members = ["apps/calve", "crates/*", "xtask"]
+default-members = ["apps/calve", "crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "Apache-2.0"
+repository = "https://github.com/calvehq/calve"
+
+[workspace.dependencies]
+calve-api = { path = "crates/calve-api" }
+calve-app = { path = "crates/calve-app" }
+calve-client = { path = "crates/calve-client" }
+calve-console = { path = "crates/calve-console" }
+calve-domain = { path = "crates/calve-domain" }
+calve-ipc = { path = "crates/calve-ipc" }
+calve-testkit = { path = "crates/calve-testkit" }
+openaevc-core = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-crypto = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-extension-contract = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-protocol = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-runtime = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-sdk = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+openaevc-store = { git = "ssh://git@github.com/calvehq/openaevc.git", branch = "main", version = "0.1.0" }
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.28"
+ed25519-dalek = "2"
+ratatui = "0.28"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+similar = "2"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
+toml = "0.8"
+unicode-width = "0.1"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# Hashing dominates extension install and handshake time; keep it fast in dev and test builds.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.curve25519-dalek]
+opt-level = 3

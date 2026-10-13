@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Events   ✓ healthy                                                                      v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Events ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││When   Source    Event                                                    Object           ││execution.finished                         │
+│  Overview        5 ││1m     calve     execution.finished                                       exe_…kmvsvhf3a   ││                                           │
+│  Work              ││1m     openaevc  execution.failed                                         exe_…kmvsvhf3a   ││Time        2026-09-29 21:31:21 UTC        │
+│  Change Graph      ││1m     openaevc  observation.appended                                     exe_…kmvsvhf3a   ││Source      calve                          │
+│  ChangePacks       ││1m     openaevc  execution.heartbeat                                      exe_…kmvsvhf3a   ││Actor       —                              │
+│  Baselines         ││1m     openaevc  execution.heartbeat                                      exe_…kmvsvhf3a   ││{                                          │
+│  Evidence          ││1m     openaevc  execution.running                                        exe_…kmvsvhf3a   ││  "actor": null,                           │
+│› Events            ││1m     openaevc  execution.starting                                       exe_…kmvsvhf3a   ││  "body": null,                            │
+│                    ││1m     openaevc  execution.admitted                                       exe_…kmvsvhf3a   ││  "detail": "FAILED",                      │
+│ SYSTEM             ││1m     openaevc  workunit.added                                           cpk_…byu3s65zi   ││  "id": "calve:37",                        │
+│  Projects          ││1m     openaevc  provider.registered                                      org.cal….shell   ││  "kind": "execution.finished",            │
+│  Inbox           2 ││1m     calve     pack.created                                             cpk_…byu3s65zi   ││  "namespace_id":                          │
+│  Doctor            ││1m     openaevc  changepack.created                                       cpk_…byu3s65zi   ││"ns_agqo6e7aiv5rpgmw24byhy3lji",           │
+│  Extensions        ││1m     openaevc  changepack.quarantined                                   cpk_…7sqtlkoba   ││  "project_id":                            │
+│                    ││1m     calve     pack.created                                             cpk_…7sqtlkoba   ││"prj_01a0ef13-e366-71a6-816c-8197620898db",│
+│                    ││1m     openaevc  changepack.created                                       cpk_…7sqtlkoba   ││  "source": "calve",                       │
+│                    ││1m     calve     file.captured                                            rules.txt        ││  "source_event_id": "37",                 │
+│                    ││1m     openaevc  execution.succeeded                                      exe_…z2zkohuja   ││  "source_sequence": 37,                   │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…z2zkohuja   ││  "subject":                               │
+│                    ││1m     openaevc  observation.appended                                     exe_…z2zkohuja   ││"exe_agqo6fcpwj26lfwyckmvsvhf3a",          │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…z2zkohuja   ││  "subjects": [                            │
+│                    ││1m     openaevc  effect.applied                                           exe_…z2zkohuja   ││    "exe_agqo6fcpwj26lfwyckmvsvhf3a"       │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…z2zkohuja   ││  ],                                       │
+│                    ││1m     openaevc  execution.running                                        exe_…z2zkohuja   ││  "summary": "execution.finished           │
+│                    ││1m     openaevc  execution.starting                                       exe_…z2zkohuja   ││exe_agqo6fcpwj26lfwyckmvsvhf3a",           │
+│                    ││1m     openaevc  execution.admitted                                       exe_…z2zkohuja   ││  "timestamp":                             │
+│                    ││1m     openaevc  workunit.added                                           cpk_…z75ayzoee   ││"2026-09-29T21:31:21.350695650Z"           │
+│                    ││1m     openaevc  provider.registered                                      org.cal….local   ││}                                          │
+│                    ││1m     calve     pack.created                                             cpk_…z75ayzoee   ││                                           │
+│                    ││1m     openaevc  changepack.created                                       cpk_…z75ayzoee   ││                                           │
+│                    ││1m     calve     task.pack.linked                                         tsk_…c72093222   ││                                           │
+│                    ││1m     calve     review.recorded                                          cpk_…ljusoarca   ││                                           │
+│                    ││1m     openaevc  evidence.registered                                      cpk_…ljusoarca   ││                                           │
+│                    ││1m     openaevc  changepack.sealed                                        cpk_…ljusoarca   ││                                           │
+│                    ││1m     calve     file.captured                                            crates/…mon.rs   ││                                           │
+│                    ││1m     openaevc  execution.succeeded                                      exe_…6kedzsxt4   ││                                           │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…6kedzsxt4   ││                                           │
+│                    ││1m     openaevc  observation.appended                                     exe_…6kedzsxt4   ││                                           │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…6kedzsxt4   ││                                           │
+│                    ││1m     openaevc  effect.applied                                           exe_…6kedzsxt4   ││                                           │
+│                    ││1m     openaevc  execution.heartbeat                                      exe_…6kedzsx1/100││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ ↑↓ navigate  / filter actor: type: object:  f follow  ^P commands  : command  ? help
