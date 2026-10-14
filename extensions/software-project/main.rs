@@ -4,12 +4,12 @@
 
 use std::path::{Component, Path};
 
-use openaevc_crypto::sha256;
-use openaevc_extension_contract::server::{Extension, HostContext, self_artifact_digest, serve};
-use openaevc_extension_contract::wire::{
+use openaevc::crypto::sha256;
+use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
+use openaevc::extension::wire::{
     ApplyOutput, EvaluateOutput, Operation, ValidateOutput, VerifyOutput, WireError,
 };
-use openaevc_protocol::*;
+use openaevc::protocol::*;
 use serde_json::{Value, json};
 
 const ID: &str = "org.calve.software";

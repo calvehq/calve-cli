@@ -163,9 +163,7 @@ dependencies = [
  "calve-ipc",
  "calve-testkit",
  "clap",
- "openaevc-crypto",
- "openaevc-extension-contract",
- "openaevc-protocol",
+ "openaevc",
  "openaevc-sdk",
  "rusqlite",
  "serde_json",
@@ -180,7 +178,7 @@ name = "calve-api"
 version = "0.1.0"
 dependencies = [
  "clap",
- "openaevc-protocol",
+ "openaevc",
  "serde",
  "serde_json",
  "uuid",
@@ -195,13 +193,8 @@ dependencies = [
  "calve-domain",
  "clap",
  "ed25519-dalek",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-extension-contract",
- "openaevc-protocol",
- "openaevc-runtime",
+ "openaevc",
  "openaevc-sdk",
- "openaevc-store",
  "rusqlite",
  "serde",
  "serde_json",
@@ -242,8 +235,7 @@ dependencies = [
 name = "calve-domain"
 version = "0.1.0"
 dependencies = [
- "openaevc-extension-contract",
- "openaevc-protocol",
+ "openaevc",
  "serde_json",
 ]
 
@@ -963,179 +955,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "openaevc-authority"
+name = "openaevc"
 version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-canonical",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
-]
-
-[[package]]
-name = "openaevc-canonical"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-protocol",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "openaevc-composition"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
- "serde",
-]
-
-[[package]]
-name = "openaevc-core"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-canonical",
- "openaevc-crypto",
- "openaevc-protocol",
- "rand_core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "openaevc-crypto"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "ed25519-dalek",
- "openaevc-canonical",
- "openaevc-protocol",
- "rand_core",
- "serde",
- "sha2",
-]
-
-[[package]]
-name = "openaevc-execution"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-authority",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
- "serde_json",
-]
-
-[[package]]
-name = "openaevc-extension-contract"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-canonical",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "openaevc-policy"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-core",
- "openaevc-protocol",
-]
-
-[[package]]
-name = "openaevc-protocol"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "base64",
- "schemars",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "openaevc-runtime"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-authority",
- "openaevc-canonical",
- "openaevc-composition",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-execution",
- "openaevc-extension-contract",
- "openaevc-policy",
- "openaevc-protocol",
- "openaevc-store",
- "openaevc-verification",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "openaevc-sdk"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-authority",
- "openaevc-canonical",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
- "openaevc-runtime",
- "openaevc-transport",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "openaevc-store"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
-dependencies = [
- "openaevc-canonical",
- "openaevc-core",
- "openaevc-crypto",
- "openaevc-protocol",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "openaevc-transport"
-version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
+source = "git+https://github.com/calvehq/openaevc.git?tag=v0.1.0#5720d3ec15bee6c49630b2cec5a21afd357dedf8"
 dependencies = [
  "axum",
+ "base64",
+ "ed25519-dalek",
  "http-body-util",
  "hyper",
  "hyper-util",
- "openaevc-canonical",
- "openaevc-core",
- "openaevc-protocol",
- "openaevc-runtime",
+ "rand_core",
+ "rusqlite",
  "rustls",
  "rustls-pki-types",
+ "schemars",
  "serde",
  "serde_json",
+ "sha2",
+ "thiserror",
  "tokio",
  "tokio-rustls",
  "tokio-stream",
@@ -1144,14 +982,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "openaevc-verification"
+name = "openaevc-sdk"
 version = "0.1.0"
-source = "git+ssh://git@github.com/calvehq/openaevc.git?branch=main#288b804fc2b7d178de9dd2de20d13e615aed02c8"
+source = "git+https://github.com/calvehq/openaevc.git?tag=v0.1.0#5720d3ec15bee6c49630b2cec5a21afd357dedf8"
 dependencies = [
- "openaevc-core",
- "openaevc-policy",
- "openaevc-protocol",
+ "openaevc",
  "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2146,7 +1984,7 @@ dependencies = [
  "calve-api",
  "calve-app",
  "clap",
- "openaevc-crypto",
+ "openaevc",
  "serde_json",
  "toml",
 ]

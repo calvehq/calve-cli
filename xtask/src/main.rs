@@ -4,9 +4,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const OPENAEVC_GIT: &str = "ssh://git@github.com/calvehq/openaevc.git";
+mod openaevc_rules;
+
+use calve_app::compatibility::{OPENAEVC_REVISION, OPENAEVC_TAG};
 
 const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
+       cargo run --bin xtask -- check-isolation
        cargo run --bin xtask -- catalog-keygen <seed-file>
        cargo run --bin xtask -- catalog-publish <catalog-dir> <seed-file>... [--threshold N] [--days D]
          (signs <catalog-dir>/targets.body.json into targets/snapshot/timestamp, creating root.json)
@@ -21,6 +24,7 @@ fn main() {
         Some("check-architecture") if args.len() == 1 => {
             check().map(|()| println!("architecture check passed"))
         }
+        Some("check-isolation") if args.len() == 1 => check_isolation(),
         Some("catalog-keygen") if args.len() == 2 => keygen(Path::new(&args[1])),
         Some("catalog-publish") if args.len() >= 3 => publish(&args[1..]),
         Some("catalog-rotate") if args.len() >= 5 => rotate(&args[1..]),
@@ -236,7 +240,7 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             "id": format!("org.calve.{key}"),
             "version": version,
             "artifact": name,
-            "digest": openaevc_crypto::sha256(&bytes),
+            "digest": openaevc::crypto::sha256(&bytes),
             "summary": format!("First-party {key} extension"),
         }));
     }
@@ -272,7 +276,7 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     outputs.push(sbom_path);
     let mut sums = String::new();
     for output in &outputs {
-        let digest = openaevc_crypto::sha256(&fs::read(output)?).to_string();
+        let digest = openaevc::crypto::sha256(&fs::read(output)?).to_string();
         let name = output.file_name().and_then(|n| n.to_str()).unwrap_or("");
         sums.push_str(&format!(
             "{}  {name}\n",
@@ -374,7 +378,7 @@ fn cli_reference(check: bool) -> Result<(), Box<dyn std::error::Error>> {
 /// `calve extension catalog-trust --key`.
 fn keygen(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::Write;
-    let key = openaevc_crypto::SigningKey::generate();
+    let key = openaevc::crypto::SigningKey::generate();
     let seed: String = key
         .seed()
         .iter()
@@ -463,6 +467,7 @@ fn rotate(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 /// Allowed internal dependency edges (PLAN §10). Anything else fails CI.
 const ALLOWED: &[(&str, &[&str])] = &[
     ("calve-domain", &[]),
+    ("calve-integration-contract", &[]),
     ("calve-api", &[]),
     ("calve-ipc", &["calve-api"]),
     ("calve-app", &["calve-api", "calve-domain"]),
@@ -490,9 +495,10 @@ const RESTRICTED: &[(&str, &[&str])] = &[
     ("ratatui", &["calve-console"]),
     ("crossterm", &["calve-console"]),
     ("rusqlite", &["calve-app", "calve"]),
-    ("openaevc-runtime", &["calve-app"]),
-    ("openaevc-store", &["calve-app"]),
 ];
+
+/// The contract crate's whole dependency set (plan §4): no `calve-*`, tokio or rusqlite.
+const CONTRACT_DEPENDENCIES: &[&str] = &["serde", "serde_json", "sha2", "openaevc"];
 
 fn check() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -503,28 +509,9 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
     let dependencies = manifest["workspace"]["dependencies"]
         .as_table()
         .ok_or("workspace has no dependencies table")?;
-    let mut public_dependencies = 0;
-    for (name, value) in dependencies {
-        if !name.starts_with("openaevc-") {
-            continue;
-        }
-        let table = value
-            .as_table()
-            .ok_or("OpenAEVC dependency must be a table")?;
-        // `branch` is allowed only while no release tag exists; Cargo.lock (built --locked) pins it.
-        if table.get("path").is_some()
-            || table.get("git").and_then(toml::Value::as_str) != Some(OPENAEVC_GIT)
-            || !["rev", "tag", "branch"]
-                .iter()
-                .any(|key| table.contains_key(*key))
-        {
-            return Err(format!("{name} must use a pinned public OpenAEVC source").into());
-        }
-        public_dependencies += 1;
-    }
-    if public_dependencies == 0 {
-        return Err("no OpenAEVC dependencies declared".into());
-    }
+    openaevc_rules::check_workspace_deps(dependencies, OPENAEVC_TAG)?;
+    let lock: toml::Value = fs::read_to_string(root.join("Cargo.lock"))?.parse()?;
+    openaevc_rules::check_lock(&lock, OPENAEVC_TAG, OPENAEVC_REVISION)?;
     for member in ["apps/calve", "xtask"]
         .into_iter()
         .map(PathBuf::from)
@@ -539,6 +526,18 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
         let name = package["package"]["name"]
             .as_str()
             .ok_or("package without name")?;
+        openaevc_rules::check_member(name, &package)?;
+        if name == "calve-integration-contract"
+            && let Some(deps) = package.get("dependencies").and_then(toml::Value::as_table)
+            && let Some(dep) = deps
+                .keys()
+                .find(|d| !CONTRACT_DEPENDENCIES.contains(&d.as_str()))
+        {
+            return Err(format!(
+                "{name} may not depend on {dep} (allowed: {CONTRACT_DEPENDENCIES:?})"
+            )
+            .into());
+        }
         let allowed = ALLOWED
             .iter()
             .find(|(crate_name, _)| *crate_name == name)
@@ -559,20 +558,16 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
                 {
                     return Err(format!("{name} may not depend on {dep}").into());
                 }
-                if let Some(table) = deps[dep].as_table()
-                    && table.get("path").is_some()
-                    && dep.starts_with("openaevc-")
-                {
-                    return Err(format!("{name} uses a path dependency on {dep}").into());
-                }
             }
         }
         // xtask lists the forbidden strings itself.
         if name != "xtask" {
             scan_sources(&root.join(&member).join("src"))?;
+            scan_openaevc_modules(name, &root.join(&member).join("src"))?;
         }
     }
     check_extensions(&root.join("extensions"))?;
+    scan_openaevc_modules("extensions", &root.join("extensions"))?;
     scan_sources(&root.join("apps/calved"))?;
     Ok(())
 }
@@ -596,9 +591,7 @@ fn check_extensions(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             let allowed = matches!(
                 krate,
                 "calve_domain"
-                    | "openaevc_protocol"
-                    | "openaevc_extension_contract"
-                    | "openaevc_crypto"
+                    | "openaevc"
                     | "serde_json"
                     | "std"
                     | "crate"
@@ -634,8 +627,8 @@ fn scan_sources(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         }
         let source = fs::read_to_string(&path)?;
         for forbidden in [
-            "openaevc_runtime::handlers",
-            "openaevc_store::sqlite::",
+            "openaevc::runtime::handlers",
+            "openaevc::store::sqlite::",
             "FROM changepacks",
             "INTO changepacks",
             "UPDATE changepacks",
@@ -653,5 +646,129 @@ fn scan_sources(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    Ok(())
+}
+
+/// `openaevc::{store,runtime,transport}` may be named only by the runtime owner.
+fn scan_openaevc_modules(name: &str, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            scan_openaevc_modules(name, &path)?;
+        } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+            openaevc_rules::check_source(
+                name,
+                &path.display().to_string(),
+                &fs::read_to_string(&path)?,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// True when `name` reaches the runtime owner through the internal dependency DAG.
+fn reaches_runtime_owner(name: &str) -> bool {
+    name == openaevc_rules::RUNTIME_OWNER
+        || ALLOWED
+            .iter()
+            .find(|(n, _)| *n == name)
+            .is_some_and(|(_, deps)| deps.iter().any(|d| reaches_runtime_owner(d)))
+}
+
+/// Plan §5.2 gate 4: every crate that does not reach the runtime owner is built alone in a
+/// generated scratch package (path dependency, the workspace lock's versions, offline); its
+/// `openaevc` feature tree must not enable store/runtime/transport, and OpenAEVC must still
+/// resolve to the pinned tag. The contract crate's closure must exclude calve-*/tokio/rusqlite.
+fn check_isolation() -> Result<(), Box<dyn std::error::Error>> {
+    let root = workspace_root();
+    let main_lock = fs::read_to_string(root.join("Cargo.lock"))?;
+    let scratch = std::env::temp_dir().join(format!("calve-isolation-{}", std::process::id()));
+    let mut members: Vec<(String, PathBuf)> = vec![];
+    for dir in fs::read_dir(root.join("crates"))? {
+        let dir = dir?.path();
+        let package: toml::Value = fs::read_to_string(dir.join("Cargo.toml"))?.parse()?;
+        let name = package["package"]["name"]
+            .as_str()
+            .ok_or("package without name")?
+            .to_owned();
+        if !reaches_runtime_owner(&name) {
+            members.push((name, dir));
+        }
+    }
+    members.sort();
+    let want = format!(
+        "git+{}?tag={OPENAEVC_TAG}#{OPENAEVC_REVISION}",
+        openaevc_rules::GIT
+    );
+    for (name, dir) in members {
+        let ws = scratch.join(&name);
+        fs::create_dir_all(ws.join("src"))?;
+        fs::write(ws.join("src/lib.rs"), "")?;
+        fs::write(
+            ws.join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"isolation-probe\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[dependencies]\n{name} = {{ path = {:?} }}\n\n[workspace]\n",
+                dir.display().to_string()
+            ),
+        )?;
+        fs::write(ws.join("Cargo.lock"), &main_lock)?;
+        let manifest = ws.join("Cargo.toml");
+        run(std::process::Command::new("cargo")
+            .args(["check", "--quiet", "--offline", "--manifest-path"])
+            .arg(&manifest))?;
+        let lock: toml::Value = fs::read_to_string(ws.join("Cargo.lock"))?.parse()?;
+        let source = lock["package"]
+            .as_array()
+            .and_then(|p| p.iter().find(|p| p["name"].as_str() == Some("openaevc")))
+            .and_then(|p| p["source"].as_str().map(str::to_owned));
+        let tree = |edges: &str, invert: bool| -> Result<String, Box<dyn std::error::Error>> {
+            let mut c = std::process::Command::new("cargo");
+            c.args([
+                "tree",
+                "--offline",
+                "-e",
+                edges,
+                "--prefix",
+                "none",
+                "--manifest-path",
+            ])
+            .arg(&manifest);
+            if invert {
+                c.args(["-i", "openaevc"]);
+            }
+            let out = c.output()?;
+            if !out.status.success() {
+                return Err(format!(
+                    "{name}: cargo tree failed: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                )
+                .into());
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        };
+        let features = match &source {
+            Some(s) if *s != want => {
+                return Err(format!("{name}: isolated build resolved OpenAEVC from {s}").into());
+            }
+            Some(_) => {
+                let t = tree("features", true)?;
+                openaevc_rules::check_feature_tree(&name, &t)?;
+                "default only"
+            }
+            None => "not used",
+        };
+        if name == "calve-integration-contract"
+            && let Some(bad) = tree("normal", false)?.lines().find(|l| {
+                l.starts_with("tokio ")
+                    || l.starts_with("rusqlite ")
+                    || (l.starts_with("calve-") && !l.starts_with("calve-integration-contract "))
+            })
+        {
+            return Err(format!("{name}: forbidden dependency in its closure: {bad}").into());
+        }
+        println!("isolated: {name:28} openaevc: {features}");
+    }
+    let _ = fs::remove_dir_all(&scratch);
+    println!("isolation check passed");
     Ok(())
 }

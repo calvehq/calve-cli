@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
-use openaevc_protocol::Digest;
+use openaevc::protocol::Digest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -1157,7 +1157,7 @@ fn parse_until(text: &str) -> std::result::Result<u64, String> {
                 .ok_or_else(|| "duration is too large".into());
         }
     }
-    let stamp: openaevc_protocol::Timestamp = text
+    let stamp: openaevc::protocol::Timestamp = text
         .parse()
         .map_err(|_| format!("{text:?} is not RFC 3339, Unix seconds, or a duration like 2h"))?;
     u64::try_from(stamp.unix_nanos() / 1_000_000_000).map_err(|_| "time is before 1970".into())

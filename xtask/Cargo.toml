@@ -15,6 +15,6 @@ workspace = true
 calve-api.workspace = true
 clap.workspace = true
 calve-app.workspace = true
-openaevc-crypto.workspace = true
+openaevc.workspace = true
 serde_json.workspace = true
 toml.workspace = true

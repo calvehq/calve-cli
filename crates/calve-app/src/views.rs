@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use openaevc_protocol::{Digest, Event, Query, b64};
+use openaevc::protocol::{Digest, Event, Query, b64};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 
@@ -35,7 +35,7 @@ fn args(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
 }
 
-fn content(effect: &openaevc_protocol::AppliedEffect) -> Option<Vec<u8>> {
+fn content(effect: &openaevc::protocol::AppliedEffect) -> Option<Vec<u8>> {
     b64::decode(effect.payload["content"].as_str()?).ok()
 }
 
@@ -114,7 +114,7 @@ impl Project {
     /// accepted content (of the rename source, for renames), the new side the candidate.
     fn file_diff(
         before: &crate::resources::FileState,
-        effect: &openaevc_protocol::AppliedEffect,
+        effect: &openaevc::protocol::AppliedEffect,
     ) -> Value {
         let path = effect.target.locator.as_str();
         let (status, old_path) = match effect.kind.as_str() {
@@ -162,7 +162,7 @@ impl Project {
             None => None,
         };
         // Files and change size against accepted history.
-        let mut latest: BTreeMap<String, &openaevc_protocol::AppliedEffect> = BTreeMap::new();
+        let mut latest: BTreeMap<String, &openaevc::protocol::AppliedEffect> = BTreeMap::new();
         for effect in &pack.candidate_effects {
             latest.insert(effect.target.locator.clone(), effect);
         }
@@ -306,7 +306,7 @@ impl Project {
     /// verification per verifier, recorded reviews, and the latest policy decision.
     async fn explain_pack(
         &self,
-        pack: &openaevc_protocol::ChangePack,
+        pack: &openaevc::protocol::ChangePack,
         requires_review: bool,
         verifications: &[Value],
         reviews: &[Value],
@@ -713,7 +713,10 @@ fn verifier_conditions(expr: &Value, out: &mut Vec<(String, String)>) {
 }
 
 /// Transitions OpenAEVC defines for each pack state; OpenAEVC still enforces each one.
-fn pack_actions(pack: &openaevc_protocol::ChangePack, explain: &Value) -> (Vec<Value>, Vec<Value>) {
+fn pack_actions(
+    pack: &openaevc::protocol::ChangePack,
+    explain: &Value,
+) -> (Vec<Value>, Vec<Value>) {
     let id = pack.id.to_string();
     let generation = pack.generation.to_string();
     let with_gen = |verb: &[&str]| {

@@ -69,16 +69,13 @@ calve-console.workspace = true
 calve-domain.workspace = true
 calve-ipc.workspace = true
 clap.workspace = true
-openaevc-crypto.workspace = true
-openaevc-extension-contract.workspace = true
-openaevc-protocol.workspace = true
+openaevc.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 calve-testkit.workspace = true
-openaevc-crypto.workspace = true
-openaevc-protocol.workspace = true
+openaevc.workspace = true
 openaevc-sdk.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true

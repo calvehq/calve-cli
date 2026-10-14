@@ -27,9 +27,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use openaevc_core::{IdGeneratorExt, SystemClock, UuidV7Ids};
-use openaevc_crypto::{Signer, SigningKey, sha256};
-use openaevc_protocol::{
+use openaevc::core::{IdGeneratorExt, SystemClock, UuidV7Ids};
+use openaevc::crypto::{Signer, SigningKey, sha256};
+use openaevc::protocol::{
     Baseline, BaselineId, Blob, ChangePack, Command, Digest, EffectProposal, ErrorCode, Event,
     EvidenceCondition, ExecutionId, ExecutionRequest, ExecutionState, Expr, GrantBody, GrantId,
     Metadata, NamespaceId, NewPrincipal, NodeRef, ObjectEnvelope, ObjectKind, PackId, PackSpec,
@@ -37,9 +37,9 @@ use openaevc_protocol::{
     ResourceRef, ResourceSelector, RevisionRelation, Timestamp, VerificationStatus,
     VerifierCondition, WorkUnitId, WorkerInfo,
 };
-use openaevc_runtime::{Admin, Runtime, RuntimeConfig, RuntimeDeps};
+use openaevc::runtime::{Admin, Runtime, RuntimeConfig, RuntimeDeps};
+use openaevc::store::{SqliteOptions, SqliteStore};
 use openaevc_sdk::{EmbeddedClient, OpenAevcClient, Session, TypedClient};
-use openaevc_store::{SqliteOptions, SqliteStore};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Protocol(Box<openaevc_protocol::ProtocolError>),
+    Protocol(Box<openaevc::protocol::ProtocolError>),
     #[error(transparent)]
     Database(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -66,8 +66,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-impl From<openaevc_protocol::ProtocolError> for Error {
-    fn from(error: openaevc_protocol::ProtocolError) -> Self {
+impl From<openaevc::protocol::ProtocolError> for Error {
+    fn from(error: openaevc::protocol::ProtocolError) -> Self {
         Self::Protocol(Box::new(error))
     }
 }
@@ -877,7 +877,7 @@ impl FileChange {
         let (kind, payload) = match self {
             Self::Snapshot(_, content) => (
                 SOFTWARE_EFFECT,
-                json!({"digest":sha256(content),"size":content.len(),"content":openaevc_protocol::b64::encode(content)}),
+                json!({"digest":sha256(content),"size":content.len(),"content":openaevc::protocol::b64::encode(content)}),
             ),
             Self::Delete { previous, .. } => (
                 "org.calve.software.delete",
@@ -885,7 +885,7 @@ impl FileChange {
             ),
             Self::Rename { from, content, .. } => (
                 "org.calve.software.rename",
-                json!({"from":from,"digest":sha256(content),"size":content.len(),"content":openaevc_protocol::b64::encode(content)}),
+                json!({"from":from,"digest":sha256(content),"size":content.len(),"content":openaevc::protocol::b64::encode(content)}),
             ),
         };
         EffectProposal {
@@ -1672,7 +1672,7 @@ impl Project {
 
     pub async fn link_task_execution(&self, task_id: &str, execution_id: &str) -> Result<()> {
         let task = self.task(task_id)?;
-        let execution: openaevc_protocol::Execution =
+        let execution: openaevc::protocol::Execution =
             serde_json::from_value(self.execution(execution_id).await?)?;
         let pack_id = execution.pack.to_string();
         let pack = self.pack(&pack_id).await?;
@@ -1717,7 +1717,7 @@ impl Project {
     }
 
     async fn enrich_tasks_with_protocol(&self, tasks: &mut [Value]) -> Result<()> {
-        let mut execution_cache = BTreeMap::<String, openaevc_protocol::Execution>::new();
+        let mut execution_cache = BTreeMap::<String, openaevc::protocol::Execution>::new();
         let mut work_unit_cache = BTreeMap::<String, Value>::new();
         let mut pack_cache = BTreeMap::<String, (PackState, Option<Value>)>::new();
         for task in tasks {
@@ -1758,7 +1758,7 @@ impl Project {
                     ));
                 }
             }
-            let mut latest = BTreeMap::<String, openaevc_protocol::Execution>::new();
+            let mut latest = BTreeMap::<String, openaevc::protocol::Execution>::new();
             let mut execution_states = Vec::new();
             for id in task["linked_executions"].as_array().into_iter().flatten() {
                 let id = id
@@ -1767,7 +1767,7 @@ impl Project {
                 let execution = if let Some(cached) = execution_cache.get(id) {
                     cached.clone()
                 } else {
-                    let fetched: openaevc_protocol::Execution =
+                    let fetched: openaevc::protocol::Execution =
                         serde_json::from_value(self.execution(id).await?)?;
                     execution_cache.insert(id.to_owned(), fetched.clone());
                     fetched

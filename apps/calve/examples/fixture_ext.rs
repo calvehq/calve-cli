@@ -2,9 +2,9 @@
 //! `CALVE-FIXTURE:{"version":"1.1.0","caps":["clock.read"]}` to create distinct artifacts.
 #![forbid(unsafe_code)]
 
-use openaevc_extension_contract::server::{Extension, HostContext, self_artifact_digest, serve};
-use openaevc_extension_contract::wire::{Operation, WireError};
-use openaevc_protocol::*;
+use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
+use openaevc::extension::wire::{Operation, WireError};
+use openaevc::protocol::*;
 use serde_json::Value;
 
 struct Fixture {

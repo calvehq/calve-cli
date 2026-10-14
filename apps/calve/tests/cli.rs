@@ -290,8 +290,8 @@ fn cli_authority_uses_protocol_decisions_and_grants() {
         .block_on(
             project
                 .client
-                .register_principal(openaevc_protocol::NewPrincipal {
-                    kind: openaevc_protocol::PrincipalKind::Actor,
+                .register_principal(openaevc::protocol::NewPrincipal {
+                    kind: openaevc::protocol::PrincipalKind::Actor,
                     public_key: None,
                     linked_to: Some(project.identity.created_by),
                     attributes: Default::default(),
@@ -326,8 +326,9 @@ fn cli_authority_uses_protocol_decisions_and_grants() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let expiry = openaevc_protocol::Timestamp::from_unix_nanos(current as i128 + 3_600_000_000_000)
-        .to_string();
+    let expiry =
+        openaevc::protocol::Timestamp::from_unix_nanos(current as i128 + 3_600_000_000_000)
+            .to_string();
     let grant_args = [
         "--project",
         root,

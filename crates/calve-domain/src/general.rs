@@ -2,7 +2,7 @@
 //! key/value records and external artifact references. Compiled into both the extension
 //! binary and the Calve library, so it only depends on OpenAEVC contract crates.
 
-use openaevc_protocol::EffectProposal;
+use openaevc::protocol::EffectProposal;
 use serde_json::{Map, Value, json};
 
 pub const ID: &str = "org.calve.general";
@@ -193,11 +193,9 @@ pub fn validate(effect: &EffectProposal) -> Result<Option<Value>, String> {
 }
 
 pub fn serve() -> std::process::ExitCode {
-    use openaevc_extension_contract::server::{
-        Extension, HostContext, self_artifact_digest, serve,
-    };
-    use openaevc_extension_contract::wire::{ApplyOutput, Operation, ValidateOutput, WireError};
-    use openaevc_protocol::{
+    use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
+    use openaevc::extension::wire::{ApplyOutput, Operation, ValidateOutput, WireError};
+    use openaevc::protocol::{
         EffectKindDecl, Entrypoint, ExtensionManifest, ResourceKindDecl, SUPPORTED_CONTRACT,
         SUPPORTED_PROTOCOL,
     };
@@ -283,7 +281,7 @@ pub fn serve() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openaevc_protocol::ResourceRef;
+    use openaevc::protocol::ResourceRef;
 
     fn effect(kind: &str, resource: &str, locator: &str, payload: Value) -> EffectProposal {
         EffectProposal {

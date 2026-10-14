@@ -251,11 +251,9 @@ pub fn integration_metadata(language: &Language) -> Value {
 
 /// Serves one language as an OpenAEVC extension; each `calve_ext_<lang>` binary calls this.
 pub fn serve_language(key: &str) -> std::process::ExitCode {
-    use openaevc_extension_contract::server::{
-        Extension, HostContext, self_artifact_digest, serve,
-    };
-    use openaevc_extension_contract::wire::{Operation, VerifyOutput, WireError};
-    use openaevc_protocol::{
+    use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
+    use openaevc::extension::wire::{Operation, VerifyOutput, WireError};
+    use openaevc::protocol::{
         Entrypoint, ExtensionManifest, Finding, SUPPORTED_CONTRACT, SUPPORTED_PROTOCOL,
         VerificationStatus,
     };

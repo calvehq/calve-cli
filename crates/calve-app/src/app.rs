@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::{fs::OpenOptions, path::Path};
 
-use openaevc_protocol::{Digest, ResourceRef, RevisionRelation};
+use openaevc::protocol::{Digest, ResourceRef, RevisionRelation};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 
@@ -624,7 +624,7 @@ async fn dispatch(request: Request) -> Result<Value> {
             "calve": env!("CARGO_PKG_VERSION"),
             "openaevc_crate_version": compatibility::OPENAEVC_CRATE_VERSION,
             "openaevc_revision": compatibility::OPENAEVC_REVISION,
-            "protocol": openaevc_protocol::PROTOCOL_VERSION.to_string(),
+            "protocol": openaevc::protocol::PROTOCOL_VERSION.to_string(),
             "api_version": API_VERSION,
         }));
     }
@@ -1099,14 +1099,14 @@ async fn dispatch(request: Request) -> Result<Value> {
         Action::Execution { command } => match command {
             ExecutionCommand::List { pack, state } => {
                 let state = state.as_deref().map(|name| match name {
-                    "pending" => openaevc_protocol::ExecutionState::Pending,
-                    "admitted" => openaevc_protocol::ExecutionState::Admitted,
-                    "starting" => openaevc_protocol::ExecutionState::Starting,
-                    "running" => openaevc_protocol::ExecutionState::Running,
-                    "succeeded" => openaevc_protocol::ExecutionState::Succeeded,
-                    "failed" => openaevc_protocol::ExecutionState::Failed,
-                    "cancelled" => openaevc_protocol::ExecutionState::Cancelled,
-                    "lost" => openaevc_protocol::ExecutionState::Lost,
+                    "pending" => openaevc::protocol::ExecutionState::Pending,
+                    "admitted" => openaevc::protocol::ExecutionState::Admitted,
+                    "starting" => openaevc::protocol::ExecutionState::Starting,
+                    "running" => openaevc::protocol::ExecutionState::Running,
+                    "succeeded" => openaevc::protocol::ExecutionState::Succeeded,
+                    "failed" => openaevc::protocol::ExecutionState::Failed,
+                    "cancelled" => openaevc::protocol::ExecutionState::Cancelled,
+                    "lost" => openaevc::protocol::ExecutionState::Lost,
                     _ => unreachable!("clap validated execution state"),
                 });
                 project.list_executions(pack.as_deref(), state).await
@@ -1339,7 +1339,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         Action::Doctor { bundle, yes } => {
             let namespace = project
                 .client
-                .query(openaevc_protocol::Query::GetNamespace {})
+                .query(openaevc::protocol::Query::GetNamespace {})
                 .await?;
             let compatibility = compatibility::query(&project.client).await?;
             let product_db = project.check_product_db()?;

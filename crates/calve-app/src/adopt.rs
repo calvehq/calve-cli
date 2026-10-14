@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use openaevc_protocol::{Command, Digest, ObjectKind, Query, b64};
+use openaevc::protocol::{Command, Digest, ObjectKind, Query, b64};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 

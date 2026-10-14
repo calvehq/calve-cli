@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use calve_app::extensions::{CatalogBody, CatalogPackage, publish_catalog, rotate_root};
 use calve_testkit::Env;
-use openaevc_crypto::sha256;
+use openaevc::crypto::sha256;
 use serde_json::json;
 
 fn fixture() -> PathBuf {

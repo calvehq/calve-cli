@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Component, Path};
 
-use openaevc_protocol::{Digest, Event, ExecutionId, Query, WorkUnitId};
+use openaevc::protocol::{Digest, Event, ExecutionId, Query, WorkUnitId};
 use openaevc_sdk::OpenAevcClient;
 use rusqlite::params;
 use serde_json::{Value, json};
@@ -216,7 +216,7 @@ impl Project {
                 continue;
             };
             let pack = self.pack(id).await?;
-            let touches = |effect: &&openaevc_protocol::AppliedEffect| {
+            let touches = |effect: &&openaevc::protocol::AppliedEffect| {
                 crate::resources::is_file_effect(&effect.kind)
                     && (effect.target.locator == locator
                         || effect.payload["from"] == locator.as_str())
@@ -418,7 +418,7 @@ impl Project {
         self.release_extension_usage(id).await?;
         let receipt = self
             .client
-            .command(openaevc_protocol::Command::UnregisterExtension {
+            .command(openaevc::protocol::Command::UnregisterExtension {
                 extension: id.into(),
             })
             .await?;
@@ -508,15 +508,15 @@ pub fn recovery_apply(root: &Path) -> Result<Value> {
 }
 
 /// OpenAEVC admits one runtime per data root, so these run while no Project is open.
-fn open_store(root: &Path) -> Result<openaevc_store::SqliteStore> {
-    Ok(openaevc_store::SqliteStore::open(
+fn open_store(root: &Path) -> Result<openaevc::store::SqliteStore> {
+    Ok(openaevc::store::SqliteStore::open(
         &root.join(".calve/openaevc"),
-        openaevc_store::SqliteOptions::default(),
+        openaevc::store::SqliteOptions::default(),
     )?)
 }
 
 pub fn verify_store(root: &Path) -> Result<Value> {
-    use openaevc_store::Store;
+    use openaevc::store::Store;
     let report = open_store(root)?.verify_integrity()?;
     Ok(
         json!({"ok":report.ok(),"problems":report.problems,"namespaces":report.namespaces,

@@ -1,6 +1,6 @@
 use calve_app::compatibility;
 use calve_app::{ActivityFilter, GrantOptions, Project};
-use openaevc_protocol::{
+use openaevc::protocol::{
     Command, ExecutionRequest, ExecutionState, NewPrincipal, PackState, PrincipalKind,
     ProviderDescriptor, RevisionRelation, WorkUnitState,
 };
@@ -42,7 +42,7 @@ async fn authority_preview_grant_explain_and_revoke_use_openaevc() {
     let options = GrantOptions {
         subject: actor.to_string(),
         actions: vec![action.into()],
-        expires_at: openaevc_protocol::Timestamp::from_unix_nanos(
+        expires_at: openaevc::protocol::Timestamp::from_unix_nanos(
             current as i128 + 3_600_000_000_000,
         )
         .to_string(),
@@ -106,7 +106,7 @@ async fn activity_merges_recent_protocol_and_product_events() {
     let pack = project.create_pack("Candidate", None).await.unwrap();
     let all_protocol = project
         .client
-        .query(openaevc_protocol::Query::ListEvents {
+        .query(openaevc::protocol::Query::ListEvents {
             after: 0,
             limit: Some(1000),
             kinds: vec![],
@@ -126,9 +126,9 @@ async fn activity_merges_recent_protocol_and_product_events() {
         && item["project_id"] == project.identity.project_id
         && item["namespace_id"] == serde_json::json!(project.identity.namespace_id)));
     for pair in merged.windows(2) {
-        let newer: openaevc_protocol::Timestamp =
+        let newer: openaevc::protocol::Timestamp =
             pair[0]["timestamp"].as_str().unwrap().parse().unwrap();
-        let older: openaevc_protocol::Timestamp =
+        let older: openaevc::protocol::Timestamp =
             pair[1]["timestamp"].as_str().unwrap().parse().unwrap();
         assert!(newer >= older);
     }
@@ -378,7 +378,7 @@ async fn intent_references_validate_protocol_objects_and_survive_reopen() {
             .is_err()
     );
     let unknown_actor =
-        openaevc_protocol::PrincipalId::from_bytes(*uuid::Uuid::now_v7().as_bytes())
+        openaevc::protocol::PrincipalId::from_bytes(*uuid::Uuid::now_v7().as_bytes())
             .unwrap()
             .to_string();
     assert!(
@@ -720,7 +720,7 @@ async fn review_policy_gates_promotion_and_old_decisions_do_not_cross_candidates
         .create_revision_pack_with_requirements(
             "Reviewed amendment",
             None,
-            openaevc_protocol::RevisionRelation::Amends,
+            openaevc::protocol::RevisionRelation::Amends,
             vec![original],
             true,
         )

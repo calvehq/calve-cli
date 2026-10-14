@@ -12,6 +12,5 @@ publish = false
 workspace = true
 
 [dependencies]
-openaevc-protocol.workspace = true
-openaevc-extension-contract.workspace = true
+openaevc.workspace = true
 serde_json.workspace = true

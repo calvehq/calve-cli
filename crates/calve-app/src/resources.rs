@@ -3,8 +3,8 @@
 use std::fs;
 use std::path::{Component, Path};
 
-use openaevc_crypto::sha256;
-use openaevc_protocol::{Digest, PackState, b64};
+use openaevc::crypto::sha256;
+use openaevc::protocol::{Digest, PackState, b64};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -136,7 +136,7 @@ pub(crate) fn is_file_effect(kind: &str) -> bool {
 }
 
 /// Content carried by a snapshot or rename effect, checked against its digest.
-pub(crate) fn effect_content(effect: &openaevc_protocol::AppliedEffect) -> Option<Vec<u8>> {
+pub(crate) fn effect_content(effect: &openaevc::protocol::AppliedEffect) -> Option<Vec<u8>> {
     let content = b64::decode(effect.payload["content"].as_str()?).ok()?;
     (effect.payload["digest"].as_str() == Some(&sha256(&content).to_string())).then_some(content)
 }
@@ -150,7 +150,7 @@ pub(crate) struct FileState {
 }
 
 impl FileState {
-    pub fn apply(&mut self, effect: &openaevc_protocol::AppliedEffect) -> Result<()> {
+    pub fn apply(&mut self, effect: &openaevc::protocol::AppliedEffect) -> Result<()> {
         let path = effect.target.locator.clone();
         match effect.kind.as_str() {
             SNAPSHOT => {

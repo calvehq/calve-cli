@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use openaevc_crypto::sha256;
-use openaevc_protocol::{
+use openaevc::crypto::sha256;
+use openaevc::protocol::{
     Digest, ExtensionManifest, HostCapability, PublicKey, Query, SUPPORTED_CONTRACT, Signature,
 };
 use openaevc_sdk::{OpenAevcClient, TypedClient};
@@ -421,14 +421,14 @@ pub fn install_artifact(
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&staged, fs::Permissions::from_mode(0o700))?;
         }
-        let (manifest, _) = openaevc_extension_contract::host::handshake(
-            &openaevc_extension_contract::host::Entrypoint {
+        let (manifest, _) = openaevc::extension::host::handshake(
+            &openaevc::extension::host::Entrypoint {
                 program: staged.clone(),
                 args: vec![],
             },
-            &openaevc_extension_contract::host::HostLimits {
+            &openaevc::extension::host::HostLimits {
                 deadline: std::time::Duration::from_secs(60),
-                ..openaevc_extension_contract::host::HostLimits::default()
+                ..openaevc::extension::host::HostLimits::default()
             },
         )
         .map_err(|error| invalid(format!("extension handshake failed: {error:?}")))?;

@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use openaevc_protocol::{Command, Digest, PackState, Query};
+use openaevc::protocol::{Command, Digest, PackState, Query};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 
@@ -92,7 +92,7 @@ impl Project {
     /// snapshots so tools see the candidate content for every captured path.
     fn materialize_candidate(
         &self,
-        effects: &[openaevc_protocol::AppliedEffect],
+        effects: &[openaevc::protocol::AppliedEffect],
     ) -> Result<(Scratch, Vec<String>, Vec<String>)> {
         let scratch =
             Scratch(std::env::temp_dir().join(format!("calve-check-{}", uuid::Uuid::now_v7())));

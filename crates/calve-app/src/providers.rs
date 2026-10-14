@@ -18,8 +18,8 @@ use std::process::{Child, Command as Process, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use openaevc_crypto::sha256;
-use openaevc_protocol::{
+use openaevc::crypto::sha256;
+use openaevc::protocol::{
     Command, EffectProposal, ExecutionId, ExecutionRequest, PackState, ProviderDescriptor,
     ResourceRef, ResourceSelector, WorkUnitId, WorkerInfo, b64,
 };
@@ -705,7 +705,7 @@ impl Project {
                 let _ = handle.block_on(client.heartbeat(&worker_lease));
             }
             handle
-                .block_on(client.query(openaevc_protocol::Query::GetExecution {
+                .block_on(client.query(openaevc::protocol::Query::GetExecution {
                     execution: execution_id,
                 }))
                 .is_ok_and(|value| value["state"] == "CANCELLED")

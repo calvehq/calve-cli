@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 
-use openaevc_crypto::{Signer, SigningKey};
-use openaevc_protocol::{NewPrincipal, PrincipalId, PrincipalKind};
+use openaevc::crypto::{Signer, SigningKey};
+use openaevc::protocol::{NewPrincipal, PrincipalId, PrincipalKind};
 use openaevc_sdk::{EmbeddedClient, Session, TypedClient};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -131,7 +131,7 @@ impl Project {
         } else {
             actions.to_vec()
         };
-        let expires = openaevc_protocol::Timestamp::from_unix_nanos(
+        let expires = openaevc::protocol::Timestamp::from_unix_nanos(
             (i128::from(crate::now()?) + i128::from(days) * 86_400) * 1_000_000_000,
         );
         let grant = self

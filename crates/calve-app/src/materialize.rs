@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use openaevc_crypto::sha256;
-use openaevc_protocol::{
+use openaevc::crypto::sha256;
+use openaevc::protocol::{
     Command, Digest, ExecutionRequest, PackSpec, ProviderDescriptor, Query, ResourceRef,
     WorkerInfo, b64,
 };
@@ -54,7 +54,7 @@ impl Project {
         Ok(known)
     }
 
-    fn snapshot_content(effect: &openaevc_protocol::AppliedEffect) -> Result<Vec<u8>> {
+    fn snapshot_content(effect: &openaevc::protocol::AppliedEffect) -> Result<Vec<u8>> {
         let content = b64::decode(effect.payload["content"].as_str().unwrap_or_default())
             .map_err(|_| invalid("snapshot content is not valid base64"))?;
         if effect.payload["digest"].as_str() != Some(&sha256(&content).to_string()) {

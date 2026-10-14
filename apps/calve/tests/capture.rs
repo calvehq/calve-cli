@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use calve_app::Project;
-use openaevc_crypto::sha256;
-use openaevc_protocol::{ExecutionState, PackState, RevisionRelation};
+use openaevc::crypto::sha256;
+use openaevc::protocol::{ExecutionState, PackState, RevisionRelation};
 
 /// Enabling an extension writes the machine-wide package cache, so the body runs in a child
 /// process whose data directory is private to this test.

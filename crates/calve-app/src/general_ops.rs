@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use openaevc_protocol::{
+use openaevc::protocol::{
     Command, EffectProposal, ExecutionRequest, PackState, ProviderDescriptor, ResourceRef,
     ResourceSelector, WorkerInfo,
 };

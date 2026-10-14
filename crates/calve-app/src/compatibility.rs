@@ -1,6 +1,6 @@
 //! Supported public OpenAEVC contract for this Calve build.
 
-use openaevc_protocol::{
+use openaevc::protocol::{
     PROTOCOL_VERSION, RuntimeInfo, SUPPORTED_CONTRACT, SUPPORTED_PROTOCOL, VersionRange,
 };
 use openaevc_sdk::OpenAevcClient;
@@ -8,8 +8,11 @@ use serde::Serialize;
 
 use crate::{Error, Result};
 
-/// Tracks calvehq/openaevc `main` until a release tag exists; matches Cargo.lock.
-pub const OPENAEVC_REVISION: &str = "288b804fc2b7d178de9dd2de20d13e615aed02c8";
+/// The OpenAEVC release this build is pinned to (ADR 0003). `xtask check-architecture`
+/// asserts that Cargo.lock resolves both `openaevc` and `openaevc-sdk` to exactly this tag and
+/// commit.
+pub const OPENAEVC_TAG: &str = "v0.1.0";
+pub const OPENAEVC_REVISION: &str = "5720d3ec15bee6c49630b2cec5a21afd357dedf8";
 pub const OPENAEVC_CRATE_VERSION: &str = "0.1.0";
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,7 +53,7 @@ pub(crate) fn check_range(
 
 pub async fn query(client: &impl OpenAevcClient) -> Result<Compatibility> {
     let value = client
-        .query(openaevc_protocol::Query::GetRuntimeInfo {})
+        .query(openaevc::protocol::Query::GetRuntimeInfo {})
         .await?;
     let info: RuntimeInfo = serde_json::from_value(value)?;
     check(&info)
@@ -59,7 +62,7 @@ pub async fn query(client: &impl OpenAevcClient) -> Result<Compatibility> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openaevc_protocol::ProtocolVersion;
+    use openaevc::protocol::ProtocolVersion;
 
     #[test]
     fn incompatible_protocol_range_is_rejected() {
