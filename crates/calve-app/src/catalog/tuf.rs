@@ -326,6 +326,9 @@ pub struct TargetInfo {
     pub path: String,
     pub length: u64,
     pub sha256: String,
+    /// The targets role that signed it (`targets` or a delegated role): the publisher
+    /// identity for `id_policy` and cross-catalog pinning (rev 10 §9.4).
+    pub role: String,
     /// The target's `custom` metadata, verbatim.
     pub custom: Option<Value>,
 }
@@ -381,7 +384,11 @@ impl TrustClient {
         policy::check_delegations(self.updater.trusted())?;
         let Some(t) = t else { return Ok(None) };
         policy::check_target(path, &t)?;
+        let role = signing_role(self.updater.trusted(), path).ok_or_else(|| {
+            TrustError::Policy(format!("{path}: resolved but no loaded role lists it"))
+        })?;
         let info = TargetInfo {
+            role,
             path: path.to_owned(),
             length: t.length,
             sha256: t.hashes["sha256"].to_ascii_lowercase(),
@@ -411,6 +418,41 @@ impl TrustClient {
     pub fn trusted(&self) -> &TrustedMetadataSet {
         self.updater.trusted()
     }
+}
+
+/// The role whose listing the verifier used for `path`: TUF's pre-order delegation search
+/// (paths, `terminating`) replayed over the roles the verifier has already loaded and verified
+/// for this lookup. Pure; it never loads or trusts anything new.
+pub fn signing_role(set: &TrustedMetadataSet, path: &str) -> Option<String> {
+    let mut queue = vec!["targets".to_owned()];
+    let mut visited = std::collections::BTreeSet::new();
+    while !queue.is_empty() {
+        let role = queue.remove(0);
+        if !visited.insert(role.clone()) {
+            continue;
+        }
+        let Some(t) = set.targets_role(&role) else {
+            continue;
+        };
+        if t.target(path).is_some() {
+            return Some(role);
+        }
+        let mut children = Vec::new();
+        if let Some(d) = &t.delegations {
+            for child in &d.roles {
+                if child.matches_path(path).unwrap_or(false) {
+                    children.push(child.name.clone());
+                    if child.terminating {
+                        queue.clear();
+                        break;
+                    }
+                }
+            }
+        }
+        children.append(&mut queue);
+        queue = children;
+    }
+    None
 }
 
 pub(crate) fn versions_of(set: &TrustedMetadataSet) -> TrustVersions {

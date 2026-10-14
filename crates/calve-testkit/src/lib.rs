@@ -83,3 +83,40 @@ pub fn copy_tree(from: &Path, to: &Path) {
         }
     }
 }
+
+/// Path of the fixture native extension (`calve-fixture-ext`), built on first use with the
+/// test's own profile. `CALVE_FIXTURE_EXT` overrides it (cross-compiled runs on another OS).
+pub fn fixture_ext() -> PathBuf {
+    if let Some(p) = std::env::var_os("CALVE_FIXTURE_EXT") {
+        return PathBuf::from(p);
+    }
+    static BUILT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let release = !cfg!(debug_assertions);
+            let mut cmd = Command::new(env!("CARGO"));
+            cmd.current_dir(&root).args([
+                "build",
+                "--quiet",
+                "-p",
+                "calve-testkit",
+                "--bin",
+                "calve-fixture-ext",
+            ]);
+            if release {
+                cmd.arg("--release");
+            }
+            assert!(
+                cmd.status().expect("cargo").success(),
+                "building calve-fixture-ext"
+            );
+            let target = std::env::var_os("CARGO_TARGET_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| root.join("target"));
+            target
+                .join(if release { "release" } else { "debug" })
+                .join(format!("calve-fixture-ext{}", std::env::consts::EXE_SUFFIX))
+        })
+        .clone()
+}

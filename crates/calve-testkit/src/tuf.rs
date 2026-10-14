@@ -367,3 +367,90 @@ pub fn copy_dir(from: &Path, to: &Path) {
         }
     }
 }
+
+/// One package version to publish (catalog conventions in `calve_app::catalog::install`).
+pub struct Package<'a> {
+    pub id: &'a str,
+    pub version: &'a str,
+    /// `cic-capable` or `openaevc-only`.
+    pub kind: &'a str,
+    /// `(file name, bytes)` of the native artifact for this host's platform.
+    pub native: (&'a str, Vec<u8>),
+    pub cic: Option<Vec<u8>>,
+    pub metadata: Option<Vec<u8>>,
+}
+
+/// `<arch>-<os>` of this host (the key Calve looks up in `package.json`).
+pub fn host_platform() -> String {
+    format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
+}
+
+impl Repo {
+    /// The targets map of `role` (`targets` or a delegated role name).
+    pub fn role_targets(&mut self, role: &str) -> &mut BTreeMap<String, Vec<u8>> {
+        if role == "targets" {
+            &mut self.targets
+        } else {
+            &mut self.deleg(role).targets
+        }
+    }
+
+    /// Adds a package version under `role`: its files at `<id>/<version>/<file>` and a merged
+    /// `<id>/package.json`. Call [`Repo::publish`] afterwards.
+    pub fn add_package(&mut self, role: &str, p: Package) {
+        let mut files = vec![(p.native.0.to_owned(), p.native.1.clone())];
+        let mut entry =
+            json!({"version": p.version, "kind": p.kind, "native": {host_platform(): p.native.0}});
+        if let Some(c) = p.cic {
+            files.push(("cic.wasm".into(), c));
+            entry["cic"] = json!("cic.wasm");
+        }
+        if let Some(m) = p.metadata {
+            files.push(("calve-integration.json".into(), m));
+            entry["metadata"] = json!("calve-integration.json");
+        }
+        let index_path = format!("{}/package.json", p.id);
+        let t = self.role_targets(role);
+        for (name, bytes) in files {
+            t.insert(format!("{}/{}/{name}", p.id, p.version), bytes);
+        }
+        let mut index: Value = t
+            .get(&index_path)
+            .map(|b| serde_json::from_slice(b).unwrap())
+            .unwrap_or_else(|| json!({"schema": "calve.package/1", "id": p.id, "versions": []}));
+        index["versions"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|v| v["version"] != p.version);
+        index["versions"].as_array_mut().unwrap().push(entry);
+        t.insert(index_path, serde_json::to_vec(&index).unwrap());
+    }
+
+    /// Top-level `revocations.json`.
+    pub fn revoke(&mut self, id: &str, version: Option<&str>, reason: &str) {
+        let mut doc: Value = self
+            .targets
+            .get("revocations.json")
+            .map(|b| serde_json::from_slice(b).unwrap())
+            .unwrap_or_else(|| json!({"revoked": []}));
+        let mut r = json!({"id": id, "reason": reason});
+        if let Some(v) = version {
+            r["version"] = json!(v);
+        }
+        doc["revoked"].as_array_mut().unwrap().push(r);
+        self.targets
+            .insert("revocations.json".into(), serde_json::to_vec(&doc).unwrap());
+    }
+
+    /// Top-level `id-policy.json`: allowed id prefixes per delegated role.
+    pub fn id_policy(&mut self, role: &str, prefixes: &[&str]) {
+        let mut doc: Value = self
+            .targets
+            .get("id-policy.json")
+            .map(|b| serde_json::from_slice(b).unwrap())
+            .unwrap_or_else(|| json!({"roles": {}}));
+        doc["roles"][role] = json!(prefixes);
+        self.targets
+            .insert("id-policy.json".into(), serde_json::to_vec(&doc).unwrap());
+    }
+}

@@ -384,6 +384,7 @@ dependencies = [
  "aws-lc-rs",
  "calve-integration-contract",
  "jiff",
+ "openaevc",
  "serde",
  "serde_json",
  "sha2",
