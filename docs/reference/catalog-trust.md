@@ -1,11 +1,12 @@
 # Catalog trust
 
-Status: M0 design proven (FG2a, FG2b, FG15); delegation conformance **BLOCKED** (FG2c). Decision records: ADR 0007, ADR 0008.
+Status: M0 design proven (FG2a, FG2b, FG15); delegation conformance shown locally by the G1-TUF phase (tuf-conformance 119/119 ×3; release gate G1 PENDING CI). Decision records: ADR 0007, ADR 0008, ADR 0021.
 
-- The catalog is a TUF repository; Calve's client is tough 0.24 behind the `TrustClient` adapter, with Calve's own HTTP transport (no hyper/reqwest).
+- The catalog is a TUF repository; Calve's verifier is `sigstore-tuf` 0.15.0 (exact pin) behind the `TrustClient` adapter, with Calve's own HTTP transport (ureq; no hyper/reqwest): per-fetch byte caps enforced while reading, connect and whole-request deadlines, no redirects, mirror-relative path validation.
 - Bootstrap pins the root by SHA-256 (`repo_id`), written to `REPO_ID`; every generation must match it.
-- Each accepted refresh becomes a generation `gen-N/` holding the client's datastore, the **raw bytes** it fetched (`raw/`) and `state.json`; floors only ever increase; `CURRENT` names the activated generation.
+- Each accepted refresh (or target resolution) becomes a generation `gen-N/` holding the exact verified bytes of every role the client accepted, the root chain and `state.json` (incl. `accepted_at`); floors only ever increase; `CURRENT` names the activated generation. Restore replays the stored bytes through the verifier as of `accepted_at`. The verifier clock never goes below the last accepted time.
 - Recovery never re-validates from bootstrap, never activates on checksums alone and never falls back to the parent of a damaged activated generation; anything inconsistent is `RecoveryRequired(trust_state)` until a fresh accepted refresh or an audited reset (`calve extension catalog reset <name> --root-digest <sha256>`).
 - Package states: Fresh, Stale (≤ / > `revocation_max_age`, default 7 days), Expired, Revoked; install/update only when Fresh.
-- Policy: ed25519 keys, sha256 target hashes, consistent snapshots, target paths `<extension-id>/<version>/<file>` authorized by delegation paths and the catalog's `custom.calve.id_policy`; cross-catalog id pinning.
-- Known client issues (FG2c): eager loading of all delegated roles; one out-of-path target in any delegate fails the whole load; wrong consistent-snapshot URL for targets in subdirectories; target streams must be abandoned at the first error; "system time stepped backward" is retryable.
+- Policy (on top of TUF; ADR 0021): ed25519 keys whose ids are the sha256 of the canonical key and whose material is unique, no non-standard key fields, sha256 target hashes, consistent snapshots, target paths `<extension-id>/<version>/<file>` authorized by delegation paths and the catalog's `custom.calve.id_policy`; cross-catalog id pinning.
+- Delegation resolution: lazy pre-order search; `terminating` and path patterns (per-segment globs) prune it; out-of-path entries are untrusted without failing the role; roles absent from the snapshot are never fetched; the walk is bounded (`max_delegations`). A target is fetched once with its pinned length as the cap and verified by length and sha256; consistent-snapshot target path `dir/<sha256>.name`.
+- Superseded M0 issues (tough 0.24, FG2c): eager delegation loading, whole-load failure on one out-of-path target, wrong sub-directory URL, non-terminating error streams, "time stepped backward" refusals — none apply to the selected verifier (G1-TUF report).

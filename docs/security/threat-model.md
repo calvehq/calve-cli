@@ -19,14 +19,14 @@ This document states what Calve defends, what it deliberately does not, and wher
 |---|---|---|---|---|
 | **Same OS user** | every process of the user running Calve | — | none: same-user processes are **trusted** (user decision; like ssh-agent/gpg-agent) | asserted by tests (ADR 0016) |
 | Other local users | the user | other accounts | Unix: 0700/0600 permissions; Windows: owner-only DACLs, pipe DACL, impersonation SID check | M5 (Windows PENDING native) |
-| Network / catalog mirrors | the pinned root of trust | mirrors, CDNs, the network | TUF (tough 0.24) with Calve floors and a pinned repository identity | FG2a, FG15; G1 delegation BLOCKED (FG2c) |
+| Network / catalog mirrors | the pinned root of trust | mirrors, CDNs, the network | TUF (sigstore-tuf 0.15.0) + Calve catalog policy, bounded transport, floors and a pinned repository identity | FG2a, FG15 reruns; G1-TUF conformance 119/119 ×3, malicious-mirror tests; G1 PENDING CI |
 | Extension planning code (T1) | the host | `cic.wasm` | wasm without imports, memory/fuel caps, supervised child with a hard wall-clock kill | FG3, FG4, FG13 |
 | Native extensions (T2) | — | — | **not confined** (OpenAEVC spawns them directly, F4); TUF-verified package, per-spawn re-hash, cleared env, grants for host-mediated calls, explicit user acknowledgment | ADR 0005 |
 | Workers and checks (T3) | the host | the worker | process group / Job Object; Linux Landlock via the helper | FG12 (Linux); M5 |
 
 ## 3. In scope (defended)
 
-- **Catalog compromise below the root of trust:** forged, expired, rolled-back, frozen or mix-and-match metadata from a mirror; targets substituted on the mirror; a delegate signing outside its paths. tough verifies; Calve adds floors that never decrease, a pinned `REPO_ID`, and refuses to activate anything the client did not accept as a transition from the activated state.
+- **Catalog compromise below the root of trust:** forged, expired, rolled-back, frozen or mix-and-match metadata from a mirror; targets substituted on the mirror; a delegate signing outside its paths. The verifier checks TUF; Calve adds a catalog key/hash policy (computed key ids, unique key material), byte caps and deadlines on every fetch, floors that never decrease, a verifier clock that never goes below the last accepted time, a pinned `REPO_ID`, and refuses to activate anything the client did not accept as a transition from the activated state. Slow-retrieval and endless-data mirrors end in one bounded error.
 - **Crashes and accidental damage** of every Calve-owned store: hash-chained journals with intent-before-mutation and ack-after-mutation (FG17), catalog generation recovery (FG15), materialization WAL (M4), product DB backups (M4).
 - **Path escapes** from the Project root through symlinks or `..` (cap-std component walk with nofollow; FG5).
 - **Untrusted planning code:** a CIC guest cannot reach the host (no imports), cannot exhaust memory or run unboundedly (caps, fuel, hard kill), and cannot make the host accept malformed, non-canonical, partial or mis-ordered output (exact validation; 25 adversarial modules + 11 adversarial relate guests).
@@ -50,7 +50,8 @@ This document states what Calve defends, what it deliberately does not, and wher
 | Local trust state | no tamper resistance against the same OS user; rollback resistance only against network/mirror attackers | FG15, FG2a |
 | Store history | the hash chain proves extension of the checkpointed journal; full-chain rewrite detection only back to a pinned signed checkpoint | FG10, M4 |
 | Capture | no atomicity across OpenAEVC commands; the candidate digest is never equal after a rollback; a raw OpenAEVC client can seal a pack Calve considers incomplete | FG7, M4 |
-| Catalog delegation conformance | tough 0.24 fails 21 delegation-related tuf-conformance cases (eager loading, whole-load failure on one out-of-path target, unusual role names) and builds a wrong consistent-snapshot URL for targets in directories | FG2c — **G1 BLOCKED** |
+| Catalog delegation conformance | shown on Linux (119/119 ×3) and by regression tests on Linux + Windows; not yet on CI runners, macOS or aarch64 | G1-TUF report — G1 PENDING CI; macOS/aarch64 BLOCKED |
+| Catalog verifier dependency | sigstore-tuf is pre-1.0 with frequent releases and counts distinct key ids toward thresholds; target bytes are buffered up to the configured cap | exact pin + re-run on bump; policy tests (duplicate key material); `target_max_length` per catalog (M2) |
 
 ## 6. Platform status
 
@@ -63,6 +64,6 @@ This document states what Calve defends, what it deliberately does not, and wher
 
 ## 7. Residual risks requiring a decision at M0 review
 
-1. **TUF delegation conformance (mandatory G1):** no available Rust client passes. Options: upstream fixes to tough (contribution needs authorization), a Calve-maintained fork behind `TrustClient`, or another library. Until resolved, L2 cannot be claimed.
+1. **TUF delegation conformance (mandatory G1):** resolved locally by replacing tough with sigstore-tuf 0.15.0 behind `TrustClient` (G1-TUF phase, no fork). L2 still needs G1 on real runners.
 2. **`unsafe` in wasm guest ABI glue:** extension `cic` crates and testkit wasm fixtures need a scoped exemption from the "only calve-win-sec has `unsafe`" rule (calve-cli crates keep the rule).
-3. **aws-lc-sys (C) in the trust path** through tough → rustls: vetted; confirm acceptance.
+3. **aws-lc-sys (C) in the trust path** through sigstore-crypto (signature verification) and rustls: approved at M0 review (Decision 3); license/advisory checks and a reproducible double build passed in G1-TUF; native CI builds PENDING (G6). No FIPS claim.

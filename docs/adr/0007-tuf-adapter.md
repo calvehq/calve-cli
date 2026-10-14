@@ -1,23 +1,27 @@
 # ADR 0007: TUF adapter, client library and the delegation gate
 
-Status: Accepted with an open blocker (G1 delegation BLOCKED).
+Status: Accepted. G1 TUF-delegation blocker resolved by local evidence (G1-TUF phase, 2026-10-14); G1 PENDING real CI runners.
 
 ## Context
 The catalog must be a real TUF repository with delegations (publisher namespaces). `tough` 0.24's documentation claims no delegation support (F11); rust-tuf 0.3.0-beta14 claims it (F12).
 
 ## Decision
 - A narrow `TrustClient` adapter in `calve-app/src/catalog/tuf.rs`; the library is replaceable behind it.
-- **M0 evidence reversed the documentation:** rust-tuf's client cannot resolve delegated targets at all (FG2); tough 0.24's code does load delegations with snapshot hash/length enforcement and glob path patterns. **tough 0.24 is adopted** (user decision 2026-10-13), with `default-features = false` and Calve's own transport (ureq), so no hyper/reqwest.
-- The adapter records the raw bytes the client fetched; tough's datastore is re-serialized and cannot be re-imported offline (FG15).
+- M0: rust-tuf's client cannot resolve delegated targets (FG2); tough 0.24 was adopted (user decision 2026-10-13) but fails tuf-conformance delegation (FG2c, 83/119; 86/119 with faketime).
+- **G1-TUF (M0 review Decision 1, bounded check first):** tough has no upstream fix (no commits after 0.24.0). **`sigstore-tuf` 0.15.0** (sigstore/sigstore-rust `f950b1b683560aadf7737539f8d7eaa656a9f0c0`, Apache-2.0) passes the pinned suite **119/119**, including over Calve's own transport (three consecutive runs). It replaces tough behind `TrustClient`; **no fork**.
+- Dependency form: `sigstore-tuf = "=0.15.0"`, `default-features = false`, `features = ["aws-lc-rs"]` (no reqwest/hyper). Any version bump re-runs conformance ×3, the regression suite and dependency checks before adoption.
+- Calve transport (ureq): per-fetch byte cap from the verifier's `max_length` enforced while reading, connect + whole-request deadlines, no redirects, no idle-connection reuse, mirror-relative path validation.
+- Calve catalog policy is applied on top of the verifier (ADR 0021): ed25519 only, computed key ids, unique key material, no non-standard key fields, consistent snapshots, sha256 target hashes.
 - Delegation conformance is a **mandatory G1 release gate** (user decision).
 
 ## Consequences
-- tuf-conformance (pinned commit `8729aa18`): 83/119 pass. Delegation behaviour fails 21 cases (eager loading of all delegated roles; one out-of-path target in any delegate fails the whole load; unusual role names); the consistent-snapshot target URL for paths with directories is wrong; a same-version timestamp with changed content is adopted. **G1 is BLOCKED** until a conformant client passes: options are an upstream tough fix (needs authorization to contribute), a Calve-maintained fork behind `TrustClient`, or another library. M2 may proceed on infrastructure only.
-- Calve must stop reading a target stream at the first error (tough's stream never terminates after a violation; FG2c) and treat "system time stepped backward" as retryable (FG15).
-- Catalog policy: ed25519 keys and sha256 hashes only (tough lacks RSA-PSS-384/512, ECDSA P-384, ML-DSA, sha512-only targets).
+- Lazy pre-order delegation search with terminating/path pruning, per-segment globs, percent-encoded role file names, consistent-snapshot target paths `dir/<hash>.name`, same-version timestamps ignored.
+- The verifier treats declared key ids as authoritative and counts distinct ids toward a threshold; Calve policy closes the duplicate-key gap.
+- A target is fetched once, bounded by its pinned length and verified; the M0 "infinite error stream" cannot occur.
+- Targets are buffered in memory up to `target_max_length` (configured per catalog in M2).
 
 ## Tests / evidence
-FG2 (FG2a/2b PASS, FG2c per-case results), FG15; M2 adversarial TUF suite (§9.4).
+FG2 (M0), G1-TUF report (`docs/audit/milestones/G1-TUF.md`): conformance 119/119 ×3; 13 delegation regression, 7 malicious-mirror, 5 policy tests; FG2a 5/5 and FG15 8/8 reruns on Linux and natively on Windows.
 
 ## Residuals
-aws-lc-rs (C, through rustls) enters the tree with tough; vetted in `docs/audit/dependency-vetting.md`.
+aws-lc-rs/aws-lc-sys (C) in the trust path (vetted; reproducible build checked; no FIPS claim). Pre-1.0 dependency with frequent releases (exact pin). Conformance on Windows/macOS/aarch64 PENDING CI / BLOCKED.
