@@ -25,6 +25,13 @@ use super::tuf::{Mirror, TargetInfo, TrustClient, TrustError, encode_role, polic
 
 /// A target resolved in a transition, with its verified bytes when downloaded.
 type Resolved = (TargetInfo, Option<Vec<u8>>);
+/// A target with its verified bytes.
+pub type Fetched = (TargetInfo, Vec<u8>);
+
+/// Verifier-written files live in `gen-N/tuf/`, apart from Calve's own `state.json`: a delegated
+/// role's metadata is stored under its (encoded) role name, so a role named `state` must not be
+/// able to collide with a Calve file (security review of ee47ddc).
+pub const TUF_DIR: &str = "tuf";
 
 /// Fault points of the commit protocol (crash = return early, leaving the disk as is).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -271,8 +278,14 @@ pub struct Catalog {
     pub history: BTreeMap<String, u64>,
     /// Latest accepted time (the verifier's clock never goes below it).
     pub accepted_at: Option<jiff::Timestamp>,
+    /// Cap for any downloaded target (a package file); the verifier also caps each fetch at
+    /// the target's pinned length.
+    pub max_target_bytes: u64,
     bootstrap: Vec<u8>,
 }
+
+/// Default cap for one package file.
+pub const MAX_TARGET_BYTES: u64 = 256 * 1024 * 1024;
 
 impl Catalog {
     fn gen_dir(&self, n: u64) -> PathBuf {
@@ -305,6 +318,7 @@ impl Catalog {
             history: BTreeMap::new(),
             accepted_at: None,
             bootstrap: root.to_vec(),
+            max_target_bytes: MAX_TARGET_BYTES,
         };
         c.refresh(mirror, None)?;
         fs::remove_dir_all(&zero).map_err(io)?;
@@ -312,7 +326,7 @@ impl Catalog {
     }
 
     pub fn refresh(&mut self, mirror: &Mirror, fault: Option<Step>) -> Result<Versions, GenError> {
-        self.transition(mirror, fault, None, false).map(|(v, _)| v)
+        self.transition(mirror, fault, &[], false).map(|(v, _)| v)
     }
 
     /// A refresh that also resolves `target`, loading the delegated roles on its search path
@@ -323,8 +337,8 @@ impl Catalog {
         target: &str,
         fault: Option<Step>,
     ) -> Result<Option<TargetInfo>, GenError> {
-        self.transition(mirror, fault, Some(target), false)
-            .map(|(_, t)| t.map(|(i, _)| i))
+        let (_, mut t) = self.transition(mirror, fault, &[target], false)?;
+        Ok(t.pop().flatten().map(|(i, _)| i))
     }
 
     /// [`Catalog::resolve`] plus the verified bytes of the target (one bounded fetch through the
@@ -335,17 +349,30 @@ impl Catalog {
         target: &str,
         fault: Option<Step>,
     ) -> Result<Option<(TargetInfo, Vec<u8>)>, GenError> {
-        self.transition(mirror, fault, Some(target), true)
-            .map(|(_, t)| t.map(|(i, b)| (i, b.expect("downloaded"))))
+        Ok(self.fetch_all(mirror, &[target], fault)?.pop().flatten())
+    }
+
+    /// Several targets resolved and downloaded in **one** transition, so every file of a
+    /// package comes from the same accepted trust state.
+    pub fn fetch_all(
+        &mut self,
+        mirror: &Mirror,
+        targets: &[&str],
+        fault: Option<Step>,
+    ) -> Result<Vec<Option<Fetched>>, GenError> {
+        let (_, t) = self.transition(mirror, fault, targets, true)?;
+        Ok(t.into_iter()
+            .map(|r| r.map(|(i, b)| (i, b.expect("downloaded"))))
+            .collect())
     }
 
     fn transition(
         &mut self,
         mirror: &Mirror,
         fault: Option<Step>,
-        target: Option<&str>,
+        targets: &[&str],
         download: bool,
-    ) -> Result<(Versions, Option<Resolved>), GenError> {
+    ) -> Result<(Versions, Vec<Option<Resolved>>), GenError> {
         let crash = |s: Step| {
             if fault == Some(s) {
                 Err(GenError::Crash(s))
@@ -362,27 +389,24 @@ impl Catalog {
         let now = now_max(self.accepted_at);
         let accepted = (|| {
             let store: Box<dyn MetadataStore> =
-                Box::new(GenStore(sigstore_tuf::FileStore::new(&tmp)));
-            let mut c = TrustClient::new(
-                mirror.clone(),
-                &self.bootstrap,
-                Some(store),
-                UpdaterConfig::default(),
-            )
+                Box::new(GenStore(sigstore_tuf::FileStore::new(tmp.join(TUF_DIR))));
+            let mut c = TrustClient::new(mirror.clone(), &self.bootstrap, Some(store), {
+                let mut l = UpdaterConfig::default();
+                l.target_max_length = self.max_target_bytes;
+                l
+            })
             .map_err(trust)?;
             c.refresh(now).map_err(trust)?;
-            let t = match target
-                .map(|p| c.resolve(p, now))
-                .transpose()
-                .map_err(trust)?
-                .flatten()
-            {
-                Some(info) if download => {
-                    let bytes = c.download(&info).map_err(trust)?;
-                    Some((info, Some(bytes)))
-                }
-                other => other.map(|i| (i, None)),
-            };
+            let mut t = Vec::with_capacity(targets.len());
+            for p in targets {
+                t.push(match c.resolve(p, now).map_err(trust)? {
+                    Some(info) if download => {
+                        let bytes = c.download(&info).map_err(trust)?;
+                        Some((info, Some(bytes)))
+                    }
+                    other => other.map(|i| (i, None)),
+                });
+            }
             Ok((Versions::of(c.trusted())?, t))
         })();
         let (v, found) = match accepted {
@@ -578,7 +602,7 @@ impl Catalog {
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| rr("trust_state: accepted_at unreadable"))?;
         // The verifier must accept the stored state as of its acceptance time.
-        let set = replay(&bootstrap, &gen_dir(active), at)
+        let set = replay(&bootstrap, &gen_dir(active).join(TUF_DIR), at)
             .map_err(|e| rr(&format!("trust_state: verifier refused stored state: {e}")))?;
         policy::check_root(&set).map_err(|e| rr(&format!("trust_state: {e}")))?;
         let v = Versions::of(&set)?;
@@ -592,6 +616,7 @@ impl Catalog {
             history: BTreeMap::new(),
             accepted_at: Some(at),
             bootstrap,
+            max_target_bytes: MAX_TARGET_BYTES,
         };
         let floors = fs::read(dir.join("floors.json"))
             .ok()
@@ -625,8 +650,10 @@ impl Catalog {
             let kat = st["accepted_at"]
                 .as_str()
                 .and_then(|s| s.parse::<jiff::Timestamp>().ok());
-            let verified =
-                child && kat.is_some_and(|kat| replay(&c.bootstrap, &gen_dir(k), kat).is_ok());
+            let verified = child
+                && kat.is_some_and(|kat| {
+                    replay(&c.bootstrap, &gen_dir(k).join(TUF_DIR), kat).is_ok()
+                });
             if verified && k == c.active + 1 && v.as_ref().is_some_and(|v| v.at_least(&c.floors()))
             {
                 let digest = st["state_digest"].as_str().unwrap().to_owned();

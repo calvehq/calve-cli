@@ -83,7 +83,7 @@ fn fg15_delegated_role_persists_and_replays() {
     let mut c = boot(&r, d.path());
     assert!(
         !d.path()
-            .join(format!("gen-{}/acme.json", c.active))
+            .join(format!("gen-{}/tuf/acme.json", c.active))
             .exists(),
         "refresh alone loads no delegated role"
     );
@@ -92,27 +92,27 @@ fn fg15_delegated_role_persists_and_replays() {
         .unwrap();
     let g = d.path().join(format!("gen-{}", c.active));
     assert!(
-        g.join("acme.json").exists(),
+        g.join("tuf/acme.json").exists(),
         "lazily loaded role stored in the new generation"
     );
     // Stored bytes are exactly the fetched bytes (no re-serialization).
     assert_eq!(
-        fs::read(g.join("acme.json")).unwrap(),
+        fs::read(g.join("tuf/acme.json")).unwrap(),
         fs::read(r.path().join("metadata/1.acme.json")).unwrap()
     );
     let st: serde_json::Value =
         serde_json::from_slice(&fs::read(g.join("state.json")).unwrap()).unwrap();
     let at = st["accepted_at"].as_str().unwrap().parse().unwrap();
-    let set = replay(&r.root_bytes(1), &g, at).unwrap();
+    let set = replay(&r.root_bytes(1), &g.join(TUF_DIR), at).unwrap();
     assert!(
         set.targets_role("acme").is_some(),
         "replay verifies the delegated role through its delegator"
     );
     // A stored delegated role signed by someone else (state digest repaired) → RecoveryRequired.
     let mut v: serde_json::Value =
-        serde_json::from_slice(&fs::read(g.join("acme.json")).unwrap()).unwrap();
+        serde_json::from_slice(&fs::read(g.join("tuf/acme.json")).unwrap()).unwrap();
     v["signed"]["targets"]["acme/pkg"]["length"] = serde_json::json!(999);
-    fs::write(g.join("acme.json"), serde_json::to_vec(&v).unwrap()).unwrap();
+    fs::write(g.join("tuf/acme.json"), serde_json::to_vec(&v).unwrap()).unwrap();
     let mut st2 = st.clone();
     st2["state_digest"] = serde_json::json!(state_digest(&g).unwrap());
     fs::write(g.join("state.json"), serde_json::to_vec(&st2).unwrap()).unwrap();
@@ -192,7 +192,7 @@ fn fg15_damaged_or_foreign_generations() {
         "root.json",
         "root_history/1.root.json",
     ] {
-        let t = d.path().join(format!("gen-{active}/{f}"));
+        let t = d.path().join(format!("gen-{active}/tuf/{f}"));
         let orig = fs::read(&t).unwrap();
         let mut bad = orig.clone();
         let i = bad.len() / 2;
@@ -347,4 +347,27 @@ fn fg15_clock_stepped_back_cannot_revive_expired_metadata() {
     let e = c.refresh(&Mirror::dir(r.path()), None).unwrap_err();
     println!("system clock behind the last accepted time: {e:?}");
     assert!(matches!(e, GenError::Refused(m) if m.contains("expired")));
+}
+
+/// Security review of ee47ddc: a delegated role named like a Calve file (`state`) is stored in
+/// the verifier's own directory and cannot collide with `state.json`, so recovery still works.
+#[test]
+fn fg15_delegated_role_named_like_a_calve_file_cannot_collide() {
+    for name in ["state", "CURRENT", "floors", "REPO_ID"] {
+        let mut r = Repo::new();
+        r.delegate(name, "targets", &["acme/*"], false)
+            .targets
+            .insert("acme/pkg".into(), b"x".to_vec());
+        r.publish();
+        let d = tempfile::tempdir().unwrap();
+        let mut c = boot(&r, d.path());
+        assert!(
+            c.resolve(&Mirror::dir(r.path()), "acme/pkg", None)
+                .unwrap()
+                .is_some(),
+            "{name}"
+        );
+        let reopened = Catalog::open(d.path()).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!(reopened.active, c.active, "{name}");
+    }
 }
