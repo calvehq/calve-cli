@@ -28,6 +28,47 @@ pub struct RelationDecl {
     pub schema: Value,
 }
 
+/// A file domain (capture, verification, materialization). Effects carry the host-generic file
+/// payload `calve.file/1`: `put` = `{digest, size, content}` (content base64), `delete` =
+/// `{previous_digest}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FilesDecl {
+    pub resource_kind: String,
+    pub put: String,
+    pub delete: String,
+    /// Effect kinds still accepted in recorded history but never emitted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<String>,
+    pub write_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verifier: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluator: Option<String>,
+    /// File names whose text the host passes to `classify` as ignore sources.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignore_files: Vec<String>,
+}
+
+/// A non-file resource kind edited with `resource set` (`<short>:<name>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceDecl {
+    pub short: String,
+    pub kind: String,
+    pub set: String,
+    pub remove: String,
+    pub write_action: String,
+}
+
+/// Language checks: the verifier that judges Calve's `org.calve.check-result/v1` evidence;
+/// detection and the check plan come from the `detect` and `check_plan` ops.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChecksDecl {
+    pub verifier: String,
+}
+
 /// Unknown keys are kept in `extra` and ignored (forward compatibility within a schema major).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Metadata {
@@ -42,6 +83,12 @@ pub struct Metadata {
     pub relations: Vec<RelationDecl>,
     pub schema: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<FilesDecl>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ResourceDecl>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<ChecksDecl>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -79,6 +126,55 @@ impl Metadata {
                 return Err(format!("duplicate relation kind {}", r.kind));
             }
             check_schema(&r.schema)?;
+        }
+        let own = |k: &str| k.starts_with(&format!("{}.", self.extension_id));
+        let caps = |c: &str| self.capabilities.required.iter().any(|x| x == c);
+        if let Some(f) = &self.files {
+            let kinds = [&f.resource_kind, &f.put, &f.delete, &f.write_action];
+            if !kinds
+                .into_iter()
+                .chain(&f.history)
+                .chain(&f.verifier)
+                .chain(&f.evaluator)
+                .all(|k| own(k))
+            {
+                return Err("files kinds must be prefixed with the extension id".into());
+            }
+            if !caps("capture.v1") || !caps("classify.v1") {
+                return Err("a files declaration requires capture.v1 and classify.v1".into());
+            }
+            if f.ignore_files
+                .iter()
+                .any(|n| n.is_empty() || n.contains(['/', '\\', '\0']) || n == "." || n == "..")
+            {
+                return Err("ignore_files must be plain file names".into());
+            }
+        }
+        let mut shorts = std::collections::BTreeSet::new();
+        for r in &self.resources {
+            if ![&r.kind, &r.set, &r.remove, &r.write_action]
+                .into_iter()
+                .all(|k| own(k))
+            {
+                return Err(format!(
+                    "resource {} kinds must be prefixed with the extension id",
+                    r.short
+                ));
+            }
+            if r.short.is_empty()
+                || !r.short.bytes().all(|b| b.is_ascii_lowercase())
+                || !shorts.insert(&r.short)
+            {
+                return Err(format!(
+                    "resource short name {:?} must be unique lowercase letters",
+                    r.short
+                ));
+            }
+        }
+        if let Some(c) = &self.checks
+            && (!own(&c.verifier) || !caps("detect.v1") || !caps("check_plan.v1"))
+        {
+            return Err("checks need an own verifier kind and detect.v1 + check_plan.v1".into());
         }
         if self.relations.iter().any(|r| r.required)
             && !self.capabilities.required.iter().any(|c| c == "relate.v1")

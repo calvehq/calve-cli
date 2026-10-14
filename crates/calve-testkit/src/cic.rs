@@ -153,3 +153,11 @@ pub fn relate<D: Driver>(
     let c = commitment(&groups);
     driver::relate(s, meta, source_o, params, max_group, c, groups, chunk)
 }
+
+/// Signed metadata of the fixture package (`fixture.wasm`).
+pub fn fixture_metadata() -> Metadata {
+    serde_json::from_slice(
+        &std::fs::read(fixtures().join("fixture-metadata.json")).expect("fixture-metadata.json"),
+    )
+    .expect("metadata")
+}
