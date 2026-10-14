@@ -421,8 +421,8 @@ impl TrustClient {
 }
 
 /// The delegation chain whose listing the verifier used for `path` (`targets` for the
-/// top-level role, otherwise delegated role names from the top joined by `/`, e.g.
-/// `acme/examples`): TUF's pre-order search (paths, `terminating`) replayed over the roles the
+/// top-level role, otherwise delegated role names from the top, each percent-encoded, joined
+/// by `/`, e.g. `acme/examples`): TUF's pre-order search (paths, `terminating`) replayed over the roles the
 /// verifier has already loaded for this lookup. Role names are chosen by their delegator, so a
 /// bare name is not an identity; the chain is (security review of 7b12d8e). Pure; it never
 /// loads or trusts anything new.
@@ -454,10 +454,14 @@ pub fn signing_role(set: &TrustedMetadataSet, path: &str) -> Option<String> {
                     continue;
                 }
                 if child.matches_path(path).unwrap_or(false) {
+                    // Each segment percent-encoded (python-tuf quoting): a single role named
+                    // `acme/examples` becomes `acme%2Fexamples`, distinct from the chain
+                    // `acme` → `examples` (security review of ec59f58).
+                    let seg = encode_role(&child.name);
                     let c = if chain.is_empty() {
-                        child.name.clone()
+                        seg
                     } else {
-                        format!("{chain}/{}", child.name)
+                        format!("{chain}/{seg}")
                     };
                     children.push((child.name.clone(), c));
                     if child.terminating {

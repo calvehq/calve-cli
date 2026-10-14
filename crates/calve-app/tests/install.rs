@@ -425,3 +425,26 @@ fn nested_role_reusing_an_authorized_name_is_not_that_publisher() {
     assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
     assert!(e.message.contains("acme/examples"), "{e}");
 }
+
+/// Security review of ec59f58: a single role whose name contains `/` must not collide with a
+/// delegation chain of the same text.
+#[test]
+fn slash_in_a_role_name_cannot_impersonate_a_chain() {
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate(
+        "acme/examples",
+        "targets",
+        &["org.example.toy/*", "org.example.toy/*/*"],
+        false,
+    );
+    r.add_package("acme/examples", toy(None));
+    r.id_policy("acme/examples", &["org.example."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    let e = installer(&m)
+        .install(&req(true))
+        .expect_err("policy for the chain, not the name");
+    assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
+    assert!(e.message.contains("acme%2Fexamples"), "{e}");
+}

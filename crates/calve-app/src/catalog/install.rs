@@ -7,7 +7,9 @@
 //! - `index.json` (top-level `targets` role): `{"schema":"calve.index/1","ids":[…]}` for search;
 //! - `revocations.json` (top-level): `{"revoked":[{"id","version"?,"digest"?,"reason"}]}`;
 //! - `id-policy.json` (top-level): `{"roles":{"<delegation chain>":["<id prefix>", …]}}`, keyed by
-//!   the full chain from the top (`acme`, `acme/examples`), never a bare nested role name;
+//!   the full chain from the top with each role name percent-encoded (`acme`,
+//!   `acme/examples`, `acme%2Fexamples` for one role named `acme/examples`), never a bare
+//!   nested role name;
 //! - `<id>/package.json` (signed by the role authorized for `<id>/*`):
 //!   `{"schema":"calve.package/1","id","versions":[{"version","kind","native":{"<platform>":"<file>"},
 //!   "cic"?, "metadata"?, "ui"?}]}` with every file at `<id>/<version>/<file>`.
