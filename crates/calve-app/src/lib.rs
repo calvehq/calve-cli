@@ -16,6 +16,7 @@ pub mod general_ops;
 pub mod identities;
 pub mod ignore;
 pub mod integration;
+pub mod journal;
 pub mod manifests;
 pub mod materialize;
 pub mod observe;
