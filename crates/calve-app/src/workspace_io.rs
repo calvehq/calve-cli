@@ -87,16 +87,37 @@ pub fn validate_locator(loc: &str) -> Result<()> {
         if p.ends_with(['.', ' ']) {
             return bad("component ends with '.' or ' '");
         }
-        // Win32 device names, with or without an extension (`NUL.txt` is still NUL).
-        let stem = p.split('.').next().unwrap_or(p).to_ascii_uppercase();
-        let reserved = matches!(
-            stem.as_str(),
-            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
-        ) || (stem.len() == 4
-            && (stem.starts_with("COM") || stem.starts_with("LPT"))
-            && stem.as_bytes()[3].is_ascii_digit());
-        if reserved {
+        // Win32 device names, with or without an extension (`NUL.txt`, `CON .txt` are still
+        // devices: the stem is compared with trailing spaces removed), including the
+        // superscript-digit forms `COM¹`..`LPT³`.
+        let stem = p
+            .split('.')
+            .next()
+            .unwrap_or(p)
+            .trim_end_matches(' ')
+            .to_uppercase();
+        let port = stem
+            .strip_prefix("COM")
+            .or_else(|| stem.strip_prefix("LPT"))
+            .is_some_and(|n| {
+                let mut c = n.chars();
+                matches!(
+                    (c.next(), c.next()),
+                    (Some('0'..='9' | '¹' | '²' | '³'), None)
+                )
+            });
+        if port
+            || matches!(
+                stem.as_str(),
+                "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+            )
+        {
             return bad("reserved Windows device name");
+        }
+        // NTFS/FAT 8.3 short-name aliases (`CALVE~1` can name `.calve`): refused everywhere, so
+        // one locator never names two files and the rules are the same on every platform.
+        if is_short_name_alias(p) {
+            return bad("8.3 short-name form (NAME~N)");
         }
     }
     Ok(())
@@ -119,6 +140,20 @@ pub fn rename_durable(from: &Path, to: &Path) -> io::Result<()> {
         }
         Ok(())
     }
+}
+
+/// `BASE~N[.EXT]` with a base of 1–8 and an extension of 0–3 characters (no other dot).
+fn is_short_name_alias(p: &str) -> bool {
+    let (base, ext) = p.split_once('.').unwrap_or((p, ""));
+    let Some((name, num)) = base.rsplit_once('~') else {
+        return false;
+    };
+    !name.is_empty()
+        && base.chars().count() <= 8
+        && !num.is_empty()
+        && num.bytes().all(|b| b.is_ascii_digit())
+        && ext.chars().count() <= 3
+        && !ext.contains('.')
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -434,6 +469,14 @@ mod tests {
             "nul.txt",
             "x/COM1",
             "lpt9.log",
+            "CON .txt",
+            "nul  ",
+            "x/COM¹",
+            "lpt³.x",
+            "CALVE~1",
+            "calve~1/x",
+            "PROGRA~1/x",
+            "a/FILE~12.TXT",
             long.as_str(),
             &"x".repeat(4097),
         ] {
