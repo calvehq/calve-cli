@@ -476,8 +476,15 @@ fn cli_workflow() {
     let root = root_path.to_str().unwrap();
     let init = calve(&["init", root, "--name", "CLI fixture"]);
     assert_eq!(init["root"], root);
-    assert!(calve(&["version"])["openaevc_revision"].is_string());
-    assert!(calve(&["--project", root, "doctor"])["compatibility"]["protocol"].is_string());
+    let version = calve(&["version"]);
+    assert_eq!(version["openaevc_tag"], "v0.1.0");
+    assert_eq!(
+        version["openaevc_revision"],
+        "5720d3ec15bee6c49630b2cec5a21afd357dedf8"
+    );
+    let doctor = calve(&["--project", root, "doctor"]);
+    assert!(doctor["compatibility"]["protocol"].is_string());
+    assert_eq!(doctor["compatibility"]["openaevc_tag"], "v0.1.0");
     let intent = calve(&["--project", root, "intent", "create", "Ship a change"]);
     let intent_id = intent["id"].as_str().unwrap();
     let prerequisite = calve(&["--project", root, "task", "create", intent_id, "Prepare"]);

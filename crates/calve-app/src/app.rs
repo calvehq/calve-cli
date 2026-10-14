@@ -623,6 +623,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         return Ok(json!({
             "calve": env!("CARGO_PKG_VERSION"),
             "openaevc_crate_version": compatibility::OPENAEVC_CRATE_VERSION,
+            "openaevc_tag": compatibility::OPENAEVC_TAG,
             "openaevc_revision": compatibility::OPENAEVC_REVISION,
             "protocol": openaevc::protocol::PROTOCOL_VERSION.to_string(),
             "api_version": API_VERSION,

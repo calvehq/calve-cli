@@ -19,6 +19,6 @@ crates/calve-console/tests/fixtures/generate.sh
 CALVE_UPDATE_SNAPSHOTS=1 cargo test -p calve-console
 ```
 
-OpenAEVC is fetched over SSH (`ssh://git@github.com/calvehq/openaevc.git`), so Cargo needs `CARGO_NET_GIT_FETCH_WITH_CLI=true` (or `net.git-fetch-with-cli = true` in `.cargo/config.toml`) and SSH access to the repository. Local development with a sibling checkout is described in [the compatibility document](docs/compatibility/openaevc.md). Do not commit a path dependency or OpenAEVC implementation internals into Calve.
+OpenAEVC is pinned to its public `v0.1.0` release tag and fetched over HTTPS (`https://github.com/calvehq/openaevc.git`); no SSH access or Cargo git configuration is needed. Both `openaevc` and `openaevc-sdk` come from that tag, and `cargo run -p xtask -- check-architecture` and `check-isolation` verify the pin and feature isolation (see [the compatibility document](docs/compatibility/openaevc.md)). Do not commit a path dependency or OpenAEVC implementation internals into Calve.
 
 Keep user-visible commands documented, include tests for state-changing workflows, and explain any migration or compatibility change. Preserve structured OpenAEVC errors and avoid inventing Calve-side authorization rules. A Project's `.calve/` directory contains local operational state and private keys; never add it to an example fixture or bug report.

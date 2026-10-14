@@ -17,6 +17,7 @@ pub const OPENAEVC_CRATE_VERSION: &str = "0.1.0";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Compatibility {
+    pub openaevc_tag: &'static str,
     pub openaevc_revision: &'static str,
     pub openaevc_crate_version: &'static str,
     pub runtime_name: String,
@@ -29,6 +30,7 @@ pub fn check(info: &RuntimeInfo) -> Result<Compatibility> {
     let protocol = check_range("protocol", &SUPPORTED_PROTOCOL, &info.protocol)?;
     let contract = check_range("extension contract", &SUPPORTED_CONTRACT, &info.contract)?;
     Ok(Compatibility {
+        openaevc_tag: OPENAEVC_TAG,
         openaevc_revision: OPENAEVC_REVISION,
         openaevc_crate_version: OPENAEVC_CRATE_VERSION,
         runtime_name: info.implementation.name.clone(),
