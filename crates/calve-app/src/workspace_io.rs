@@ -72,12 +72,32 @@ pub fn validate_locator(loc: &str) -> Result<()> {
     {
         return bad("empty, '.' or '..' component (or absolute)");
     }
-    if parts[0] == ".calve" {
+    // Case-insensitive and trailing-dot/space-insensitive filesystems (Windows, default macOS)
+    // map `.CALVE`, `.calve.` and `.calve ` onto `.calve`: compare the normalized form.
+    let fold = |p: &str| p.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    if fold(parts[0]) == ".calve" {
         return bad("inside .calve");
     }
-    // A Windows drive prefix or a reserved separator form never reaches the filesystem.
-    if parts[0].len() == 2 && parts[0].ends_with(':') {
-        return bad("drive prefix");
+    for p in &parts {
+        // `:` names an NTFS alternate data stream or a drive; a trailing dot or space is
+        // stripped by Win32, so the name on disk would differ from the locator.
+        if p.contains(':') {
+            return bad("':' (drive or alternate data stream)");
+        }
+        if p.ends_with(['.', ' ']) {
+            return bad("component ends with '.' or ' '");
+        }
+        // Win32 device names, with or without an extension (`NUL.txt` is still NUL).
+        let stem = p.split('.').next().unwrap_or(p).to_ascii_uppercase();
+        let reserved = matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit());
+        if reserved {
+            return bad("reserved Windows device name");
+        }
     }
     Ok(())
 }
@@ -374,7 +394,17 @@ mod tests {
 
     #[test]
     fn locator_rules() {
-        for ok in ["a", "src/main.rs", "a b/ü.txt", ".github/x", "x..y"] {
+        for ok in [
+            "a",
+            "src/main.rs",
+            "a b/ü.txt",
+            ".github/x",
+            "x..y",
+            ".calvex",
+            "console.rs",
+            "COM",
+            "com10",
+        ] {
             assert!(validate_locator(ok).is_ok(), "{ok}");
         }
         let long = "a/".repeat(64) + "b";
@@ -392,6 +422,18 @@ mod tests {
             ".calve/x",
             "C:",
             "C:/x",
+            ".CALVE/x",
+            ".Calve",
+            ".calve./x",
+            ".calve /x",
+            "a:b",
+            "f.txt:stream",
+            "x/a.",
+            "x/a ",
+            "CON",
+            "nul.txt",
+            "x/COM1",
+            "lpt9.log",
             long.as_str(),
             &"x".repeat(4097),
         ] {
