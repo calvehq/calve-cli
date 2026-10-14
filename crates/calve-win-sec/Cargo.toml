@@ -1,0 +1,20 @@
+[package]
+name = "calve-win-sec"
+description = "Windows security and durability primitives: the only Calve crate allowed `unsafe` (ADR 0016)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# The workspace forbids `unsafe`; this crate is the single, user-approved exception. Every
+# `unsafe` block is one FFI call with owned arguments and a SAFETY comment.
+[lints.rust]
+unsafe_code = "deny"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile.workspace = true

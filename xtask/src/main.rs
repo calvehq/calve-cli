@@ -477,12 +477,15 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "calve-domain",
             "calve-integration-contract",
             "calve-testkit",
+            "calve-win-sec",
         ],
     ),
     ("calve-client", &["calve-api", "calve-app", "calve-ipc"]),
     // The console reads read models through the client only (PLAN §10).
     ("calve-console", &["calve-api", "calve-client"]),
     ("calve-testkit", &["calve-integration-contract"]),
+    // The single crate allowed `unsafe` (cfg(windows) FFI only).
+    ("calve-win-sec", &[]),
     (
         "calve",
         &[
@@ -536,6 +539,15 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
             .as_str()
             .ok_or("package without name")?;
         openaevc_rules::check_member(name, &package)?;
+        // Plan §4.1: `unsafe` is forbidden everywhere (workspace lints) except calve-win-sec.
+        let inherits = package
+            .get("lints")
+            .and_then(|l| l.get("workspace"))
+            .and_then(toml::Value::as_bool)
+            == Some(true);
+        if name != "calve-win-sec" && !inherits {
+            return Err(format!("{name} must use the workspace lints (unsafe_code = forbid)").into());
+        }
         if name == "calve-integration-contract"
             && let Some(deps) = package.get("dependencies").and_then(toml::Value::as_table)
             && let Some(dep) = deps

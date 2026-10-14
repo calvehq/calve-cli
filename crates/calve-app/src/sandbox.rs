@@ -187,6 +187,8 @@ pub struct CalveHost {
     /// Wall time and fuel slices of the last guest call (deadline tests).
     pub last_call: Duration,
     pub last_slices: u64,
+    /// Most fuel slices any single guest call needed (sizing evidence).
+    pub peak_slices: u64,
 }
 
 impl CalveHost {
@@ -238,6 +240,7 @@ impl CalveHost {
             dead: false,
             last_call: Duration::ZERO,
             last_slices: 0,
+            peak_slices: 0,
         };
         let v = host.run(&version, ())?;
         if v != abi::ABI_VERSION {
@@ -288,6 +291,7 @@ impl CalveHost {
         };
         self.last_call = start.elapsed();
         self.last_slices = slices;
+        self.peak_slices = self.peak_slices.max(slices);
         out
     }
 

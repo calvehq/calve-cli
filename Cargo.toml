@@ -19,6 +19,7 @@ calve-console = { path = "crates/calve-console" }
 calve-domain = { path = "crates/calve-domain" }
 calve-ipc = { path = "crates/calve-ipc" }
 calve-testkit = { path = "crates/calve-testkit" }
+calve-win-sec = { path = "crates/calve-win-sec" }
 openaevc = { git = "https://github.com/calvehq/openaevc.git", tag = "v0.1.0", version = "=0.1.0", default-features = false }
 openaevc-sdk = { git = "https://github.com/calvehq/openaevc.git", tag = "v0.1.0", version = "=0.1.0", default-features = false }
 calve-integration-contract = { path = "crates/calve-integration-contract" }
@@ -43,6 +44,10 @@ wasmparser = "0.261"
 wat = "1.262"
 sha2 = "0.10"
 landlock = "0.4"
+cap-std = "3.4"
+cap-fs-ext = "3.4"
+rustix = { version = "1", features = ["fs"] }
+proptest = "1.11"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

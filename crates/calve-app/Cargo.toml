@@ -32,10 +32,20 @@ wasmi.workspace = true
 wasmi_core.workspace = true
 wasmparser.workspace = true
 sha2.workspace = true
+cap-std.workspace = true
+cap-fs-ext.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
 calve-testkit.workspace = true
 wat.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+calve-win-sec.workspace = true
