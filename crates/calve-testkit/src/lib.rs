@@ -3,6 +3,7 @@
 
 pub mod cic;
 pub mod mini_host;
+pub mod tuf;
 
 use std::fs;
 use std::path::{Path, PathBuf};

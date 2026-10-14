@@ -546,7 +546,9 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(toml::Value::as_bool)
             == Some(true);
         if name != "calve-win-sec" && !inherits {
-            return Err(format!("{name} must use the workspace lints (unsafe_code = forbid)").into());
+            return Err(
+                format!("{name} must use the workspace lints (unsafe_code = forbid)").into(),
+            );
         }
         if name == "calve-integration-contract"
             && let Some(deps) = package.get("dependencies").and_then(toml::Value::as_table)
@@ -581,6 +583,9 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        // ADR 0007: the TUF library is replaceable — only the adapter and the trust-state
+        // module may name it.
+        scan_verifier_use(&root.join(&member).join("src"))?;
         // xtask lists the forbidden strings itself.
         if name != "xtask" {
             scan_sources(&root.join(&member).join("src"))?;
@@ -628,6 +633,36 @@ fn check_extensions(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .into());
             }
+        }
+    }
+    Ok(())
+}
+
+const VERIFIER_OWNERS: &[&str] = &[
+    "crates/calve-app/src/catalog/tuf.rs",
+    "crates/calve-app/src/catalog/state.rs",
+];
+
+fn scan_verifier_use(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            scan_verifier_use(&path)?;
+            continue;
+        }
+        if path.extension().and_then(|s| s.to_str()) != Some("rs") {
+            continue;
+        }
+        let rel = path.to_string_lossy().replace('\\', "/");
+        let owned = VERIFIER_OWNERS.iter().any(|o| rel.ends_with(o));
+        let text = fs::read_to_string(&path)?;
+        let named = text.contains("sigstore_tuf") && !path.ends_with("main.rs");
+        if named && !owned {
+            return Err(format!(
+                "{} names sigstore_tuf; only {VERIFIER_OWNERS:?} may (ADR 0007)",
+                path.display()
+            )
+            .into());
         }
     }
     Ok(())
@@ -792,4 +827,21 @@ fn check_isolation() -> Result<(), Box<dyn std::error::Error>> {
     let _ = fs::remove_dir_all(&scratch);
     println!("isolation check passed");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Negative fixture for the ADR 0007 rule: naming the verifier outside the adapter fails.
+    #[test]
+    fn verifier_named_outside_the_adapter_is_rejected() {
+        let d = tempfile::tempdir().unwrap();
+        let ok = d.path().join("crates/calve-app/src/catalog");
+        fs::create_dir_all(&ok).unwrap();
+        fs::write(ok.join("tuf.rs"), "use sigstore_tuf::Updater;").unwrap();
+        assert!(scan_verifier_use(d.path()).is_ok());
+        fs::write(ok.join("install.rs"), "use sigstore_tuf::TargetFile;").unwrap();
+        assert!(scan_verifier_use(d.path()).is_err());
+    }
 }

@@ -6,6 +6,7 @@ pub use calve_domain::{general, language as domain};
 
 pub mod adopt;
 pub mod app;
+pub mod catalog;
 pub mod checks;
 pub mod compatibility;
 pub mod config;

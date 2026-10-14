@@ -34,8 +34,14 @@ wasmparser.workspace = true
 sha2.workspace = true
 cap-std.workspace = true
 cap-fs-ext.workspace = true
+sigstore-tuf.workspace = true
+ureq.workspace = true
+futures-executor.workspace = true
+jiff.workspace = true
 
 [dev-dependencies]
+sigstore-tuf.workspace = true
+jiff.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
 calve-testkit.workspace = true
