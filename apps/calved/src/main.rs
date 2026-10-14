@@ -11,8 +11,16 @@ struct Cli {
     endpoint: Option<PathBuf>,
 }
 
+fn main() {
+    // Hidden helper modes run before any runtime thread exists (Landlock is per thread).
+    if let Some(code) = calve_app::sandbox::hidden_mode() {
+        std::process::exit(code);
+    }
+    real_main();
+}
+
 #[tokio::main]
-async fn main() {
+async fn real_main() {
     let cli = Cli::parse();
     let result = async {
         let endpoint = match cli.endpoint {

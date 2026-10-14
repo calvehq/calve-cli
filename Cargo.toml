@@ -2,6 +2,7 @@
 resolver = "3"
 members = ["apps/calve", "crates/*", "xtask"]
 default-members = ["apps/calve", "crates/*"]
+exclude = ["crates/calve-testkit/guests"]
 
 [workspace.package]
 version = "0.1.0"
@@ -36,6 +37,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-uti
 toml = "0.8"
 unicode-width = "0.1"
 uuid = { version = "1", features = ["v7", "serde"] }
+wasmi = "=2.0.0"
+wasmi_core = "=2.0.0"
+wasmparser = "0.261"
+wat = "1.262"
+sha2 = "0.10"
+landlock = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

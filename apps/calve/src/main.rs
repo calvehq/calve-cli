@@ -152,8 +152,16 @@ async fn run(cli: Cli) -> Result<()> {
     }
 }
 
+fn main() {
+    // Hidden helper modes run before any runtime thread exists (Landlock is per thread).
+    if let Some(code) = calve_app::sandbox::hidden_mode() {
+        std::process::exit(code);
+    }
+    real_main();
+}
+
 #[tokio::main]
-async fn main() {
+async fn real_main() {
     if let Err(error) = run(Cli::parse()).await {
         eprintln!("calve: {error}");
         std::process::exit(1);

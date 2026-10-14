@@ -470,11 +470,19 @@ const ALLOWED: &[(&str, &[&str])] = &[
     ("calve-integration-contract", &[]),
     ("calve-api", &[]),
     ("calve-ipc", &["calve-api"]),
-    ("calve-app", &["calve-api", "calve-domain"]),
+    (
+        "calve-app",
+        &[
+            "calve-api",
+            "calve-domain",
+            "calve-integration-contract",
+            "calve-testkit",
+        ],
+    ),
     ("calve-client", &["calve-api", "calve-app", "calve-ipc"]),
     // The console reads read models through the client only (PLAN §10).
     ("calve-console", &["calve-api", "calve-client"]),
-    ("calve-testkit", &[]),
+    ("calve-testkit", &["calve-integration-contract"]),
     (
         "calve",
         &[
@@ -483,6 +491,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "calve-client",
             "calve-console",
             "calve-domain",
+            "calve-integration-contract",
             "calve-ipc",
             "calve-testkit",
         ],

@@ -9,6 +9,7 @@
 
 pub mod abi;
 pub mod digest;
+pub mod driver;
 pub mod hello;
 pub mod jcs;
 pub mod metadata;

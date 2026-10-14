@@ -12,5 +12,10 @@ publish = false
 workspace = true
 
 [dependencies]
+calve-integration-contract.workspace = true
+serde.workspace = true
+wasmi.workspace = true
+wasmi_core.workspace = true
+wasmparser.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

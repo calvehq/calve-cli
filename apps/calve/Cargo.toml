@@ -74,6 +74,8 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+calve-integration-contract.workspace = true
+wat.workspace = true
 calve-testkit.workspace = true
 openaevc.workspace = true
 openaevc-sdk.workspace = true

@@ -1,0 +1,22 @@
+# CIC reference guests (rev 10 §6.8): built for wasm32-unknown-unknown into ../fixtures/cic by build.sh.
+# Separate workspace (excluded from the Calve workspace). Wasm ABI glue may use `unsafe` (user-approved
+# exemption, M0 review Decision 2); each block documents its SAFETY invariant.
+[workspace]
+resolver = "3"
+members = ["ref-rust", "ref-min"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = true
+codegen-units = 1
+debug = false
+strip = true
+
+[profile.dev]
+panic = "abort"

@@ -1,6 +1,9 @@
 //! Helpers shared by Calve's integration tests: isolated data directories and a CLI runner.
 #![forbid(unsafe_code)]
 
+pub mod cic;
+pub mod mini_host;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 calve-api.workspace = true
 calve-domain.workspace = true
+calve-integration-contract.workspace = true
 base64.workspace = true
 clap.workspace = true
 ed25519-dalek.workspace = true
@@ -27,3 +28,14 @@ thiserror.workspace = true
 tokio.workspace = true
 toml.workspace = true
 uuid.workspace = true
+wasmi.workspace = true
+wasmi_core.workspace = true
+wasmparser.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+calve-testkit.workspace = true
+wat.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock.workspace = true

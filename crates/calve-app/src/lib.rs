@@ -19,6 +19,7 @@ pub mod ops;
 pub mod providers;
 pub mod registry;
 pub mod resources;
+pub mod sandbox;
 pub mod views;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
