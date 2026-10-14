@@ -326,7 +326,7 @@ pub struct TargetInfo {
     pub path: String,
     pub length: u64,
     pub sha256: String,
-    /// The targets role that signed it (`targets` or a delegated role): the publisher
+    /// The delegation chain that signed it (`targets`, `acme`, `acme/examples`): the publisher
     /// identity for `id_policy` and cross-catalog pinning (rev 10 §9.4).
     pub role: String,
     /// The target's `custom` metadata, verbatim.
@@ -420,14 +420,17 @@ impl TrustClient {
     }
 }
 
-/// The role whose listing the verifier used for `path`: TUF's pre-order delegation search
-/// (paths, `terminating`) replayed over the roles the verifier has already loaded and verified
-/// for this lookup. Pure; it never loads or trusts anything new.
+/// The delegation chain whose listing the verifier used for `path` (`targets` for the
+/// top-level role, otherwise delegated role names from the top joined by `/`, e.g.
+/// `acme/examples`): TUF's pre-order search (paths, `terminating`) replayed over the roles the
+/// verifier has already loaded for this lookup. Role names are chosen by their delegator, so a
+/// bare name is not an identity; the chain is (security review of 7b12d8e). Pure; it never
+/// loads or trusts anything new.
 pub fn signing_role(set: &TrustedMetadataSet, path: &str) -> Option<String> {
-    let mut queue = vec!["targets".to_owned()];
+    let mut queue: Vec<(String, String)> = vec![("targets".to_owned(), String::new())];
     let mut visited = std::collections::BTreeSet::new();
     while !queue.is_empty() {
-        let role = queue.remove(0);
+        let (role, chain) = queue.remove(0);
         if !visited.insert(role.clone()) {
             continue;
         }
@@ -435,13 +438,28 @@ pub fn signing_role(set: &TrustedMetadataSet, path: &str) -> Option<String> {
             continue;
         };
         if t.target(path).is_some() {
-            return Some(role);
+            return Some(if chain.is_empty() {
+                "targets".to_owned()
+            } else {
+                chain
+            });
         }
         let mut children = Vec::new();
         if let Some(d) = &t.delegations {
             for child in &d.roles {
+                if matches!(
+                    child.name.as_str(),
+                    "root" | "timestamp" | "snapshot" | "targets"
+                ) {
+                    continue;
+                }
                 if child.matches_path(path).unwrap_or(false) {
-                    children.push(child.name.clone());
+                    let c = if chain.is_empty() {
+                        child.name.clone()
+                    } else {
+                        format!("{chain}/{}", child.name)
+                    };
+                    children.push((child.name.clone(), c));
                     if child.terminating {
                         queue.clear();
                         break;

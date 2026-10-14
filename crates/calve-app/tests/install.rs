@@ -400,3 +400,28 @@ fn catalog_names_and_ids_are_validated() {
         assert!(!valid_id(bad), "{bad}");
     }
 }
+
+/// Security review of 7b12d8e: a role name is chosen by its delegator, so a nested delegation
+/// that reuses the name of a policy-authorized top-level role must not inherit its policy.
+#[test]
+fn nested_role_reusing_an_authorized_name_is_not_that_publisher() {
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate("acme", "targets", &["*", "*/*", "*/*/*"], false);
+    r.delegate(
+        "examples",
+        "acme",
+        &["org.example.toy/*", "org.example.toy/*/*"],
+        false,
+    );
+    r.add_package("examples", toy(None));
+    r.id_policy("acme", &["com.acme."]);
+    r.id_policy("examples", &["org.example."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    let e = installer(&m)
+        .install(&req(true))
+        .expect_err("nested name must not match");
+    assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
+    assert!(e.message.contains("acme/examples"), "{e}");
+}
