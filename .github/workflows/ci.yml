@@ -7,15 +7,9 @@ on:
 jobs:
   rust:
     runs-on: ubuntu-latest
-    env:
-      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - uses: actions/checkout@v4
-      # OpenAEVC is fetched over SSH until a release tag is published; the secret is a
-      # read-only deploy key for calvehq/openaevc.
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.OPENAEVC_DEPLOY_KEY }}
+      # OpenAEVC v0.1.0 is fetched from its public tag over HTTPS: no SSH key or secret (ADR 0003).
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
@@ -23,6 +17,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo run --locked -p xtask -- check-architecture
+      - run: cargo test --locked -p xtask
+      - run: cargo run --locked -p xtask -- check-isolation
       - run: cargo run --locked -p xtask -- cli-reference --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
