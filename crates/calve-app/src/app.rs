@@ -1487,9 +1487,10 @@ async fn lifecycle(
             generation,
             languages,
             only,
+            approve_plan,
         } => {
             project
-                .run_checks(settings, &id, generation, &languages, &only)
+                .run_checks(settings, &id, generation, &languages, &only, approve_plan)
                 .await
         }
         LifecycleCommand::Capture {

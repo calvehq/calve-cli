@@ -803,6 +803,10 @@ pub enum LifecycleCommand {
         /// Only these check names (repeatable).
         #[arg(long = "check")]
         only: Vec<String>,
+        /// Approve the commands of the packages' check plans shown by a previous refusal
+        /// (they run with your permissions); recorded per extension artifact.
+        #[arg(long)]
+        approve_plan: bool,
     },
     /// List reviews recorded against the pack.
     Review { id: String },

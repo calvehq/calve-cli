@@ -33,6 +33,10 @@ fn invalid(message: impl Into<String>) -> Error {
 /// permissions, not confined") next to the host-capability grants of that exact artifact.
 pub const T2_ACKNOWLEDGED: &str = "calve:t2-acknowledged";
 
+/// Grant-marker prefix recording the user's approval of one exact check plan
+/// (`calve:check-plan:<sha256>`) of this artifact; grant changes keep it, an upgrade does not.
+pub const CHECK_PLAN_APPROVED: &str = "calve:check-plan:";
+
 /// Default `revocation_max_age` (§9.3).
 pub const REVOCATION_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
 
@@ -332,9 +336,30 @@ impl Project {
         let names: Vec<String> = self
             .grant_rows(id, digest)?
             .into_iter()
-            .filter(|n| n != T2_ACKNOWLEDGED)
+            .filter(|n| !n.starts_with("calve:"))
             .collect();
         parse_capabilities(&names)
+    }
+
+    pub(crate) fn check_plan_approved(&self, r: &PackageRecord, plan: &str) -> Result<bool> {
+        let marker = format!("{CHECK_PLAN_APPROVED}{plan}");
+        Ok(self
+            .grant_rows(&r.id, r.native_digest())?
+            .contains(&marker))
+    }
+
+    pub(crate) fn approve_check_plan(&self, r: &PackageRecord, plan: &str) -> Result<()> {
+        self.db.execute(
+            "INSERT INTO extension_grants VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                r.id,
+                r.version,
+                format!("sha256:{}", r.native_digest()),
+                format!("{CHECK_PLAN_APPROVED}{plan}"),
+                now()?
+            ],
+        )?;
+        Ok(())
     }
 
     fn native_acknowledged(&self, id: &str, digest: &str) -> Result<bool> {
@@ -354,7 +379,8 @@ impl Project {
         let digest = format!("sha256:{}", r.native_digest());
         let tx = self.db.unchecked_transaction()?;
         tx.execute(
-            "DELETE FROM extension_grants WHERE extension_id=?1 AND artifact_digest=?2",
+            "DELETE FROM extension_grants WHERE extension_id=?1 AND artifact_digest=?2
+             AND capability NOT LIKE 'calve:check-plan:%'",
             [&r.id, &digest],
         )?;
         let mut names = capability_names(capabilities);

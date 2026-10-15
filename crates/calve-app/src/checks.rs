@@ -56,10 +56,11 @@ fn overrides(r: &PackageRecord, config: &EffectiveConfig) -> Option<Vec<(String,
     )
 }
 
-/// A package's check plan comes from its sandboxed CIC module, so it may only name a program
-/// on PATH (never a path, which could run candidate content or anything on disk), plain
-/// arguments (no absolute paths or `..`), and environment variables that carry no credentials or
-/// loader hooks (their values are the user's and end up in recorded output). Configured
+/// A package's check plan comes from its sandboxed CIC module but runs with the user's
+/// permissions, so it runs only once the user approved that exact plan in this Project (see
+/// [`plan_digest`]). The program must also be a bare name found on an absolute PATH entry (a
+/// path could run candidate content). The argument and environment-name rules below are defence
+/// in depth, not the boundary: a denylist cannot confine an arbitrary program. Configured
 /// overrides are the user's own and are not restricted.
 fn validate_plan(c: &PlannedCheck) -> Result<()> {
     let bad = |m: String| {
@@ -110,6 +111,17 @@ fn validate_plan(c: &PlannedCheck) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// SHA-256 of the canonical plan: what an approval covers.
+fn plan_digest(c: &PlannedCheck) -> Result<String> {
+    use sha2::{Digest as _, Sha256};
+    let canonical = calve_integration_contract::jcs::to_vec(&serde_json::to_value(c)?)
+        .map_err(|_| invalid("check plan is not canonical JSON"))?;
+    Ok(Sha256::digest(canonical)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 impl Project {
@@ -183,6 +195,7 @@ impl Project {
         generation: u64,
         languages: &[String],
         only: &[String],
+        approve_plan: bool,
     ) -> Result<Value> {
         let pack = self.pack(pack_id).await?;
         if pack.generation != generation
@@ -257,6 +270,31 @@ impl Project {
         }
         if plans.is_empty() {
             return Err(invalid("no supported language detected; pass --language"));
+        }
+        // A package's own plan runs only when approved (configured overrides replace it).
+        let mut unapproved = Vec::new();
+        for (r, _, c) in &plans {
+            if overrides(r, config).is_some() || !(only.is_empty() || only.contains(&c.name)) {
+                continue;
+            }
+            let digest = plan_digest(c)?;
+            if self.check_plan_approved(r, &digest)? {
+                continue;
+            }
+            if approve_plan {
+                self.approve_check_plan(r, &digest)?;
+            } else {
+                unapproved.push(format!(
+                    "{} {}: {:?} with environment {:?}",
+                    r.id, c.name, c.argv, c.env
+                ));
+            }
+        }
+        if !unapproved.is_empty() {
+            return Err(invalid(format!(
+                "CHECK_PLAN_UNAPPROVED: these commands from the packages' check plans run with your permissions; review them, then rerun with --approve-plan (or configure [integrations.\"<id>\".checks]):\n  {}",
+                unapproved.join("\n  ")
+            )));
         }
         let mut report = Vec::new();
         let mut by_language: BTreeMap<
@@ -393,6 +431,15 @@ mod tests {
             env: env.iter().map(|s| (*s).into()).collect(),
             sources: vec![],
         }
+    }
+
+    #[test]
+    fn approval_covers_the_exact_plan() {
+        let a = plan(&["cargo", "test"], &[]);
+        let mut b = a.clone();
+        b.env.push("CARGO_HOME".into());
+        assert_ne!(plan_digest(&a).unwrap(), plan_digest(&b).unwrap());
+        assert_eq!(plan_digest(&a).unwrap(), plan_digest(&a.clone()).unwrap());
     }
 
     #[test]

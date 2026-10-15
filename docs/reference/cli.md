@@ -127,7 +127,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve pack verify <id> --generation <generation> [--path <path>] [--digest <digest>]` | Run snapshot verification on the sealed candidate |
 | `calve pack evaluate <id> --generation <generation> [--warn-after-bytes <warn_after_bytes>] [--warn-after-files <warn_after_files>]` | Evaluate change size on the sealed candidate |
 | `calve pack seal <id> --generation <generation>` | Seal the candidate |
-| `calve pack check <id> --generation <generation> [--language <languages>] [--check <only>]` | Run language checks on the sealed candidate and verify their evidence |
+| `calve pack check <id> --generation <generation> [--language <languages>] [--check <only>] [--approve-plan]` | Run language checks on the sealed candidate and verify their evidence |
 | `calve pack review <id>` | List reviews recorded against the pack |
 | `calve pack approve <id> --generation <generation> [--reason <reason>]` | Approve the sealed candidate |
 | `calve pack reject <id> --generation <generation> [--reason <reason>]` | Reject the sealed candidate |
@@ -145,7 +145,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve revision verify <id> --generation <generation> [--path <path>] [--digest <digest>]` | Run snapshot verification on the sealed candidate |
 | `calve revision evaluate <id> --generation <generation> [--warn-after-bytes <warn_after_bytes>] [--warn-after-files <warn_after_files>]` | Evaluate change size on the sealed candidate |
 | `calve revision seal <id> --generation <generation>` | Seal the candidate |
-| `calve revision check <id> --generation <generation> [--language <languages>] [--check <only>]` | Run language checks on the sealed candidate and verify their evidence |
+| `calve revision check <id> --generation <generation> [--language <languages>] [--check <only>] [--approve-plan]` | Run language checks on the sealed candidate and verify their evidence |
 | `calve revision review <id>` | List reviews recorded against the pack |
 | `calve revision approve <id> --generation <generation> [--reason <reason>]` | Approve the sealed candidate |
 | `calve revision reject <id> --generation <generation> [--reason <reason>]` | Reject the sealed candidate |

@@ -133,7 +133,17 @@ fn language_checks_gate_promotion_through_openaevc() {
         ]);
         let g = env.ok(&["--project", &p, "pack", "show", &other])["generation"].to_string();
         env.ok(&["--project", &p, "pack", "seal", &other, "--generation", &g]);
-        env.ok(&["--project", &p, "pack", "check", &other, "--generation", &g])
+        let check = ["--project", &p, "pack", "check", &other, "--generation", &g];
+        if content.contains("checks]") {
+            return env.ok(&check);
+        }
+        // The package's own plan runs only after the user approved it.
+        let refused = env.fails(&check);
+        assert!(
+            refused.contains("CHECK_PLAN_UNAPPROVED") && refused.contains("toy-check"),
+            "{refused}"
+        );
+        env.ok(&[&check[..], &["--approve-plan"]].concat())
     };
     let failed = run_checks(
         &env,
