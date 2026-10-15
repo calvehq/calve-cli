@@ -1,6 +1,6 @@
 # ADR 0019: Contract crate bootstrap and coordinated pins
 
-Status: Accepted.
+Status: Accepted; M2 implemented (pin workflow exercised once locally).
 
 ## Context
 calve-extensions depends on `calve-integration-contract`, which lives in calve-cli and is not yet public.
@@ -18,3 +18,7 @@ M2 step 10 (pin workflow exercised once end to end).
 
 ## Residuals
 None.
+
+## M2 implementation (2026-10-15)
+- calve-extensions pins `calve-integration-contract`, `calve-testkit` and `calve-app` (dev) to one calve-cli `rev`. `scripts/dev-env.sh` is sourced and rewrites the transport for that shell only (`GIT_CONFIG_*` `url.file://….insteadOf`, `CARGO_NET_GIT_FETCH_WITH_CLI`) — no global git configuration, lockfile unchanged.
+- `cargo xtask check-contract` checks one rev for all calve-cli dependencies, equal to the newest `docs/contract-pins.md` row and to the `Cargo.lock` source.

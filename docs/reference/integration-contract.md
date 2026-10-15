@@ -1,6 +1,6 @@
 # Calve Integration Contract (CIC) v1
 
-Status: contract crate `calve-integration-contract` 1.0.0-alpha.1 (committed); wire major 1, minor 0; wasm ABI 1. Decision record: ADR 0004. Evidence: FG4, FG13.
+Status: contract crate `calve-integration-contract` 1.0.0-alpha.1 (committed, not yet released); wire major 1, minor 0; wasm ABI 1. Decision record: ADR 0004. Evidence: FG4, FG13 (spikes); M2 production host, fixture package and the ten first-party modules (calve-extensions conformance).
 
 ## Packages
 A **cic-capable** package ships, as separate TUF targets: the native OpenAEVC artifact, `cic.wasm`, and `calve-integration.json`. An **openaevc-only** package ships the native artifact and optionally `calve-ui.json` (ADR 0006).
@@ -31,8 +31,22 @@ Guest codes: `INVALID_INPUT`, `LIMIT_EXCEEDED`, `UNSUPPORTED_OP`, `BAD_STATE`, `
 ## Operations
 Stateless: `describe`, `detect{markers}`, `check_plan`, `diff`, `classify`. Streaming (`capture.begin/chunk/finish`, `materialize_plan`) over host-merge-joined tuples `{path, base?, work?}` in byte-wise path order; exactly one op per tuple (`add | modify | delete | unchanged | refuse{reason}`), byte-equal paths, shape-checked op kinds; output digest `O = SHA-256(Σ JCS(op) ‖ 0x0A)` recomputed by the host. Aggregate: `relate.begin/groups/finish` (capability `relate.v1`) over host-grouped ops with a `groups_commitment`, acked cumulative counts and running digest, per-kind outcomes `complete | {"refused": reason}`, relations digest `R`; any session failure discards all relations; fatality per the package's `relations[].required` and `optional_relations` policy.
 
+## Declarations (`calve.integration/1`, M2)
+The host has no domain knowledge (INV-022); everything comes from the package's signed metadata:
+- `files` — the Project's file domain: `resource_kind`, `put` (`{digest, size, content}`), `delete` (`{previous_digest}`), `history` (kinds valid only in recorded history, read as moves `{from, digest, size, content}`), `write_action`, optional `verifier`, `evaluator`, and `ignore_files` (plain names whose text the host passes to `classify`). Requires `capture.v1` and `classify.v1`. Exactly one active package may declare it.
+- `resources[]` — `{short, kind, set, remove, write_action}` for `calve resource set <short>:<name>=JSON`.
+- `checks` — `{verifier}` judging Calve's `org.calve.check-result/v1` evidence; requires `detect.v1` and `check_plan.v1`.
+Every kind must be prefixed with the extension id. Harness and provider ids are derived (`<id>.capture`, `.materialize`, `.edit`, `.local`).
+
+## Operation bodies (M2)
+- `detect {markers, extensions}` → `{languages}`; `check_plan {languages, markers}` → `{checks:[{language, name, argv, takes_files, env, sources}]}`. A plan runs only after the user approved its digest (`pack check --approve-plan`); `argv[0]` must be a bare program name.
+- `classify {entries:[{path, kind, size?}], ignore_sources:{path: text}, markers?}` → `{decisions:[{path, ignored, rule?}]}` — one decision per entry, same order; `markers` are the names of the files at the Workspace root (≤ 1024), so an extension can apply defaults that depend on them.
+- `diff {path, before?, after?, context}` → `{kind: "hunks", hunks} | {kind: "binary"} | {kind: "too_large"}`; content is OpenAEVC base64 (URL-safe alphabet, no padding), ≤ 1 MiB per side.
+- Locators in every body follow ADR 0014; the validator is in the contract crate (`locator::validate`) and shared by the host and extensions.
+
 ## Limits (defaults)
 Guest memory 64 MiB; module 8 MiB; tables 10 000; request/response 4 MiB; chunk 2 048 tuples; `max_group` 64; fuel slice 1e7, per call 5e8; soft deadline 5 s; hard deadline 15 s (supervised child).
 
 ## Conformance
 Golden transcripts `evidence/m0/fixtures/cic/goldens/v1/session.jsonl` (local evidence) must be byte-identical for every guest × host pair; the reference guests are cic-ref-rust and the independent `no_std` cic-ref-min.
+M2: the production host (`calve-app` sandbox) runs the reference goldens, the `org.example.toy` fixture package, and — in calve-extensions — all ten first-party modules, each byte-identical against `testkit::mini_host` and pinned by `crates/conformance/goldens/*.sha256`.

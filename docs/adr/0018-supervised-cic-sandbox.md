@@ -1,6 +1,6 @@
 # ADR 0018: Supervised CIC sandbox and hard deadlines
 
-Status: Accepted (M0: FG3 PASS).
+Status: Accepted (M0: FG3 PASS; M2 production PASS on Linux).
 
 ## Context
 wasmi has no epoch interruption (F13); fuel alone cannot bound wall time for every instruction mix.
@@ -18,3 +18,6 @@ FG3: release soft-deadline overshoot 50 µs (slice 1e5) / 15.6 ms (1e7); bulk op
 
 ## Residuals
 wasmi interpreter bugs (tracked by cargo-deny advisories).
+
+## M2 production implementation (2026-10-15)
+- `calve __cic-sandbox` serves every production CIC session (`domains::open_session`); Linux applies Landlock deny-all in the child. The production host is the one exercised by calve-extensions conformance.

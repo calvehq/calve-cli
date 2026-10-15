@@ -1,6 +1,6 @@
 # ADR 0004: Calve Integration Contract (CIC) v1 and wasm ABI 1
 
-Status: Accepted (M0: FG4, FG13 PASS; deltas recorded).
+Status: Accepted (M0: FG4, FG13 PASS; M2 production implementation PASS locally on Linux).
 
 ## Context
 OpenAEVC v0.1.0's extension operations are closed (validate_effect, apply_effect, verify, evaluate, compose; F3). Calve needs domain-specific *planning* operations — detection, classification, capture, materialization planning, diffs, relations — without putting software semantics in the host (INV-022). Extensions are distributed only through the signed catalog and must be runnable without trusting native code.
@@ -22,3 +22,11 @@ FG4 (2×2 goldens, 25 adversarial modules on both hosts, determinism across fuel
 
 ## Residuals
 Cross-OS determinism (macOS, Windows) is PENDING native runs; the Windows axis is run in M0 where possible (FG4 Windows). A12: cic-ref-rust contains 64 float instructions (serde_json number formatting), cic-ref-min none; integer-only JSON avoids float divergence in the protocol, but guest-internal float paths are not proven deterministic across architectures (aarch64 BLOCKED).
+
+## M2 production implementation (2026-10-15)
+- Implemented in `calve-integration-contract` (driver, session, metadata, wire, locator) and `calve-app::sandbox`; the M0 spike code is not used.
+- Additive schema-1 declarations `files`, `resources`, `checks` (ADR 0006 delta) and the bodies of `detect`, `check_plan`, `classify` (with optional root `markers`), `diff`; diff content is OpenAEVC base64 (URL-safe, unpadded).
+- The ADR 0014 locator validator moved into the contract crate so host and extensions share one parser.
+- The M0 review exemption is applied as decided: in calve-extensions only `crates/cic-guest` contains `unsafe` (ABI glue, SAFETY-documented), enforced by `cargo xtask check-architecture` (negative test logged).
+- Evidence: `crates/calve-app/tests/cic_host.rs` (13), `cic_fixture.rs`, calve-extensions `crates/conformance` (10 first-party modules, production host vs mini host byte-identical, goldens).
+- Distinguish: FG4/FG13 are historical spike PASS; the M2 results above are production-code PASS on Linux x86_64. Windows native for the M2 paths: see the M2 report; macOS and aarch64 not run.

@@ -1,6 +1,6 @@
 # ADR 0006: Package kinds and metadata identity
 
-Status: Accepted (M0: FG14 PASS).
+Status: Accepted (M0: FG14 PASS; M2 production PASS locally).
 
 ## Context
 Not every extension needs Calve planning operations; some are plain OpenAEVC extensions with optional UI metadata.
@@ -21,3 +21,7 @@ FG14; contract tests `metadata_rules_and_forward_compat`; M2 install-journal cra
 
 ## Residuals
 Same-user modification of an installed directory is detected by OpenAEVC's per-spawn re-hash, not prevented (trusted boundary).
+
+## M2 production implementation (2026-10-15)
+- Schema 1 gained optional `files`, `resources` and `checks` declarations (validated by `Metadata::validate`: kinds prefixed by the extension id, required capabilities, plain ignore-file names). The host derives every domain kind from them (INV-022; `xtask` refuses first-party domain literals in calve-cli).
+- Installer: I0–I4 journal, read-only `<id>/<native-sha>/`, `recover()`, `retire()`, pins and id-policy keyed by the percent-encoded delegation chain, upgrade guard `EXTENSION_IN_USE`.
