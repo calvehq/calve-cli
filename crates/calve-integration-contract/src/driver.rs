@@ -339,8 +339,12 @@ pub fn capture<D: Driver>(
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RelateOut {
+    /// Accepted relations in canonical order: by kind, then members.
     pub relations: Vec<Relation>,
     pub kinds: Vec<KindOutcome>,
+    /// Digest of `relations` in that canonical order (§6.6: invariant over batch and group
+    /// chunk sizes). The wire digest the guest reported, which follows delivery order, was
+    /// checked by the verifier.
     pub r: String,
 }
 
@@ -402,11 +406,18 @@ pub fn relate<D: Driver>(
         op::RELATE_FINISH,
         json!({"total_groups": tg, "total_members": tm}),
     )?)?;
-    let (relations, kinds, r) = v.finish(fin).map_err(HostError::AbiViolation)?;
+    let (mut relations, kinds, _wire_r) = v.finish(fin).map_err(HostError::AbiViolation)?;
+    // Delivery order depends on how groups were chunked; what Calve records must not.
+    relations.sort_by(|a, b| (&a.kind, &a.members).cmp(&(&b.kind, &b.members)));
+    let mut h = LineHasher::new();
+    for rel in &relations {
+        h.push(&serde_json::to_value(rel).expect("relation"))
+            .map_err(|_| HostError::AbiViolation("float in relation".into()))?;
+    }
     Ok(RelateOut {
         relations,
         kinds,
-        r,
+        r: h.finish(),
     })
 }
 

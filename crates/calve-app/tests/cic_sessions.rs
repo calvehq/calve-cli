@@ -189,6 +189,23 @@ fn arb_manifests() -> impl Strategy<Value = (Vec<Entry>, Vec<Entry>)> {
         })
 }
 
+/// Regression (found by `batch_and_chunk_invariance` on Windows, 2026-10-15): two renames in
+/// different relate chunks were delivered in the other order, so the recorded relation order
+/// and `R` depended on the group chunk size. Relations are now returned in canonical order.
+#[test]
+fn relations_are_canonical_across_group_chunks() {
+    let base = vec![entry("a".into(), 4, 10), entry("c/c".into(), 2, 20)];
+    let work = vec![
+        entry("b".into(), 0, 30),
+        entry("bc".into(), 2, 20),
+        entry("cb/c".into(), 4, 10),
+    ];
+    let reference = run("ref-rust", &base, &work, &limits(2048, 256, 100));
+    assert_eq!(reference.4, 2, "two renames");
+    assert_eq!(run("ref-rust", &base, &work, &limits(1, 1, 100)), reference);
+    assert_eq!(run("ref-min", &base, &work, &limits(7, 1, 128)), reference);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig { cases: 10, ..ProptestConfig::default() })]
 
