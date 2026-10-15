@@ -230,7 +230,8 @@ impl Project {
         if pack.generation != generation
             || !matches!(pack.state, PackState::Sealed | PackState::Qualified)
         {
-            return Err(invalid(
+            return Err(crate::coded(
+                "STALE_VIEW",
                 "checks need a sealed pack at the requested generation",
             ));
         }

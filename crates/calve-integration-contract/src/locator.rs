@@ -89,3 +89,39 @@ fn is_short_name_alias(p: &str) -> bool {
         && ext.chars().count() <= 3
         && !ext.contains('.')
 }
+
+#[cfg(test)]
+mod properties {
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(2048))]
+        /// An accepted locator stays under the root and never names Calve's state directory.
+        #[test]
+        fn accepted_locators_stay_inside_and_avoid_calve_state(
+            parts in proptest::collection::vec(
+                prop_oneof![
+                    "[a-zA-Z0-9_ .:-]{0,12}",
+                    Just("..".to_owned()),
+                    Just(".".to_owned()),
+                    Just(".calve".to_owned()),
+                    Just(".CALVE.".to_owned()),
+                    Just("CON".to_owned()),
+                    Just("a\\b".to_owned()),
+                ],
+                0..8,
+            ),
+            lead in prop_oneof![Just(""), Just("/")],
+        ) {
+            let loc = format!("{lead}{}", parts.join("/"));
+            if super::validate(&loc).is_ok() {
+                let p = std::path::Path::new(&loc);
+                prop_assert!(p.is_relative());
+                prop_assert!(p.components().all(|c| matches!(c, std::path::Component::Normal(_))));
+                let first = loc.split('/').next().unwrap().trim_end_matches(['.', ' ']).to_ascii_lowercase();
+                prop_assert_ne!(first, ".calve");
+                prop_assert!(!loc.contains('\\') && !loc.contains(':'));
+            }
+        }
+    }
+}

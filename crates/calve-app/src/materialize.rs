@@ -251,7 +251,7 @@ impl Project {
                 timeout_ms: 1_800_000,
                 budget: BTreeMap::new(),
                 max_attempts: 1,
-                idempotency_key: uuid::Uuid::now_v7().to_string(),
+                idempotency_key: crate::app::idempotency_key("materialize"),
                 retry_of: None,
             })
             .await?;

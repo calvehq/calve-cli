@@ -12,7 +12,7 @@ trap 'rm -rf "$work"' EXIT
 export XDG_DATA_HOME="$work/d" XDG_CONFIG_HOME="$work/c"
 p="$work/openaevc"
 calve() { "$bin/calve" --no-daemon-start --json --project "$p" "$@"; }
-field() { python3 -c "import json,sys; print(json.load(sys.stdin)$1)"; }
+field() { python3 -c "import json,sys; print(json.load(sys.stdin)['data']$1)"; }
 gen() { calve pack show "$1" | field '["generation"]'; }
 
 "$bin/calve" --no-daemon-start --json init "$p" --name openaevc >/dev/null

@@ -285,7 +285,10 @@ pub fn uninstall(id: &str, version: Option<&str>) -> Result<Value> {
         .filter(|r| r.id == id && version.is_none_or(|v| v == r.version))
         .collect();
     if targets.is_empty() {
-        return Err(invalid(format!("{id} is not installed")));
+        return Err(crate::coded(
+            "EXTENSION_NOT_INSTALLED",
+            format!("{id} is not installed"),
+        ));
     }
     let inst = installer()?;
     let mut removed = vec![];

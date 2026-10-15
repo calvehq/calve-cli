@@ -21,6 +21,7 @@ pub mod materialize;
 pub mod observe;
 pub mod ops;
 pub mod providers;
+pub mod redact;
 pub mod registry;
 pub mod resources;
 pub mod sandbox;
@@ -80,6 +81,12 @@ impl From<openaevc::protocol::ProtocolError> for Error {
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
+}
+
+/// A product error with a stable code from [`calve_api::errors::CODES`] (`CODE: message`).
+pub(crate) fn coded(code: &'static str, message: impl Into<String>) -> Error {
+    debug_assert!(calve_api::errors::is_code(code), "{code}");
+    Error::Message(format!("{code}: {}", message.into()))
 }
 
 const REVIEW_POLICY_NAME: &str = "org.calve.review.required/v1";
@@ -505,10 +512,18 @@ fn init_db(path: &Path, create: bool) -> Result<Connection> {
                     row.get(0)
                 })
                 .optional()
-                .map_err(|_| invalid("unrecognized project database schema"))?
+                .map_err(|_| {
+                    coded(
+                        "CORRUPT_PRODUCT_STATE",
+                        "unrecognized project database schema",
+                    )
+                })?
                 .flatten();
             if legacy != Some(1) {
-                return Err(invalid("unrecognized project database schema"));
+                return Err(coded(
+                    "CORRUPT_PRODUCT_STATE",
+                    "unrecognized project database schema",
+                ));
             }
             migrate_task_dependencies(&mut db)?;
             migrate_review_evidence(&mut db)?;
@@ -626,10 +641,21 @@ fn init_db(path: &Path, create: bool) -> Result<Connection> {
         (13, false) => {}
         (1..=13, true) => return Err(invalid("project database already exists")),
         (other, _) => {
-            return Err(invalid(format!(
-                "unsupported project database schema version {other}"
-            )));
+            return Err(coded(
+                "MIGRATION_REQUIRED",
+                format!(
+                    "project database schema version {other} is newer than this Calve supports (13); upgrade Calve"
+                ),
+            ));
         }
+    }
+    // Migration log (§45.1): every schema change of an existing database is recorded.
+    let now: u32 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if !create && now != version {
+        crate::observe::record(
+            "migration",
+            serde_json::json!({"database": "project", "path": path, "from": version, "to": now}),
+        );
     }
     Ok(db)
 }
@@ -1013,7 +1039,7 @@ impl Project {
                 return Ok(current);
             }
             if !current.pop() {
-                return Err(invalid("no Calve project found"));
+                return Err(coded("PROJECT_NOT_FOUND", "no Calve project found"));
             }
         }
     }
@@ -1028,7 +1054,10 @@ impl Project {
         let identity: ProjectIdentity =
             toml::from_str(&fs::read_to_string(state.join("project.toml"))?)?;
         if !matches!(identity.format_version, 1 | 2) {
-            return Err(invalid("unsupported project format"));
+            return Err(crate::coded(
+                "MIGRATION_REQUIRED",
+                "unsupported project format",
+            ));
         }
         let stored: Option<String> = Connection::open_with_flags(
             state.join("product.sqlite3"),
@@ -1070,7 +1099,10 @@ impl Project {
         let identity: ProjectIdentity =
             toml::from_str(&fs::read_to_string(state.join("project.toml"))?)?;
         if !matches!(identity.format_version, 1 | 2) {
-            return Err(invalid("unsupported project format"));
+            return Err(crate::coded(
+                "MIGRATION_REQUIRED",
+                "unsupported project format",
+            ));
         }
         let key_path = state.join("keys.toml");
         #[cfg(unix)]
@@ -1252,7 +1284,7 @@ impl Project {
         self.list_intents()?
             .into_iter()
             .find(|intent| intent["id"] == id)
-            .ok_or_else(|| invalid(format!("unknown intent {id}")))
+            .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown intent {id}")))
     }
 
     pub async fn intent_with_packs(&self, id: &str) -> Result<Value> {
@@ -1364,7 +1396,7 @@ impl Project {
             ],
         )?;
         if changed == 0 {
-            return Err(invalid(format!("unknown intent {id}")));
+            return Err(crate::coded("NOT_FOUND", format!("unknown intent {id}")));
         }
         event(&tx, "intent.updated", id, "")?;
         tx.commit()?;
@@ -1381,7 +1413,7 @@ impl Project {
                 row.get(0)
             })
             .optional()?
-            .ok_or_else(|| invalid(format!("unknown intent {id}")))?;
+            .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown intent {id}")))?;
         if current == state {
             return Err(invalid(format!("intent is already {state}")));
         }
@@ -1417,7 +1449,7 @@ impl Project {
                 row.get(0)
             })
             .optional()?
-            .ok_or_else(|| invalid(format!("unknown intent {intent}")))?;
+            .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown intent {intent}")))?;
         if state != "OPEN" {
             return Err(invalid("cannot create a task in a closed intent"));
         }
@@ -1465,7 +1497,7 @@ impl Project {
             ],
         )?;
         if changed == 0 {
-            return Err(invalid(format!("unknown task {id}")));
+            return Err(crate::coded("NOT_FOUND", format!("unknown task {id}")));
         }
         event(&self.db, "task.updated", id, "")
     }
@@ -1572,7 +1604,7 @@ impl Project {
         self.list_tasks()?
             .into_iter()
             .find(|task| task["id"] == id)
-            .ok_or_else(|| invalid(format!("unknown task {id}")))
+            .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown task {id}")))
     }
 
     pub async fn link_task_pack(&self, task_id: &str, pack_id: &str) -> Result<()> {
@@ -1813,7 +1845,7 @@ impl Project {
                         r.get::<_, String>(0)
                     })
                     .optional()?
-                    .ok_or_else(|| invalid(format!("unknown task {id}")))
+                    .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown task {id}")))
             })
             .collect::<Result<Vec<_>>>()?;
         if states[0] == "COMPLETE" && states[1] != "COMPLETE" {
@@ -2088,7 +2120,7 @@ impl Project {
                         r.get(0)
                     })?;
             if count == 0 {
-                return Err(invalid(format!("unknown intent {id}")));
+                return Err(crate::coded("NOT_FOUND", format!("unknown intent {id}")));
             }
         }
         let required_policies = self
@@ -2453,7 +2485,10 @@ impl Project {
             |row| row.get(0),
         )?;
         if count == 0 {
-            return Err(invalid(format!("unknown intent {intent_id}")));
+            return Err(crate::coded(
+                "NOT_FOUND",
+                format!("unknown intent {intent_id}"),
+            ));
         }
         let pack = self.pack(id).await?;
         let receipt = self
@@ -2568,7 +2603,7 @@ impl Project {
                         row.get(0)
                     })?;
             if count == 0 {
-                return Err(invalid(format!("unknown intent {id}")));
+                return Err(crate::coded("NOT_FOUND", format!("unknown intent {id}")));
             }
         }
         let spec = PackSpec {
@@ -2778,7 +2813,7 @@ impl Project {
             timeout_ms: 1_800_000,
             budget: BTreeMap::new(),
             max_attempts: CAPTURE_MAX_ATTEMPTS,
-            idempotency_key: uuid::Uuid::now_v7().to_string(),
+            idempotency_key: crate::app::idempotency_key("capture"),
             retry_of: retry.map(|(_, execution)| execution),
         };
         let (execution, lease) = self.client.start_execution(request).await?;
@@ -2901,7 +2936,10 @@ impl Project {
             .ok_or_else(|| invalid(format!("{} declares no snapshot verifier", d.extension)))?;
         let pack = self.pack(pack_id).await?;
         if pack.generation != expected_generation || pack.sealed.is_none() {
-            return Err(invalid("pack must be sealed at the requested generation"));
+            return Err(coded(
+                "STALE_VIEW",
+                "pack must be sealed at the requested generation",
+            ));
         }
         let config = if let Some((path, digest)) = expected {
             use std::path::Component;
@@ -2960,7 +2998,10 @@ impl Project {
         if pack.generation != expected_generation
             || !matches!(pack.state, PackState::Sealed | PackState::Qualified)
         {
-            return Err(invalid("pack must be sealed at the requested generation"));
+            return Err(coded(
+                "STALE_VIEW",
+                "pack must be sealed at the requested generation",
+            ));
         }
         let mut config = serde_json::Map::new();
         if let Some(bytes) = warn_after_bytes {
@@ -3272,7 +3313,12 @@ impl Project {
             )
             .optional()?;
         stored
-            .ok_or_else(|| invalid(format!("unknown baseline or alias {id_or_alias}")))?
+            .ok_or_else(|| {
+                crate::coded(
+                    "NOT_FOUND",
+                    format!("unknown baseline or alias {id_or_alias}"),
+                )
+            })?
             .parse()
             .map_err(|_| invalid("invalid stored baseline alias"))
     }
@@ -3287,7 +3333,7 @@ impl Project {
             )
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => {
-                    invalid(format!("unknown local baseline {id}"))
+                    crate::coded("NOT_FOUND", format!("unknown local baseline {id}"))
                 }
                 error => Error::Database(error),
             })?;
@@ -3331,7 +3377,10 @@ impl Project {
         }
         let baseline: Baseline = serde_json::from_value(envelope.body)?;
         if baseline.id != id {
-            return Err(invalid("Baseline identity mismatch"));
+            return Err(crate::coded(
+                "CORRUPT_PRODUCT_STATE",
+                "Baseline identity mismatch",
+            ));
         }
         Ok(baseline)
     }
@@ -3410,7 +3459,10 @@ impl Project {
             [format!("baseline.alias.{alias}")],
         )?;
         if changed == 0 {
-            return Err(invalid(format!("unknown baseline alias {alias}")));
+            return Err(crate::coded(
+                "NOT_FOUND",
+                format!("unknown baseline alias {alias}"),
+            ));
         }
         event(&self.db, "baseline.alias.removed", alias, "")
     }

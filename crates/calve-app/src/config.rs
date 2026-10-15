@@ -423,7 +423,12 @@ impl ConfigPaths {
                 found = Some(scope);
             }
         }
-        found.ok_or_else(|| invalid(format!("provider {id} is not configured")))
+        found.ok_or_else(|| {
+            crate::coded(
+                "PROVIDER_UNAVAILABLE",
+                format!("provider {id} is not configured"),
+            )
+        })
     }
 
     pub fn get(&self, key: &str) -> Result<Value> {

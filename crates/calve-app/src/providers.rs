@@ -12,7 +12,7 @@
 //!   Anything else is recorded as a protocol error and fails the execution.
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command as Process, Stdio};
 use std::sync::mpsc;
@@ -26,6 +26,7 @@ use openaevc::protocol::{
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde::Serialize;
 use serde_json::{Value, json};
+use zeroize::Zeroizing;
 
 use crate::config::{
     ConfigPaths, EffectiveConfig, HarnessDefinition, HarnessMode, ProviderKind, ProviderProfile,
@@ -79,13 +80,20 @@ pub fn resolve_executable(name: &str) -> Result<PathBuf> {
 /// Resolves a secret reference at launch time. The value never leaves the child environment.
 fn resolve_secret(reference: &str) -> Result<String> {
     if let Some(name) = reference.strip_prefix("env:") {
-        return std::env::var(name)
-            .map_err(|_| invalid(format!("secret reference {reference} is not set")));
+        return std::env::var(name).map_err(|_| {
+            crate::coded(
+                "SECRET_UNAVAILABLE",
+                format!("secret reference {reference} is not set"),
+            )
+        });
     }
     if let Some(name) = reference.strip_prefix("keyring:") {
         return keyring_lookup(name);
     }
-    Err(invalid(format!("unsupported secret reference {reference}")))
+    Err(crate::coded(
+        "SECRET_UNAVAILABLE",
+        format!("unsupported secret reference {reference}"),
+    ))
 }
 
 /// Reads `name` (service `calve`) from the OS credential store through the platform tool,
@@ -129,7 +137,10 @@ fn keyring_lookup(name: &str) -> Result<String> {
     let value = String::from_utf8(output.stdout).unwrap_or_default();
     let value = value.trim_end_matches(['\n', '\r']).to_owned();
     if !output.status.success() || value.is_empty() {
-        return Err(invalid(format!("keyring:{name} was not found; {hint}")));
+        return Err(crate::coded(
+            "SECRET_UNAVAILABLE",
+            format!("keyring:{name} was not found; {hint}"),
+        ));
     }
     Ok(value)
 }
@@ -151,13 +162,21 @@ pub struct WorkerContext {
     task: Option<String>,
     intent: Option<String>,
     active_baseline: Option<String>,
+    /// The recorded context object (`org.calve.worker-context/v1`) this execution consumes.
+    context_digest: String,
 }
 
 struct Launch {
     argv: Vec<String>,
-    env: BTreeMap<String, String>,
+    /// Secret values live in zeroized buffers and leave this process only in the child's
+    /// environment.
+    env: BTreeMap<String, Zeroizing<String>>,
     timeout: Duration,
     max_output: u64,
+    /// Redacts this launch's secrets from its output streams (§16.1).
+    redactor: crate::redact::Redactor,
+    /// Keeps the secrets registered for this process's other sinks while the launch lives.
+    _registered: crate::redact::Registered,
 }
 
 fn launch_plan(
@@ -167,7 +186,12 @@ fn launch_plan(
 ) -> Result<Launch> {
     let mut argv = Vec::new();
     if let Some(executable) = &profile.executable {
-        argv.push(resolve_executable(executable)?.display().to_string());
+        argv.push(
+            resolve_executable(executable)
+                .map_err(|e| crate::coded("PROVIDER_UNAVAILABLE", e.to_string()))?
+                .display()
+                .to_string(),
+        );
         argv.extend(profile.args.iter().cloned());
         argv.extend(harness.command.iter().cloned());
     } else {
@@ -176,17 +200,25 @@ fn launch_plan(
                 "provider {provider_id} has no executable and the harness no command"
             ))
         })?;
-        argv.push(resolve_executable(program)?.display().to_string());
+        argv.push(
+            resolve_executable(program)
+                .map_err(|e| crate::coded("HARNESS_UNAVAILABLE", e.to_string()))?
+                .display()
+                .to_string(),
+        );
         argv.extend(rest.iter().cloned());
     }
     let mut env = BTreeMap::new();
     for name in &profile.env {
         if let Ok(value) = std::env::var(name) {
-            env.insert(name.clone(), value);
+            env.insert(name.clone(), Zeroizing::new(value));
         }
     }
+    let mut secrets = Vec::new();
     for (name, reference) in &profile.secrets {
-        env.insert(name.clone(), resolve_secret(reference)?);
+        let value = Zeroizing::new(resolve_secret(reference)?);
+        secrets.push(value.clone());
+        env.insert(name.clone(), value);
     }
     let timeout = harness
         .timeout_ms
@@ -197,6 +229,8 @@ fn launch_plan(
         env,
         timeout: Duration::from_millis(timeout),
         max_output: profile.max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT),
+        redactor: crate::redact::Redactor::new(secrets.iter().map(|s| s.as_bytes())),
+        _registered: crate::redact::register(secrets.iter().map(|s| s.as_bytes())),
     })
 }
 
@@ -211,7 +245,7 @@ fn spawn(launch: &Launch, cwd: &Path, context: &BTreeMap<String, String>) -> Res
         .args(&launch.argv[1..])
         .current_dir(cwd)
         .env_clear()
-        .envs(&launch.env)
+        .envs(launch.env.iter().map(|(k, v)| (k, v.as_str())))
         .envs(context)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -237,20 +271,54 @@ fn terminate(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn pump(stream: impl Read + Send + 'static, tx: mpsc::Sender<Line>, err: bool) {
+/// Reads one stream through its own redaction state (stdout and stderr never share one), then
+/// splits the redacted bytes into lines.
+fn pump(
+    mut stream: impl Read + Send + 'static,
+    tx: mpsc::Sender<Line>,
+    err: bool,
+    redactor: &crate::redact::Redactor,
+) {
+    let mut redact = redactor.stream();
     std::thread::spawn(move || {
-        for line in BufReader::new(stream).lines() {
-            let Ok(line) = line else { break };
-            if tx
-                .send(if err {
-                    Line::Err(line)
+        let mut line: Vec<u8> = Vec::new();
+        let mut buf = [0u8; 8192];
+        let send = |bytes: &[u8], line: &mut Vec<u8>| -> bool {
+            for &b in bytes {
+                if b == b'\n' {
+                    let text = String::from_utf8_lossy(line).into_owned();
+                    line.clear();
+                    let msg = if err {
+                        Line::Err(text)
+                    } else {
+                        Line::Out(text)
+                    };
+                    if tx.send(msg).is_err() {
+                        return false;
+                    }
                 } else {
-                    Line::Out(line)
-                })
-                .is_err()
-            {
-                break;
+                    line.push(b);
+                }
             }
+            true
+        };
+        loop {
+            let n = match stream.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => n,
+            };
+            if !send(&redact.feed(&buf[..n]), &mut line) {
+                return;
+            }
+        }
+        let rest = redact.finish();
+        if send(&rest, &mut line) && !line.is_empty() {
+            let text = String::from_utf8_lossy(&line).into_owned();
+            let _ = tx.send(if err {
+                Line::Err(text)
+            } else {
+                Line::Out(text)
+            });
         }
     });
 }
@@ -288,8 +356,14 @@ fn run_worker(
         child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
+        &launch.redactor,
     );
-    pump(child.stderr.take().expect("piped stderr"), tx, true);
+    pump(
+        child.stderr.take().expect("piped stderr"),
+        tx,
+        true,
+        &launch.redactor,
+    );
     let deadline = Instant::now() + launch.timeout;
     let mut outcome = Outcome {
         status: "failed",
@@ -440,9 +514,15 @@ pub fn run_command(
 ) -> Result<CommandRun> {
     let launch = Launch {
         argv: argv.to_vec(),
-        env: env.clone(),
+        env: env
+            .iter()
+            .map(|(k, v)| (k.clone(), Zeroizing::new(v.clone())))
+            .collect(),
         timeout,
         max_output: u64::MAX,
+        // Checks get no provider secrets; anything registered in this process is still redacted.
+        redactor: crate::redact::active(),
+        _registered: crate::redact::register(Vec::<Vec<u8>>::new()),
     };
     let started = Instant::now();
     let mut child = spawn(&launch, cwd, &BTreeMap::new())?;
@@ -452,8 +532,14 @@ pub fn run_command(
         child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
+        &launch.redactor,
     );
-    pump(child.stderr.take().expect("piped stderr"), tx, true);
+    pump(
+        child.stderr.take().expect("piped stderr"),
+        tx,
+        true,
+        &launch.redactor,
+    );
     let mut tail = std::collections::VecDeque::new();
     let mut size = 0usize;
     let deadline = started + timeout;
@@ -511,7 +597,10 @@ fn in_scope(paths: &[String], locator: &str) -> bool {
 impl Project {
     fn provider_allowed(&self, id: &str, profile: &ProviderProfile) -> Result<()> {
         if !profile.enabled {
-            return Err(invalid(format!("provider {id} is disabled")));
+            return Err(crate::coded(
+                "PROVIDER_UNAVAILABLE",
+                format!("provider {id} is disabled"),
+            ));
         }
         if !profile.projects.is_empty() && !profile.projects.contains(&self.identity.project_id) {
             return Err(invalid(format!(
@@ -539,6 +628,33 @@ impl Project {
     }
 
     /// Starts an OpenAEVC execution for a configured harness and supervises the worker.
+    /// Stores a worker-context record as an immutable OpenAEVC blob; returns its digest.
+    async fn put_context(&self, record: &Value) -> Result<openaevc::protocol::Digest> {
+        let data = calve_integration_contract::jcs::to_vec(record)
+            .map_err(|_| invalid("worker context is not canonical JSON"))?;
+        let object = openaevc::core::ImmutableObject::build(openaevc::protocol::ObjectEnvelope {
+            kind: openaevc::protocol::ObjectKind::Blob,
+            protocol_version: openaevc::protocol::PROTOCOL_VERSION,
+            namespace: self.identity.namespace_id,
+            id: None,
+            created_seq: 0,
+            creator: self.identity.created_by,
+            body: serde_json::to_value(openaevc::protocol::Blob {
+                media_type: "application/vnd.calve.worker-context+json".into(),
+                data,
+            })?,
+            signatures: vec![],
+        })?;
+        let digest = object.digest();
+        self.client
+            .command(Command::PutImmutableObject {
+                digest,
+                bytes: object.bytes().to_vec(),
+            })
+            .await?;
+        Ok(digest)
+    }
+
     pub async fn start_harness_execution(
         &self,
         config: &EffectiveConfig,
@@ -548,14 +664,18 @@ impl Project {
         task: Option<&str>,
         retry: Option<(WorkUnitId, ExecutionId)>,
     ) -> Result<Value> {
-        let harness = config
-            .harnesses
-            .get(harness_id)
-            .ok_or_else(|| invalid(format!("harness {harness_id} is not configured")))?;
-        let profile = config
-            .providers
-            .get(&harness.provider)
-            .ok_or_else(|| invalid(format!("provider {} is not configured", harness.provider)))?;
+        let harness = config.harnesses.get(harness_id).ok_or_else(|| {
+            crate::coded(
+                "HARNESS_UNAVAILABLE",
+                format!("harness {harness_id} is not configured"),
+            )
+        })?;
+        let profile = config.providers.get(&harness.provider).ok_or_else(|| {
+            crate::coded(
+                "PROVIDER_UNAVAILABLE",
+                format!("provider {} is not configured", harness.provider),
+            )
+        })?;
         self.provider_allowed(&harness.provider, profile)?;
         let launch = launch_plan(&harness.provider, profile, harness)?;
         let pack = self.pack(pack_id).await?;
@@ -627,6 +747,40 @@ impl Project {
         } else {
             (vec![], vec![])
         };
+        let intent: Option<String> = self
+            .db
+            .query_row(
+                "SELECT intent_id FROM pack_metadata WHERE id=?1",
+                [pack.id.to_string()],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten();
+        let active_baseline = self.active_baseline()?;
+        // §23.4: the context handed to the worker is recorded in OpenAEVC before the execution
+        // starts and referenced from it (an auditable `Consumes` edge). Names only: never
+        // environment or secret values.
+        let context_record = json!({
+            "type": "org.calve.worker-context/v1",
+            "project_id": self.identity.project_id,
+            "namespace_id": self.identity.namespace_id,
+            "pack": pack.id,
+            "generation": generation,
+            "work_unit": work_unit,
+            "provider": provider,
+            "harness": protocol_harness,
+            "mode": harness.mode,
+            "paths": harness.paths,
+            "task": task,
+            "intent": intent,
+            "active_baseline": active_baseline,
+            "allowed_resources": allowed_resources,
+            "allowed_effects": allowed_effects,
+            "extensions": self.list_extensions().await?,
+            "environment": launch.env.keys().collect::<Vec<_>>(),
+            "secrets": profile.secrets.keys().collect::<Vec<_>>(),
+        });
+        let context_digest = self.put_context(&context_record).await?;
         let (execution, lease) = self
             .client
             .start_execution(ExecutionRequest {
@@ -642,11 +796,11 @@ impl Project {
                 }),
                 allowed_resources,
                 allowed_effects,
-                context: vec![],
+                context: vec![context_digest],
                 timeout_ms: u64::try_from(launch.timeout.as_millis()).unwrap_or(u64::MAX),
                 budget: BTreeMap::new(),
                 max_attempts: 3,
-                idempotency_key: uuid::Uuid::now_v7().to_string(),
+                idempotency_key: crate::app::idempotency_key("execution"),
                 retry_of: retry.map(|(_, previous)| previous),
             })
             .await?;
@@ -657,15 +811,6 @@ impl Project {
                 rusqlite::params![task, execution.to_string(), crate::now()?],
             )?;
         }
-        let intent: Option<String> = self
-            .db
-            .query_row(
-                "SELECT intent_id FROM pack_metadata WHERE id=?1",
-                [pack.id.to_string()],
-                |row| row.get(0),
-            )
-            .ok()
-            .flatten();
         let context = WorkerContext {
             kind: "context",
             version: 1,
@@ -680,7 +825,8 @@ impl Project {
             paths: harness.paths.clone(),
             task: task.map(str::to_owned),
             intent,
-            active_baseline: self.active_baseline()?,
+            active_baseline,
+            context_digest: context_digest.to_string(),
         };
         let mut env = BTreeMap::from([
             (
@@ -866,7 +1012,7 @@ impl Project {
                 "exit_code":outcome.exit_code,"effects":effects.len(),"reason":failure}),
         );
         Ok(
-            json!({"execution":execution,"work_unit":work_unit,"state":state,"harness":harness_id,
+            json!({"execution":execution,"work_unit":work_unit,"context":context_digest,"state":state,"harness":harness_id,
             "provider":provider,"exit_code":outcome.exit_code,"reason":failure,"effects":effects,
             "log_lines":outcome.logs.len(),"output_truncated":outcome.truncated}),
         )
@@ -889,10 +1035,12 @@ pub fn list_providers(config: &EffectiveConfig) -> Value {
 }
 
 pub fn show_provider(config: &EffectiveConfig, id: &str) -> Result<Value> {
-    let profile = config
-        .providers
-        .get(id)
-        .ok_or_else(|| invalid(format!("provider {id} is not configured")))?;
+    let profile = config.providers.get(id).ok_or_else(|| {
+        crate::coded(
+            "PROVIDER_UNAVAILABLE",
+            format!("provider {id} is not configured"),
+        )
+    })?;
     let harnesses: Vec<&String> = config
         .harnesses
         .iter()
@@ -906,10 +1054,12 @@ pub fn show_provider(config: &EffectiveConfig, id: &str) -> Result<Value> {
 
 /// Health check without launching the worker: executable, secrets and harness references.
 pub fn test_provider(config: &EffectiveConfig, id: &str) -> Result<Value> {
-    let profile = config
-        .providers
-        .get(id)
-        .ok_or_else(|| invalid(format!("provider {id} is not configured")))?;
+    let profile = config.providers.get(id).ok_or_else(|| {
+        crate::coded(
+            "PROVIDER_UNAVAILABLE",
+            format!("provider {id} is not configured"),
+        )
+    })?;
     let mut problems = Vec::new();
     let executable = match &profile.executable {
         Some(name) => match resolve_executable(name) {
@@ -921,9 +1071,15 @@ pub fn test_provider(config: &EffectiveConfig, id: &str) -> Result<Value> {
         },
         None => None,
     };
+    let mut warnings = Vec::new();
     for (name, reference) in &profile.secrets {
-        if resolve_secret(reference).is_err() {
-            problems.push(format!("secret {name} ({reference}) is unavailable"));
+        match resolve_secret(reference).map(Zeroizing::new) {
+            Err(_) => problems.push(format!("secret {name} ({reference}) is unavailable")),
+            Ok(value) if value.len() < crate::redact::SHORT_SECRET => warnings.push(format!(
+                "secret {name} is shorter than {} bytes: redaction will also hide unrelated output that contains it",
+                crate::redact::SHORT_SECRET
+            )),
+            Ok(_) => {}
         }
     }
     if let Some(harness) = &profile.default_harness
@@ -934,7 +1090,9 @@ pub fn test_provider(config: &EffectiveConfig, id: &str) -> Result<Value> {
     if !profile.enabled {
         problems.push("provider is disabled".into());
     }
-    Ok(json!({"id":id,"healthy":problems.is_empty(),"executable":executable,"problems":problems}))
+    Ok(
+        json!({"id":id,"healthy":problems.is_empty(),"executable":executable,"problems":problems,"warnings":warnings}),
+    )
 }
 
 pub fn list_harnesses(config: &EffectiveConfig) -> Value {
@@ -950,10 +1108,12 @@ pub fn show_harness(config: &EffectiveConfig, id: &str) -> Result<Value> {
     if id == CAPTURE_HARNESS {
         return Ok(builtin_harnesses()[0].clone());
     }
-    let harness = config
-        .harnesses
-        .get(id)
-        .ok_or_else(|| invalid(format!("harness {id} is not configured")))?;
+    let harness = config.harnesses.get(id).ok_or_else(|| {
+        crate::coded(
+            "HARNESS_UNAVAILABLE",
+            format!("harness {id} is not configured"),
+        )
+    })?;
     Ok(json!({"id":id,"builtin":false,"definition":harness}))
 }
 
@@ -961,10 +1121,12 @@ pub fn test_harness(config: &EffectiveConfig, id: &str) -> Result<Value> {
     if id == CAPTURE_HARNESS {
         return Ok(json!({"id":id,"healthy":true,"problems":[]}));
     }
-    let harness = config
-        .harnesses
-        .get(id)
-        .ok_or_else(|| invalid(format!("harness {id} is not configured")))?;
+    let harness = config.harnesses.get(id).ok_or_else(|| {
+        crate::coded(
+            "HARNESS_UNAVAILABLE",
+            format!("harness {id} is not configured"),
+        )
+    })?;
     let mut problems = Vec::new();
     let mut argv = None;
     match config.providers.get(&harness.provider) {

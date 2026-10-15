@@ -23,7 +23,7 @@ fn daemon_ok(env: &Env, args: &[&str]) -> Value {
         "{args:?}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).unwrap_or(Value::Null)
+    calve_testkit::json_data(&output.stdout)
 }
 
 /// Scenario K: a daemon crash mid-execution is reconciled by OpenAEVC as LOST after restart;

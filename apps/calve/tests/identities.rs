@@ -96,7 +96,14 @@ fn reviewer_identity_and_self_review_rule() {
     assert_eq!(reviews[0]["reviewer"], reviewer["principal"]);
     env.ok(&["--project", p, "pack", "qualify", id, "--generation", &g]);
     env.ok(&["--project", p, "pack", "promote", id, "--generation", &g]);
-    let removed = env.ok(&["--project", p, "authority", "identity-remove", "reviewer"]);
+    let removed = env.ok(&[
+        "--project",
+        p,
+        "authority",
+        "identity-remove",
+        "reviewer",
+        "--yes",
+    ]);
     assert_eq!(removed["revoked_grants"].as_array().unwrap().len(), 1);
     env.fails(&["--project", p, "--as", "reviewer", "status"]);
 }

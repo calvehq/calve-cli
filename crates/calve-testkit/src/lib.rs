@@ -11,6 +11,15 @@ use std::process::Command;
 
 use serde_json::Value;
 
+/// The `data` of a `--json` success envelope (`{"api_version","command","data"}`) on `stdout`;
+/// `Null` when stdout is not one.
+pub fn json_data(stdout: &[u8]) -> Value {
+    serde_json::from_slice::<Value>(stdout)
+        .ok()
+        .and_then(|v| v.get("data").cloned())
+        .unwrap_or(Value::Null)
+}
+
 /// A temporary machine: private data/config homes plus a scratch area for Projects.
 pub struct Env {
     pub temp: tempfile::TempDir,
@@ -83,7 +92,7 @@ impl Env {
             .expect("run calve");
         Run {
             success: output.status.success(),
-            value: serde_json::from_slice(&output.stdout).unwrap_or(Value::Null),
+            value: json_data(&output.stdout),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         }
     }

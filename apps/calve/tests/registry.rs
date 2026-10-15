@@ -43,7 +43,7 @@ async fn workspace_membership_does_not_duplicate_project_state() {
     drop(registry);
     let mut reopened = Registry::open_at(&temp.path().join("data")).unwrap();
     assert_eq!(reopened.selected().unwrap().workspace.id, second.id);
-    reopened.delete("team").unwrap();
+    reopened.delete("team", true).unwrap();
     assert_eq!(reopened.selected().unwrap().workspace.id, "wsp_default");
     assert_eq!(reopened.projects().unwrap().len(), 1);
     drop(project);

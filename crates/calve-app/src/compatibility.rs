@@ -6,7 +6,7 @@ use openaevc::protocol::{
 use openaevc_sdk::OpenAevcClient;
 use serde::Serialize;
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// The OpenAEVC release this build is pinned to (ADR 0003). `xtask check-architecture`
 /// asserts that Cargo.lock resolves both `openaevc` and `openaevc-sdk` to exactly this tag and
@@ -46,7 +46,7 @@ pub(crate) fn check_range(
     runtime: &VersionRange,
 ) -> Result<String> {
     supported.negotiate(runtime).map(|version| version.to_string()).ok_or_else(|| {
-        Error::Message(format!(
+        crate::coded("OPENAEVC_INCOMPATIBLE", format!(
             "OpenAEVC {label} is incompatible: runtime {}..={}, Calve SDK {}..={} (built for {})",
             runtime.min, runtime.max, supported.min, supported.max, PROTOCOL_VERSION
         ))

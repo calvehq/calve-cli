@@ -1,11 +1,15 @@
 #![forbid(unsafe_code)]
 
+mod render;
+
+use std::io::IsTerminal as _;
 use std::path::PathBuf;
 
-use calve_api::{Action, Outcome, Request, RequestScope};
-use calve_client::{Backend, Client, Error, Options, Result};
-use clap::Parser;
-use serde_json::Value;
+use calve_api::errors::{exit, exit_code};
+use calve_api::{Action, Fault, Outcome, Request, RequestScope};
+use calve_client::{Backend, Client, Options};
+use clap::{CommandFactory as _, FromArgMatches as _, Parser};
+use serde_json::{Value, json};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -23,7 +27,8 @@ struct Cli {
     /// Extra configuration file applied after the scope files.
     #[arg(long = "config", global = true)]
     config_file: Option<PathBuf>,
-    /// Structured JSON output.
+    /// JSON output in the versioned envelope, for commands that declare a JSON schema
+    /// (docs/reference/json/v1); other commands refuse it.
     #[arg(long, global = true)]
     json: bool,
     /// Run in this process even when calved is available.
@@ -51,52 +56,84 @@ struct Cli {
     command: Action,
 }
 
-fn print_value(value: Value, machine: bool) {
-    if machine {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&value).unwrap_or_default()
-        );
-    } else {
-        match value {
-            Value::String(text) => println!("{text}"),
-            Value::Array(values) => {
-                if values.is_empty() {
-                    println!("No items.");
-                }
-                for value in values {
-                    print_one(&value);
-                }
-            }
-            value => print_one(&value),
+/// `pack list`, `extension catalog add`, …: the subcommand path the user typed.
+fn command_key(matches: &clap::ArgMatches) -> String {
+    let mut parts = vec![];
+    let mut m = matches;
+    while let Some((name, sub)) = m.subcommand() {
+        parts.push(name.to_owned());
+        m = sub;
+    }
+    parts.join(" ")
+}
+
+/// Test hook: `CALVE_JSON_RECORD=<dir>` writes every JSON result to its own file
+/// `<dir>/<command>@<pid>-<n>.json` (parallel runs never interleave), the input of
+/// `xtask json-schemas`.
+fn record(key: &str, data: &Value) {
+    let Some(dir) = std::env::var_os("CALVE_JSON_RECORD") else {
+        return;
+    };
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = PathBuf::from(dir).join(format!(
+        "{}@{}-{n}.json",
+        key.replace(' ', "."),
+        std::process::id()
+    ));
+    let _ = std::fs::write(path, data.to_string());
+}
+
+struct Run {
+    key: String,
+    json: bool,
+    quiet: bool,
+}
+
+impl Run {
+    fn success(&self, data: Value) {
+        if self.json {
+            record(&self.key, &data);
+            let envelope = json!({"api_version": calve_api::API_VERSION.to_string(), "command": self.key, "data": data});
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&envelope).unwrap_or_default()
+            );
+        } else if !self.quiet {
+            print!("{}", render::human(&self.key, &data));
         }
+    }
+
+    /// Prints the error to stderr and returns the exit status for its code.
+    fn failure(&self, fault: Fault) -> i32 {
+        let status = exit_code(&fault.code);
+        if self.json {
+            let envelope = json!({"api_version": calve_api::API_VERSION.to_string(), "command": self.key,
+                "error": {"code": fault.code, "message": fault.message, "retryable": fault.retryable,
+                    "detail": fault.detail, "exit_code": status}});
+            eprintln!(
+                "{}",
+                serde_json::to_string_pretty(&envelope).unwrap_or_default()
+            );
+        } else {
+            eprint!("{}", render::error(&fault));
+        }
+        status
     }
 }
 
-fn print_one(value: &Value) {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                let rendered = match value {
-                    Value::String(s) => s.clone(),
-                    _ => value.to_string(),
-                };
-                println!("{key}: {rendered}");
-            }
-            println!();
-        }
-        _ => println!("{value}"),
-    }
-}
-
-async fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli, out: &Run) -> i32 {
     let client = Client::new(Options {
         direct: cli.direct,
         endpoint: cli.endpoint.clone(),
         no_daemon_start: cli.no_daemon_start,
     });
+    let fail = |e: calve_client::Error| out.failure(calve_app::app::fault(e));
     // The daemon has its own working directory, so every path is made absolute here.
-    let cwd = std::env::current_dir()?;
+    let cwd = match std::env::current_dir() {
+        Ok(cwd) => cwd,
+        Err(e) => return fail(e.into()),
+    };
     let absolute = |path: PathBuf| {
         if path.is_absolute() {
             path
@@ -116,38 +153,75 @@ async fn run(cli: Cli) -> Result<()> {
     };
     let mut command = cli.command;
     match &mut command {
-        Action::Console => return calve_console::run(client, scope, cli.no_color).await,
+        Action::Console => {
+            return match calve_console::run(client, scope, cli.no_color).await {
+                Ok(()) => exit::OK,
+                Err(e) => fail(e),
+            };
+        }
         Action::Daemon { command } => {
-            let value = client.daemon(command.clone()).await?;
-            if !cli.quiet {
-                print_value(value, cli.json);
-            }
-            return Ok(());
+            return match client.daemon(command.clone()).await {
+                Ok(value) => {
+                    out.success(value);
+                    exit::OK
+                }
+                Err(e) => fail(e),
+            };
         }
         Action::Init { path, .. } => {
             *path = Some(absolute(path.take().unwrap_or_else(|| cwd.clone())));
         }
         _ => {}
     }
-    let request = Request::local(scope, command);
-    let request_id = request.request_id;
-    let (response, backend) = client.send(request).await?;
-    if cli.verbose {
-        let backend = match backend {
-            Backend::Daemon => "daemon",
-            Backend::Embedded => "embedded",
+    let mut request = Request::local(scope, command);
+    // Callers correlate several requests (scripts, retries) with CALVE_CORRELATION_ID.
+    request.correlation_id = std::env::var("CALVE_CORRELATION_ID")
+        .ok()
+        .and_then(|v| v.parse().ok());
+    loop {
+        let request_id = request.request_id;
+        let (response, backend) = match client.send(request.clone()).await {
+            Ok(r) => r,
+            Err(e) => return fail(e),
         };
-        eprintln!("calve: backend={backend} request={request_id}");
-    }
-    match response.outcome {
-        Outcome::Ok { value } => {
-            if !cli.quiet {
-                print_value(value, cli.json);
-            }
-            Ok(())
+        if cli.verbose {
+            let backend = match backend {
+                Backend::Daemon => "daemon",
+                Backend::Embedded => "embedded",
+            };
+            eprintln!("calve: backend={backend} request={request_id}");
         }
-        Outcome::Error { error } => {
-            Err(Error::Message(format!("{}: {}", error.code, error.message)))
+        match response.outcome {
+            Outcome::Ok { value } => {
+                out.success(value);
+                return exit::OK;
+            }
+            // A destructive command asked for confirmation: ask on a terminal, then resend the
+            // same request acknowledged (non-interactive callers pass --yes).
+            Outcome::Error { error }
+                if error.code == "CONFIRMATION_REQUIRED"
+                    && !out.json
+                    && std::io::stdin().is_terminal()
+                    && std::io::stderr().is_terminal() =>
+            {
+                eprintln!("{}", error.message);
+                eprint!("Proceed? [y/N] ");
+                let mut answer = String::new();
+                let _ = std::io::stdin().read_line(&mut answer);
+                if !matches!(answer.trim(), "y" | "Y" | "yes" | "Yes") {
+                    return out.failure(Fault {
+                        code: "USER_CANCELLED".into(),
+                        message: "cancelled; nothing was changed".into(),
+                        retryable: false,
+                        detail: None,
+                    });
+                }
+                request.action.acknowledge();
+                // The confirmed resend is a new request correlated with the first.
+                request.correlation_id.get_or_insert(request.request_id);
+                request.request_id = calve_api::new_request_id();
+            }
+            Outcome::Error { error } => return out.failure(error),
         }
     }
 }
@@ -157,13 +231,32 @@ fn main() {
     if let Some(code) = calve_app::sandbox::hidden_mode() {
         std::process::exit(code);
     }
-    real_main();
+    std::process::exit(real_main());
 }
 
 #[tokio::main]
-async fn real_main() {
-    if let Err(error) = run(Cli::parse()).await {
-        eprintln!("calve: {error}");
-        std::process::exit(1);
+async fn real_main() -> i32 {
+    // Usage errors exit 2 (clap); --help/--version exit 0.
+    let matches = Cli::command().get_matches();
+    let key = command_key(&matches);
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(e) => e.exit(),
+    };
+    let out = Run {
+        key,
+        json: cli.json,
+        quiet: cli.quiet,
+    };
+    if cli.json
+        && !calve_api::json::declares(&out.key)
+        && std::env::var_os("CALVE_JSON_RECORD").is_none()
+    {
+        eprintln!(
+            "error: --json is not supported by `calve {}` (it declares no JSON schema)",
+            out.key
+        );
+        return exit::USAGE;
     }
+    run(cli, &out).await
 }

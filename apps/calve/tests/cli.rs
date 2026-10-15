@@ -21,7 +21,7 @@ fn run_cli(data_home: &Path, args: &[&str]) -> Value {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).unwrap()
+    calve_testkit::json_data(&output.stdout)
 }
 
 fn copy_tree(from: &Path, to: &Path) {
@@ -372,7 +372,7 @@ fn cli_authority_uses_protocol_decisions_and_grants() {
     );
     run_cli(
         &data_home,
-        &["--project", root, "authority", "revoke", grant_id],
+        &["--project", root, "authority", "revoke", grant_id, "--yes"],
     );
     assert_eq!(
         run_cli(
@@ -740,6 +740,7 @@ fn cli_workflow() {
         disposable_id,
         "--generation",
         "2",
+        "--yes",
     ]);
     assert_eq!(
         calve(&["--project", root, "pack", "show", disposable_id])["state"],
@@ -797,7 +798,7 @@ fn cli_workflow() {
         .output()
         .unwrap();
     assert!(!blocked.status.success());
-    assert!(String::from_utf8_lossy(&blocked.stderr).contains("identity conflict"));
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("PROJECT_IDENTITY_CONFLICT"));
 }
 
 #[test]
@@ -1031,7 +1032,7 @@ fn workspace_commands_select_and_share_a_project() {
             .len(),
         1
     );
-    calve(&["workspace", "delete", "team"]);
+    calve(&["workspace", "delete", "team", "--force", "--yes"]);
     assert_eq!(calve(&["workspace", "show"])["name"], "default");
     assert_eq!(calve(&["status"])["project"]["project_id"], id);
 }
@@ -1109,7 +1110,7 @@ fn cli_operations_surface() {
     assert_eq!(calve(&["maintenance", "gc", "--dry-run"])["dry_run"], true);
     calve(&["maintenance", "compact"]);
     calve(&["maintenance", "rebuild-projections"]);
-    calve(&["inbox", "clear-resolved"]);
+    calve(&["inbox", "clear-resolved", "--yes"]);
 
     let stale = root.join(".calve-init-stale");
     fs::create_dir(&stale).unwrap();

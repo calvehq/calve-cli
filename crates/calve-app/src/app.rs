@@ -15,45 +15,62 @@ use crate::config::{ConfigPaths, Scope};
 use crate::registry::Registry;
 use crate::{Error, Project, Result};
 
-/// Maps product errors onto stable API fault codes.
+tokio::task_local! {
+    /// The Calve request being served: `(request_id, correlation_id, OpenAEVC calls so far)`.
+    static REQUEST: (uuid::Uuid, Option<uuid::Uuid>, std::cell::Cell<u32>);
+}
+
+/// The OpenAEVC idempotency key of the next state-changing call in this request (§45.2):
+/// `calve:<request id>:<purpose>:<n>`. A retried request (same id) reproduces the same keys, so
+/// OpenAEVC deduplicates it; outside a request a fresh key is used.
+pub(crate) fn idempotency_key(purpose: &str) -> String {
+    REQUEST
+        .try_with(|(id, _, n)| {
+            let k = n.get();
+            n.set(k + 1);
+            format!("calve:{id}:{purpose}:{k}")
+        })
+        .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string())
+}
+
+/// Maps product errors onto the stable codes of [`calve_api::errors`] (§41). OpenAEVC errors keep
+/// their structured form in `detail.openaevc`; every message and detail is redacted against the
+/// secrets registered in this process (§16.1).
 pub fn fault(error: Error) -> Fault {
-    match error {
-        Error::Protocol(protocol) => Fault {
-            code: protocol.code.as_str().into(),
-            message: protocol.message.clone(),
-            retryable: protocol.retryable,
-            detail: serde_json::to_value(&protocol).ok(),
+    use calve_api::errors::{openaevc_code, split_code};
+    let (code, message, retryable, detail): (&str, String, bool, Option<Value>) = match error {
+        Error::Protocol(protocol) => (
+            openaevc_code(protocol.code.as_str()),
+            protocol.message.clone(),
+            protocol.retryable,
+            Some(json!({"openaevc": &*protocol})),
+        ),
+        Error::Message(message) => match split_code(&message) {
+            Some((code, rest)) => (code, rest.to_owned(), false, None),
+            None => ("PRODUCT_ERROR", message, false, None),
         },
-        Error::Message(message) => Fault {
-            code: "PRODUCT_ERROR".into(),
-            message,
-            retryable: false,
-            detail: None,
+        Error::Busy(message) => ("PROJECT_LOCKED", message, true, None),
+        Error::Io(error) => ("IO_ERROR", error.to_string(), false, None),
+        Error::Database(error) => match error.sqlite_error_code() {
+            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+                ("PROJECT_LOCKED", error.to_string(), true, None)
+            }
+            Some(rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase) => {
+                ("CORRUPT_PRODUCT_STATE", error.to_string(), false, None)
+            }
+            _ => ("INTERNAL", error.to_string(), false, None),
         },
-        Error::Busy(message) => Fault {
-            code: "PROJECT_BUSY".into(),
-            message,
-            retryable: true,
-            detail: None,
-        },
-        Error::Io(error) => Fault {
-            code: "IO_ERROR".into(),
-            message: error.to_string(),
-            retryable: false,
-            detail: None,
-        },
-        Error::Database(error) => Fault {
-            code: "DATABASE_ERROR".into(),
-            message: error.to_string(),
-            retryable: false,
-            detail: None,
-        },
-        other => Fault {
-            code: "INVALID_CONFIGURATION".into(),
-            message: other.to_string(),
-            retryable: false,
-            detail: None,
-        },
+        Error::TomlRead(error) => ("INVALID_CONFIGURATION", error.to_string(), false, None),
+        Error::TomlWrite(error) => ("INTERNAL", error.to_string(), false, None),
+        Error::Json(error) => ("INTERNAL", error.to_string(), false, None),
+    };
+    let redact = crate::redact::active();
+    Fault {
+        code: code.into(),
+        message: redact.text(&message),
+        retryable,
+        detail: detail
+            .map(|d| serde_json::from_str(&redact.text(&d.to_string())).unwrap_or(Value::Null)),
     }
 }
 
@@ -76,8 +93,10 @@ fn workspace_command(registry: &mut Registry, command: WorkspaceCommand) -> Resu
         WorkspaceCommand::SetDefaultProject { workspace, project } => {
             json!(registry.set_default_project(&workspace, &project)?)
         }
-        WorkspaceCommand::Delete { workspace } => {
-            registry.delete(&workspace)?;
+        WorkspaceCommand::Delete {
+            workspace, force, ..
+        } => {
+            registry.delete(&workspace, force)?;
             json!({"deleted":workspace})
         }
     })
@@ -95,7 +114,7 @@ fn project_command(
             let project = Project::peek(&path)?;
             json!(registry.register_project(&project, workspace)?)
         }
-        ProjectCommand::Unregister { project } => {
+        ProjectCommand::Unregister { project, .. } => {
             registry.unregister(&project)?;
             json!({"unregistered":project})
         }
@@ -231,7 +250,10 @@ fn resolve_project_path(
         None => registry.selected()?,
     };
     let id = selected.workspace.default_project_id.ok_or_else(|| {
-        Error::Message("no project found and this workspace has no default project".into())
+        crate::coded(
+            "PROJECT_NOT_FOUND",
+            "no project found and this workspace has no default project",
+        )
     })?;
     Ok(registry.project(&id)?.path)
 }
@@ -351,11 +373,12 @@ fn provider_command(
     let paths = context_config(registry, requested, workspace, override_file)?;
     let config = paths.load()?;
     let existing = |id: &str| -> Result<ProviderProfile> {
-        config
-            .providers
-            .get(id)
-            .cloned()
-            .ok_or_else(|| Error::Message(format!("provider {id} is not configured")))
+        config.providers.get(id).cloned().ok_or_else(|| {
+            crate::coded(
+                "PROVIDER_UNAVAILABLE",
+                format!("provider {id} is not configured"),
+            )
+        })
     };
     let apply = |profile: &mut ProviderProfile, fields: ProviderFields| -> Result<()> {
         if let Some(kind) = fields.kind {
@@ -447,7 +470,7 @@ fn provider_command(
         }
         ProviderCommand::Enable { id } => set_enabled(&id, true),
         ProviderCommand::Disable { id } => set_enabled(&id, false),
-        ProviderCommand::Remove { id } => {
+        ProviderCommand::Remove { id, .. } => {
             let scope = paths.provider_scope(&id)?;
             paths.remove_provider(scope, &id)?;
             Ok(json!({"removed":id,"scope":scope.to_string()}))
@@ -595,8 +618,24 @@ async fn execute_inner(request: Request) -> Response {
                 detail: None,
             },
         }
+    } else if let Some(consequence) = request.action.confirmation() {
+        // Destructive commands need `--yes` (the CLI asks on a terminal and resends).
+        Outcome::Error {
+            error: Fault {
+                code: "CONFIRMATION_REQUIRED".into(),
+                message: format!("{consequence} Confirm with --yes."),
+                retryable: false,
+                detail: None,
+            },
+        }
     } else {
-        match dispatch(request).await {
+        match REQUEST
+            .scope(
+                (request_id, correlation_id, std::cell::Cell::new(0)),
+                dispatch(request),
+            )
+            .await
+        {
             Ok(value) => Outcome::Ok { value },
             Err(error) => Outcome::Error {
                 error: fault(error),
@@ -692,7 +731,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                         }
                         extensions::catalog_reset(&name, &root, &root_digest)
                     }
-                    CatalogCommand::Remove { name } => extensions::catalog_remove(&name),
+                    CatalogCommand::Remove { name, .. } => extensions::catalog_remove(&name),
                 },
                 ExtensionCommand::Search { query } => extensions::search(query.as_deref()),
                 ExtensionCommand::Install {
@@ -719,7 +758,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                     }
                     extensions::switch_publisher(&id, &catalog, acknowledge_native)
                 }
-                ExtensionCommand::Uninstall { id, version } => {
+                ExtensionCommand::Uninstall { id, version, .. } => {
                     extensions::uninstall(&id, version.as_deref())
                 }
                 _ => unreachable!(),
@@ -789,6 +828,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                 MaintenanceCommand::Gc {
                     dry_run,
                     grace_secs,
+                    ..
                 },
         } => return crate::ops::collect_garbage(&root, *grace_secs, *dry_run),
         Action::Maintenance {
@@ -979,7 +1019,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                 }
                 Ok(json!({"unacknowledged":source_keys}))
             }
-            InboxCommand::ClearResolved => project.clear_resolved_inbox().await,
+            InboxCommand::ClearResolved { .. } => project.clear_resolved_inbox().await,
             InboxCommand::Read { source_key } => {
                 project.update_inbox_item(&source_key, "read", None).await?;
                 Ok(json!({"read":source_key}))
@@ -1044,7 +1084,9 @@ async fn dispatch(request: Request) -> Result<Value> {
             PackCommand::Reopen { id, generation } => project.reopen(&id, generation).await,
             PackCommand::Quarantine { id, reason } => project.quarantine_pack(&id, &reason).await,
             PackCommand::Release { id } => project.release_quarantine(&id).await,
-            PackCommand::Abandon { id, generation } => project.abandon_pack(&id, generation).await,
+            PackCommand::Abandon { id, generation, .. } => {
+                project.abandon_pack(&id, generation).await
+            }
         },
         Action::Revision { command } => match command {
             RevisionCommand::Create {
@@ -1367,7 +1409,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                     .await
             }
             AuthorityCommand::Grant { options } => project.authority_grant(&options).await,
-            AuthorityCommand::Revoke { grant, reason } => {
+            AuthorityCommand::Revoke { grant, reason, .. } => {
                 project.authority_revoke(&grant, reason.as_deref()).await
             }
             AuthorityCommand::IdentityAdd {
@@ -1376,7 +1418,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                 days,
             } => project.add_identity(&name, &actions, days).await,
             AuthorityCommand::Identities => project.list_identities(),
-            AuthorityCommand::IdentityRemove { name } => project.remove_identity(&name).await,
+            AuthorityCommand::IdentityRemove { name, .. } => project.remove_identity(&name).await,
         },
         Action::Doctor { bundle, yes } => {
             let namespace = project

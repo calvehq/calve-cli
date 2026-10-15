@@ -424,7 +424,12 @@ impl Project {
             .flatten()
             .find(|item| item["id"] == id)
             .cloned()
-            .ok_or_else(|| invalid(format!("extension {id} is not registered")))?;
+            .ok_or_else(|| {
+                crate::coded(
+                    "EXTENSION_NOT_INSTALLED",
+                    format!("extension {id} is not registered"),
+                )
+            })?;
         let digest: Digest = serde_json::from_value(entry["manifest"].clone())?;
         let manifest = self.client.query(Query::GetObject { digest }).await?;
         Ok(json!({"extension":entry,"manifest":manifest["envelope"]["body"]}))

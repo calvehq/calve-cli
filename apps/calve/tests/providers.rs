@@ -13,7 +13,7 @@ fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
         .args(args)
         .output()
         .unwrap();
-    let value = serde_json::from_slice(&output.stdout).unwrap_or(Value::Null);
+    let value = calve_testkit::json_data(&output.stdout);
     (
         output.status.success(),
         value,
@@ -137,6 +137,49 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
     );
     assert_eq!(run["state"], "SUCCEEDED");
     assert_eq!(run["effects"][0]["path"], "out/a.txt");
+    // §23.4 (P10): the worker context is recorded in OpenAEVC and consumed by the execution;
+    // the OpenAEVC idempotency key derives from the Calve request id (P17).
+    let context = run["context"].as_str().expect("context digest").to_owned();
+    let shown = ok(
+        data,
+        &[
+            "--project",
+            p,
+            "execution",
+            "show",
+            run["execution"].as_str().unwrap(),
+        ],
+    );
+    let record = shown.get("execution").unwrap_or(&shown);
+    assert_eq!(record["context"][0], context.as_str(), "{shown}");
+    assert!(
+        record["idempotency_key"]
+            .as_str()
+            .is_some_and(|k| k.starts_with("calve:") && k.ends_with(":execution:0")),
+        "{shown}"
+    );
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let body = rt.block_on(async {
+        use openaevc_sdk::OpenAevcClient as _;
+        let project = calve_app::Project::open(&root).unwrap();
+        let digest: openaevc::protocol::Digest = context.parse().unwrap();
+        project
+            .client
+            .query(openaevc::protocol::Query::GetObject { digest })
+            .await
+            .unwrap()
+    });
+    let blob: openaevc::protocol::Blob =
+        serde_json::from_value(body["envelope"]["body"].clone()).unwrap();
+    let recorded: Value = serde_json::from_slice(&blob.data).unwrap();
+    assert_eq!(recorded["type"], "org.calve.worker-context/v1");
+    assert_eq!(recorded["harness"], "org.calve.harness.write");
+    assert_eq!(recorded["secrets"], serde_json::json!(["TOKEN"]));
+    assert_eq!(recorded["paths"], serde_json::json!(["out"]));
+    assert!(
+        !recorded.to_string().contains("s3cret"),
+        "names only: {recorded}"
+    );
     // The environment is cleared; only referenced secrets reach the worker.
     assert_eq!(
         fs::read_to_string(root.join("out/a.txt")).unwrap(),
@@ -272,7 +315,7 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
     );
     assert!(!success && stderr.contains("disabled"), "{stderr}");
     assert_eq!(ok(data, &["harness", "test", "write"])["healthy"], false);
-    ok(data, &["provider", "remove", "shell"]);
+    ok(data, &["provider", "remove", "shell", "--yes"]);
     assert_eq!(ok(data, &["provider", "list"]).as_array().unwrap().len(), 1);
 }
 
@@ -303,7 +346,7 @@ fn keyring_secrets_resolve_at_launch() {
             .unwrap();
         (
             output.status.success(),
-            serde_json::from_slice::<Value>(&output.stdout).unwrap_or(Value::Null),
+            calve_testkit::json_data(&output.stdout),
         )
     };
     let root = data.join("p");

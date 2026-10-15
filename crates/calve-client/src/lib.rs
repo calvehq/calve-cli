@@ -40,7 +40,9 @@ fn daemon_file(endpoint: &Path, name: &str) -> PathBuf {
 
 fn ipc_error(error: calve_ipc::Error) -> Error {
     match error {
-        calve_ipc::Error::Io(error) => Error::Io(error),
+        calve_ipc::Error::Io(error) => Error::Message(format!(
+            "DAEMON_UNAVAILABLE: the daemon could not be reached: {error}"
+        )),
         calve_ipc::Error::Busy(message) => Error::Busy(message),
         other => Error::Message(other.to_string()),
     }
@@ -190,14 +192,14 @@ impl Client {
                     }
                     if let Some(status) = child.try_wait()? {
                         return Err(Error::Message(format!(
-                            "calved exited with {status}; see {}",
+                            "DAEMON_UNAVAILABLE: calved exited with {status}; see {}",
                             log_path.display()
                         )));
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
                 Err(Error::Message(
-                    "calved did not become ready within 5 s".into(),
+                    "DAEMON_UNAVAILABLE: calved did not become ready within 5 s".into(),
                 ))
             }
             DaemonCommand::Stop => {

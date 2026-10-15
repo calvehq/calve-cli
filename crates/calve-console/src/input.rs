@@ -101,6 +101,8 @@ fn destructive(args: &[String]) -> bool {
         "activate",
         "clear-resolved",
         "remove",
+        "gc",
+        "identity-remove",
     ];
     words.iter().take(3).any(|w| risky.contains(w))
         || words.contains(&"--apply")
@@ -109,12 +111,21 @@ fn destructive(args: &[String]) -> bool {
 
 /// Queues a typed command; results come back through [`on_response`].
 pub fn issue(app: &mut App, label: &str, args: &[String], show_result: bool) {
+    issue_with(app, label, args, show_result, false);
+}
+
+/// `confirmed`: the user accepted the confirmation dialog, which is the `--yes` of a
+/// destructive command.
+fn issue_with(app: &mut App, label: &str, args: &[String], show_result: bool, confirmed: bool) {
     if !app.can_act() {
         app.notify(Tone::Warning, "Offline: actions are disabled");
         return;
     }
     match parse_action(args) {
-        Ok(action) => {
+        Ok(mut action) => {
+            if confirmed {
+                action.acknowledge();
+            }
             app.commands += 1;
             let key = format!("cmd:{}:{}:{label}", app.commands, u8::from(show_result));
             app.outbox.push(Request { key, action });
@@ -588,6 +599,7 @@ enum Then {
         label: String,
         args: Vec<String>,
         show: bool,
+        confirmed: bool,
     },
     CommandLine(String),
     Navigate(Route),
@@ -737,6 +749,7 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
                     label: label.clone(),
                     args: args.clone(),
                     show: label.starts_with(':'),
+                    confirmed: true,
                 };
             } else if esc || matches!(key.code, KeyCode::Char('q' | 'n')) {
                 keep = false;
@@ -804,6 +817,7 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
                         label: format!("Review: {verb}"),
                         args,
                         show: false,
+                        confirmed: false,
                     };
                 }
             } else if matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
@@ -839,7 +853,12 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
     match then {
         Then::Nothing => {}
         Then::Run(target) => run_target(app, target),
-        Then::Issue { label, args, show } => issue(app, &label, &args, show),
+        Then::Issue {
+            label,
+            args,
+            show,
+            confirmed,
+        } => issue_with(app, &label, &args, show, confirmed),
         Then::CommandLine(text) => {
             if let Err(message) = run_command_line(app, &text) {
                 app.overlays.push(Overlay::Command {

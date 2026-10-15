@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod json_schemas;
 mod openaevc_rules;
 
 use calve_app::compatibility::{OPENAEVC_REVISION, OPENAEVC_TAG};
@@ -11,6 +12,7 @@ use calve_app::compatibility::{OPENAEVC_REVISION, OPENAEVC_TAG};
 const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
        cargo run --bin xtask -- check-isolation
        cargo run --bin xtask -- cli-reference [--check]
+       cargo run --bin xtask -- json-schemas [--write]
        cargo run --bin xtask -- dist [--target <triple>]
        cargo run --bin xtask -- sbom <output.json>";
 
@@ -23,6 +25,10 @@ fn main() {
         Some("check-isolation") if args.len() == 1 => check_isolation(),
         Some("dist") => dist(&args[1..]),
         Some("sbom") if args.len() == 2 => sbom(Path::new(&args[1])),
+        Some("json-schemas") if args.len() <= 2 => json_schemas::run(
+            &workspace_root(),
+            args.get(1).map(String::as_str) == Some("--write"),
+        ),
         Some("cli-reference") if args.len() <= 2 => {
             cli_reference(args.get(1).map(String::as_str) == Some("--check"))
         }

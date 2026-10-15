@@ -116,18 +116,25 @@ pub async fn request(endpoint: &Path, payload: Request) -> Result<Response> {
     .await?;
     let ack = match read_frame(&mut stream).await? {
         Frame::HelloAck(ack) => ack,
-        _ => return Err(Error::Message("invalid daemon handshake".into())),
+        _ => {
+            return Err(Error::Message(
+                "DAEMON_INCOMPATIBLE: invalid daemon handshake".into(),
+            ));
+        }
     };
     if !ack.accepted || ack.api_version != app::API_VERSION {
-        return Err(Error::Message(
+        return Err(Error::Message(format!(
+            "DAEMON_INCOMPATIBLE: {}",
             ack.message
-                .unwrap_or_else(|| "incompatible daemon API".into()),
-        ));
+                .unwrap_or_else(|| "incompatible daemon API".into())
+        )));
     }
     write_frame(&mut stream, &Frame::Request(Box::new(payload))).await?;
     match read_frame(&mut stream).await? {
         Frame::Response(response) => Ok(*response),
-        _ => Err(Error::Message("invalid daemon response".into())),
+        _ => Err(Error::Message(
+            "DAEMON_INCOMPATIBLE: invalid daemon response".into(),
+        )),
     }
 }
 

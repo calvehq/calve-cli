@@ -19,7 +19,7 @@ objects_after=$(calve maintenance verify-store | get '["objects"]')
 # Each Baseline adds its own object plus a command receipt; no pack objects are copied.
 expect "Baselines reuse promoted packs" "$((objects_after - objects_before))" "6"
 
-shared=$(calve baseline compare "$b0" "$b1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["shared_members"]))')
+shared=$(calve baseline compare "$b0" "$b1" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["data"]["shared_members"]))')
 expect "B0 and B1 share P0 and P1" "$shared" "2"
 for b in "$b0" "$b1" "$b2"; do
   expect "baseline $b validates" "$(calve baseline validate "$b" | get '["valid"]')" "true"

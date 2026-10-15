@@ -14,7 +14,7 @@ fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
         .unwrap();
     (
         output.status.success(),
-        serde_json::from_slice(&output.stdout).unwrap_or(Value::Null),
+        calve_testkit::json_data(&output.stdout),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
 }

@@ -19,7 +19,8 @@ PROJECT="$WORK/project"
 calve() { "$CALVE_BIN" --json --no-daemon-start --project "$PROJECT" "$@"; }
 
 # get '<python subscript>': reads JSON on stdin, prints one field, e.g. get '["id"]'.
-get() { python3 -c "import json,sys; v=json.load(sys.stdin)$1; print(v if isinstance(v,str) else json.dumps(v))"; }
+# --json output is the envelope {"api_version","command","data"}; get reads data.
+get() { python3 -c "import json,sys; v=json.load(sys.stdin)['data']$1; print(v if isinstance(v,str) else json.dumps(v))"; }
 
 # expect <description> <actual> <expected>
 expect() {

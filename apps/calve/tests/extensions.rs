@@ -141,7 +141,24 @@ fn catalog_install_grant_update_rollback_and_uninstall() {
         ])["granted"],
         json!(["clock.read"])
     );
-    let busy = env.fails(&["extension", "uninstall", "org.example.fixture"]);
+    let revoked = env.ok(&[
+        "--project",
+        p,
+        "extension",
+        "revoke",
+        "org.example.fixture",
+        "clock.read",
+    ]);
+    assert_eq!(revoked["granted"], json!([]), "{revoked}");
+    env.ok(&[
+        "--project",
+        p,
+        "extension",
+        "grant",
+        "org.example.fixture",
+        "clock.read",
+    ]);
+    let busy = env.fails(&["extension", "uninstall", "org.example.fixture", "--yes"]);
     assert!(busy.contains("EXTENSION_IN_USE"), "{busy}");
 
     // A new version requesting more is held until the widening is granted.
@@ -197,7 +214,7 @@ fn catalog_install_grant_update_rollback_and_uninstall() {
         "disable",
         "org.example.fixture",
     ]);
-    let removed = env.ok(&["extension", "uninstall", "org.example.fixture"]);
+    let removed = env.ok(&["extension", "uninstall", "org.example.fixture", "--yes"]);
     assert_eq!(removed["removed"].as_array().unwrap().len(), 2, "{removed}");
 }
 

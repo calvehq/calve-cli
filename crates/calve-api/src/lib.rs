@@ -4,6 +4,9 @@
 
 use std::path::PathBuf;
 
+pub mod errors;
+pub mod json;
+
 use clap::Subcommand;
 use openaevc::protocol::Digest;
 use serde::{Deserialize, Serialize};
@@ -341,7 +344,13 @@ pub enum ProviderCommand {
     /// Disable a provider.
     Disable { id: String },
     /// Remove a provider profile.
-    Remove { id: String },
+    Remove {
+        id: String,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
@@ -382,6 +391,10 @@ pub enum MaintenanceCommand {
     Gc {
         #[arg(long)]
         dry_run: bool,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
         #[arg(long, default_value_t = 86_400)]
         grace_secs: u64,
     },
@@ -425,8 +438,18 @@ pub enum WorkspaceCommand {
     RemoveProject { workspace: String, project: String },
     /// Choose the Project used outside Project directories.
     SetDefaultProject { workspace: String, project: String },
-    /// Delete an empty Workspace.
-    Delete { workspace: String },
+    /// Delete a Workspace (`--force` also when it still lists Projects; their files and
+    /// registrations stay).
+    Delete {
+        workspace: String,
+        #[arg(long)]
+        #[serde(default)]
+        force: bool,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
@@ -438,7 +461,13 @@ pub enum ProjectCommand {
     /// Register an existing Project directory.
     Register { path: PathBuf },
     /// Forget a Project registration (keeps its files).
-    Unregister { project: String },
+    Unregister {
+        project: String,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
     /// Point a registration at a moved Project.
     Relocate { project: String, path: PathBuf },
     /// Make a copied Project directory a new Project with its own identity and Namespace.
@@ -618,7 +647,12 @@ pub enum InboxCommand {
         source_keys: Vec<String>,
     },
     /// Forget resolved items (audit history is untouched).
-    ClearResolved,
+    ClearResolved {
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
     /// Hide an item until a time.
     Snooze {
         source_key: String,
@@ -660,6 +694,10 @@ pub enum AuthorityCommand {
         grant: String,
         #[arg(long)]
         reason: Option<String>,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
     },
     /// Create a local identity: an OpenAEVC key principal with a scoped grant (default: read and record review/verification results).
     IdentityAdd {
@@ -673,7 +711,13 @@ pub enum AuthorityCommand {
     /// List local identities.
     Identities,
     /// Revoke an identity's grants and forget its key.
-    IdentityRemove { name: String },
+    IdentityRemove {
+        name: String,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
@@ -745,6 +789,10 @@ pub enum PackCommand {
         id: String,
         #[arg(long)]
         generation: u64,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
     },
     #[command(flatten)]
     Lifecycle(LifecycleCommand),
@@ -969,7 +1017,13 @@ pub enum CatalogCommand {
         i_understand_rollback_risk: bool,
     },
     /// Stop trusting a catalog (installed packages stay).
-    Remove { name: String },
+    Remove {
+        name: String,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
@@ -1024,6 +1078,10 @@ pub enum ExtensionCommand {
         id: String,
         #[arg(long)]
         version: Option<String>,
+        /// Confirm without prompting (required when not on a terminal).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
     },
     /// Enable an installed (or installable) extension in this Project.
     Enable {
@@ -1220,7 +1278,98 @@ impl LifecycleCommand {
     }
 }
 
+/// A fresh request id (UUIDv7).
+pub fn new_request_id() -> Uuid {
+    Uuid::now_v7()
+}
+
 impl Action {
+    /// The consequence to confirm when this is a destructive command given without `--yes`
+    /// (§17.1); `None` when it may run.
+    pub fn confirmation(&self) -> Option<String> {
+        use ExtensionCommand as E;
+        let ask = |yes: bool, text: String| (!yes).then_some(text);
+        match self {
+            Self::Provider { command: ProviderCommand::Remove { id, yes } } => {
+                ask(*yes, format!("Remove provider profile {id}; executions can no longer use it."))
+            }
+            Self::Maintenance { command: MaintenanceCommand::Gc { dry_run: false, yes, .. } } => ask(
+                *yes,
+                "Delete unreferenced product data past the grace period (run with --dry-run to see what).".into(),
+            ),
+            Self::Workspace { command: WorkspaceCommand::Delete { workspace, yes, .. } } => {
+                ask(*yes, format!("Delete Workspace {workspace} (Projects and their files stay)."))
+            }
+            Self::Project { command: ProjectCommand::Unregister { project, yes } } => ask(
+                *yes,
+                format!("Forget the registration of Project {project} (its files stay)."),
+            ),
+            Self::Inbox { command: InboxCommand::ClearResolved { yes } } => {
+                ask(*yes, "Forget all resolved inbox items (audit history stays).".into())
+            }
+            Self::Authority { command: AuthorityCommand::Revoke { grant, yes, .. } } => ask(
+                *yes,
+                format!("Revoke grant {grant}; holders lose these capabilities immediately."),
+            ),
+            Self::Authority { command: AuthorityCommand::IdentityRemove { name, yes } } => ask(
+                *yes,
+                format!("Revoke every grant of identity {name} and forget its key."),
+            ),
+            Self::Pack { command: PackCommand::Abandon { id, generation, yes } } => ask(
+                *yes,
+                format!("Abandon pack {id} at generation {generation}; it can no longer be promoted."),
+            ),
+            Self::Extension { command: E::Uninstall { id, yes, .. } } => {
+                ask(*yes, format!("Uninstall {id} from this machine."))
+            }
+            Self::Extension { command: E::Catalog { command: CatalogCommand::Remove { name, yes } } } => {
+                ask(*yes, format!("Stop trusting catalog {name} (installed packages stay)."))
+            }
+            _ => None,
+        }
+    }
+
+    /// Records the user's confirmation (`--yes`).
+    pub fn acknowledge(&mut self) {
+        use ExtensionCommand as E;
+        match self {
+            Self::Provider {
+                command: ProviderCommand::Remove { yes, .. },
+            }
+            | Self::Maintenance {
+                command: MaintenanceCommand::Gc { yes, .. },
+            }
+            | Self::Workspace {
+                command: WorkspaceCommand::Delete { yes, .. },
+            }
+            | Self::Project {
+                command: ProjectCommand::Unregister { yes, .. },
+            }
+            | Self::Inbox {
+                command: InboxCommand::ClearResolved { yes },
+            }
+            | Self::Authority {
+                command: AuthorityCommand::Revoke { yes, .. },
+            }
+            | Self::Authority {
+                command: AuthorityCommand::IdentityRemove { yes, .. },
+            }
+            | Self::Pack {
+                command: PackCommand::Abandon { yes, .. },
+            }
+            | Self::Extension {
+                command: E::Uninstall { yes, .. },
+            }
+            | Self::Extension {
+                command:
+                    E::Catalog {
+                        command: CatalogCommand::Remove { yes, .. },
+                    },
+            } => *yes = true,
+            _ => {}
+        }
+    }
+
     pub fn kind(&self) -> OperationKind {
         match self {
             Self::Init { .. } => OperationKind::Command,

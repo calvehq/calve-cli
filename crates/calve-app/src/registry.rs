@@ -131,12 +131,19 @@ impl Registry {
                 tx.execute_batch(SCHEMA)?;
                 tx.execute_batch("PRAGMA user_version=1")?;
                 tx.commit()?;
+                crate::observe::record(
+                    "migration",
+                    serde_json::json!({"database": "registry", "from": 0, "to": 1}),
+                );
             }
             1 => {}
             _ => {
-                return Err(invalid(format!(
-                    "unsupported registry schema version {version}"
-                )));
+                return Err(crate::coded(
+                    "MIGRATION_REQUIRED",
+                    format!(
+                        "registry schema version {version} is newer than this Calve supports (1); upgrade Calve"
+                    ),
+                ));
             }
         }
         let mut registry = Self { db, root };
@@ -174,7 +181,12 @@ impl Registry {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .optional()?
-            .ok_or_else(|| invalid(format!("unknown workspace {identifier}")))
+            .ok_or_else(|| {
+                crate::coded(
+                    "WORKSPACE_NOT_FOUND",
+                    format!("unknown workspace {identifier}"),
+                )
+            })
     }
 
     pub fn selected(&self) -> Result<WorkspaceView> {
@@ -288,10 +300,25 @@ impl Registry {
         self.show(&id)
     }
 
-    pub fn delete(&mut self, identifier: &str) -> Result<()> {
+    /// Deletes a Workspace; one that still lists Projects only with `force` (the Projects, their
+    /// files and registrations stay).
+    pub fn delete(&mut self, identifier: &str, force: bool) -> Result<()> {
         let (id, _, _) = self.workspace_row(identifier)?;
         if id == "wsp_default" {
             return Err(invalid("the default workspace cannot be deleted"));
+        }
+        let listed: i64 = self.db.query_row(
+            "SELECT COUNT(*) FROM workspace_projects WHERE workspace_id=?1",
+            [&id],
+            |row| row.get(0),
+        )?;
+        if listed > 0 && !force {
+            return Err(crate::coded(
+                "CONFIRMATION_REQUIRED",
+                format!(
+                    "Workspace {identifier} still lists {listed} Project(s); delete it anyway with --force (the Projects stay registered)"
+                ),
+            ));
         }
         let tx = self.db.transaction()?;
         tx.execute("UPDATE registry_meta SET value='wsp_default' WHERE key='selected_workspace' AND value=?1", [&id])?;
@@ -322,7 +349,7 @@ impl Registry {
                 project_id: row.get(0)?, namespace_id: row.get(1)?,
                 path: PathBuf::from(row.get::<_,String>(2)?), name: row.get(3)?, pinned: false,
             }),
-        ).optional()?.ok_or_else(|| invalid(format!("unknown registered project {identifier}")))
+        ).optional()?.ok_or_else(|| crate::coded("PROJECT_NOT_FOUND", format!("unknown registered project {identifier}")))
     }
 
     pub fn rename_project(&self, identifier: &str, name: &str) -> Result<ProjectEntry> {
@@ -349,7 +376,10 @@ impl Registry {
                 )
                 .optional()?;
             if let Some(id) = existing {
-                return Err(invalid(format!("path is already registered to {id}")));
+                return Err(crate::coded(
+                    "PROJECT_IDENTITY_CONFLICT",
+                    format!("path is already registered to {id}"),
+                ));
             }
         }
         Ok(())
@@ -368,10 +398,13 @@ impl Registry {
         if let Some(other) = at_path
             && other != identity.project_id
         {
-            return Err(invalid(format!(
-                "path {} is registered to another project ({other})",
-                path.display()
-            )));
+            return Err(crate::coded(
+                "PROJECT_IDENTITY_CONFLICT",
+                format!(
+                    "path {} is registered to another project ({other})",
+                    path.display()
+                ),
+            ));
         }
         let registered: Option<(String, String)> = self
             .db
@@ -384,12 +417,15 @@ impl Registry {
         if let Some((known, namespace)) = registered
             && (known != path_text || namespace != identity.namespace_id.to_string())
         {
-            return Err(invalid(format!(
-                "project identity conflict: {} is registered at {}; writes to {} are blocked",
-                identity.project_id,
-                known,
-                path.display()
-            )));
+            return Err(crate::coded(
+                "PROJECT_IDENTITY_CONFLICT",
+                format!(
+                    "{} is registered at {}; writes to {} are blocked",
+                    identity.project_id,
+                    known,
+                    path.display()
+                ),
+            ));
         }
         Ok(())
     }

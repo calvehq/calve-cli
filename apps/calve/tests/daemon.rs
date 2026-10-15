@@ -77,7 +77,7 @@ fn daemon_ipc_and_project_writer() {
         "{}",
         String::from_utf8_lossy(&version.stderr)
     );
-    let version: serde_json::Value = serde_json::from_slice(&version.stdout).unwrap();
+    let version = calve_testkit::json_data(&version.stdout);
     assert_eq!(version["api_version"], 1);
 
     let mut socket = UnixStream::connect(&endpoint).unwrap();
@@ -182,7 +182,7 @@ fn daemon_ipc_and_project_writer() {
         ],
     );
     assert!(!blocked.status.success());
-    assert!(String::from_utf8_lossy(&blocked.stderr).contains("PROJECT_BUSY"));
+    assert!(String::from_utf8_lossy(&blocked.stderr).contains("PROJECT_LOCKED"));
     drop(lock);
     let created = cli(
         &data,
@@ -200,7 +200,7 @@ fn daemon_ipc_and_project_writer() {
         "{}",
         String::from_utf8_lossy(&created.stderr)
     );
-    let created: serde_json::Value = serde_json::from_slice(&created.stdout).unwrap();
+    let created = calve_testkit::json_data(&created.stdout);
     assert!(created["id"].is_string());
     let signal = Command::new("kill")
         .arg("-TERM")

@@ -57,7 +57,7 @@ impl Project {
         {
             use std::os::unix::fs::PermissionsExt;
             let mode = fs::metadata(&path)
-                .map_err(|_| invalid(format!("no local identity named {name}")))?
+                .map_err(|_| crate::coded("NOT_FOUND", format!("no local identity named {name}")))?
                 .permissions()
                 .mode();
             if mode & 0o077 != 0 {

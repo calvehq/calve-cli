@@ -2861,6 +2861,34 @@ pub fn matches_filter(row: &Row, filter: &str) -> bool {
 mod tests {
     use super::*;
 
+    proptest::proptest! {
+        /// Tokens are conjunctive and case-insensitive; any substring of a field matches.
+        #[test]
+        fn filter_tokens_are_conjunctive_and_case_insensitive(
+            state in "[a-z]{1,8}",
+            text in "[a-z ]{1,16}",
+            a in "[a-zA-Z]{0,4}",
+            b in "[a-zA-Z]{0,4}",
+            from in 0usize..8,
+        ) {
+            let row = Row {
+                id: "r".into(),
+                cells: vec![],
+                open: None,
+                search: vec![("state", state.clone()), ("text", text.clone())],
+            };
+            let both = format!("{a} {b}");
+            proptest::prop_assert_eq!(
+                matches_filter(&row, &both),
+                matches_filter(&row, &a) && matches_filter(&row, &b)
+            );
+            proptest::prop_assert_eq!(matches_filter(&row, &a), matches_filter(&row, &a.to_uppercase()));
+            let start = from.min(state.len() - 1);
+            let field_token = format!("state:{}", &state[start..]);
+            proptest::prop_assert!(matches_filter(&row, &field_token));
+        }
+    }
+
     #[test]
     fn structured_filters_match_fields() {
         let row = Row {

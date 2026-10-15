@@ -1,0 +1,215 @@
+//! The rest of the `--json` command surface (PLAN §17, ADR 0020): commands no other end-to-end
+//! test runs. Each succeeds here, so `cargo xtask json-schemas` records its output and its v1
+//! schema is enforced.
+
+use std::fs;
+
+use calve_testkit::Env;
+
+fn id(v: &serde_json::Value) -> String {
+    v["id"].as_str().expect("id").to_owned()
+}
+
+#[test]
+fn remaining_commands_succeed_with_json() {
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&root);
+    let pr = |args: &[&str]| -> Vec<String> {
+        ["--project", p.as_str()]
+            .iter()
+            .chain(args)
+            .map(|s| (*s).to_owned())
+            .collect()
+    };
+    let run = |env: &Env, args: &[&str]| {
+        let a = pr(args);
+        env.ok(&a.iter().map(String::as_str).collect::<Vec<_>>())
+    };
+
+    // Workspaces and Projects.
+    let project_id = env.ok(&["project", "list"])[0]["project_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&["workspace", "create", "team"]);
+    env.ok(&["workspace", "rename", "team", "crew"]);
+    env.ok(&["workspace", "add-project", "crew", &project_id]);
+    env.ok(&["workspace", "set-default-project", "crew", &project_id]);
+    env.ok(&["workspace", "remove-project", "crew", &project_id]);
+    env.ok(&["project", "unregister", &project_id, "--yes"]);
+    env.ok(&["project", "register", &p]);
+    run(&env, &["config", "list"]);
+
+    // Intents and Tasks.
+    let intent = id(&run(&env, &["intent", "create", "Ship"]));
+    run(&env, &["intent", "list"]);
+    let a = id(&run(&env, &["task", "create", &intent, "A"]));
+    let b = id(&run(&env, &["task", "create", &intent, "B"]));
+    run(&env, &["task", "depends-on", &a, &b]);
+    run(&env, &["task", "remove-dependency", &a, &b]);
+    run(&env, &["task", "assign", &a, "alex"]);
+
+    // Pack review decisions and reopen.
+    fs::write(root.join("toy.toml"), "").unwrap();
+    fs::write(root.join("a.toy"), "one").unwrap();
+    let pack = id(&run(&env, &["pack", "create", "Review me"]));
+    run(
+        &env,
+        &["pack", "capture", &pack, "a.toy", "--generation", "1"],
+    );
+    let g = run(&env, &["pack", "show", &pack])["generation"].to_string();
+    run(&env, &["pack", "seal", &pack, "--generation", &g]);
+    run(
+        &env,
+        &["review", "comment", &pack, "--generation", &g, "looks fine"],
+    );
+    run(
+        &env,
+        &[
+            "review",
+            "reject",
+            &pack,
+            "--generation",
+            &g,
+            "--reason",
+            "not yet",
+        ],
+    );
+    run(
+        &env,
+        &[
+            "pack",
+            "reject",
+            &pack,
+            "--generation",
+            &g,
+            "--reason",
+            "still not",
+        ],
+    );
+    run(&env, &["pack", "reopen", &pack, "--generation", &g]);
+
+    // A promoted pack, a revision through its whole lifecycle, Baselines and aliases.
+    let p1 = id(&run(&env, &["pack", "create", "P1"]));
+    run(
+        &env,
+        &["pack", "capture", &p1, "a.toy", "--generation", "1"],
+    );
+    let g1 = run(&env, &["pack", "show", &p1])["generation"].to_string();
+    run(&env, &["pack", "seal", &p1, "--generation", &g1]);
+    run(&env, &["pack", "qualify", &p1, "--generation", &g1]);
+    let p1_digest = run(&env, &["pack", "promote", &p1, "--generation", &g1])["promoted_digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fs::write(root.join("a.toy"), "two").unwrap();
+    let r = id(&run(
+        &env,
+        &["revision", "create", "R1", "--of", &p1_digest],
+    ));
+    run(
+        &env,
+        &["revision", "capture", &r, "a.toy", "--generation", "1"],
+    );
+    run(&env, &["revision", "diff", &r]);
+    let gr = run(&env, &["revision", "show", &r])["generation"].to_string();
+    run(&env, &["revision", "seal", &r, "--generation", &gr]);
+    run(&env, &["revision", "verify", &r, "--generation", &gr]);
+    run(&env, &["revision", "evaluate", &r, "--generation", &gr]);
+    run(&env, &["revision", "review", &r]);
+    run(
+        &env,
+        &[
+            "revision",
+            "reject",
+            &r,
+            "--generation",
+            &gr,
+            "--reason",
+            "first look",
+        ],
+    );
+    run(
+        &env,
+        &[
+            "revision",
+            "approve",
+            &r,
+            "--generation",
+            &gr,
+            "--reason",
+            "fine",
+        ],
+    );
+    let refused = env.fails(
+        &pr(&["revision", "check", &r, "--generation", &gr])
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    let plan = refused
+        .split_whitespace()
+        .find(|w| w.len() == 64 && w.bytes().all(|c| c.is_ascii_hexdigit()))
+        .expect("plan digest")
+        .to_owned();
+    run(
+        &env,
+        &[
+            "revision",
+            "check",
+            &r,
+            "--generation",
+            &gr,
+            "--approve-plan",
+            &plan,
+        ],
+    );
+    run(&env, &["pack", "qualify", &r, "--generation", &gr]);
+    run(&env, &["revision", "promote", &r, "--generation", &gr]);
+    run(&env, &["revision", "list"]);
+    let baseline = id(&run(&env, &["baseline", "create", "B0", &p1_digest]));
+    run(&env, &["baseline", "list"]);
+    run(&env, &["baseline", "show", &baseline]);
+    run(&env, &["baseline", "alias", "set", "stable", &baseline]);
+    run(&env, &["baseline", "alias", "remove", "stable"]);
+
+    // Inbox items come from attention the pack and tasks created.
+    let items = run(&env, &["inbox", "list", "--all"]);
+    if let Some(key) = items
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|i| i["source_key"].as_str())
+        .map(str::to_owned)
+    {
+        run(&env, &["inbox", "show", &key]);
+        run(&env, &["inbox", "read", &key]);
+        run(&env, &["inbox", "ack", &key]);
+        run(&env, &["inbox", "unack", &key]);
+        run(&env, &["inbox", "snooze", &key, "--until", "1h"]);
+        run(&env, &["inbox", "unsnooze", &key]);
+    } else {
+        panic!("expected inbox items: {items}");
+    }
+
+    // Providers, harnesses, extension catalogs, daemon status.
+    env.ok(&[
+        "provider",
+        "add",
+        "sh",
+        "--kind",
+        "local-process",
+        "--executable",
+        "sh",
+    ]);
+    env.ok(&["provider", "disable", "sh"]);
+    env.ok(&["provider", "enable", "sh"]);
+    env.ok(&["provider", "show", "sh"]);
+    run(&env, &["harness", "list"]);
+    run(&env, &["harness", "show", "capture"]);
+    env.ok(&["extension", "catalog", "refresh"]);
+    env.ok(&["daemon", "status"]);
+    env.ok(&["extension", "catalog", "remove", "test", "--yes"]);
+}
