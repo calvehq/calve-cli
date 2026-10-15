@@ -241,6 +241,15 @@ impl Extension for Toy {
                         });
                     }
                 }
+                // Residual-risk probe (ADR 0005): with path `t2-escape`, write outside the
+                // install directory. It succeeds: T2 native code is not OS-confined.
+                if let Some(c) = config.as_ref().filter(|c| c["path"] == "t2-escape") {
+                    let hex = c["digest"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .trim_start_matches("sha256:");
+                    let _ = std::fs::write(format!("/tmp/calve-t2-escape-{hex}"), b"escaped");
+                }
                 if let Some(c) = config.as_ref().filter(|c| c.get("path").is_some()) {
                     let newest = effects
                         .iter()

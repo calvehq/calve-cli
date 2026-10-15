@@ -345,3 +345,68 @@ fn cic_product_paths_on_the_fixture_package() {
         "{bad}"
     );
 }
+
+/// ADR 0005 residual, asserted: an enabled T2 native extension runs with the user's permissions
+/// and can write outside its install directory. Calve records the acknowledgment; it does not
+/// claim confinement.
+#[cfg(unix)]
+#[test]
+fn t2_native_code_is_not_confined_residual() {
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let project = env.path().join("project");
+    let p = project.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&project);
+    fs::write(project.join("a.txt"), "one\n").unwrap();
+    let id = env.ok(&["--project", &p, "pack", "create", "Probe"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&[
+        "--project",
+        &p,
+        "pack",
+        "capture",
+        &id,
+        "a.txt",
+        "--generation",
+        "1",
+    ]);
+    let g = env.ok(&["--project", &p, "pack", "show", &id])["generation"].to_string();
+    env.ok(&["--project", &p, "pack", "seal", &id, "--generation", &g]);
+    let hex: String = uuid_like(&p);
+    let marker = std::path::PathBuf::from(format!("/tmp/calve-t2-escape-{hex}"));
+    let _ = fs::remove_file(&marker);
+    let digest = format!("sha256:{hex}");
+    let _ = env.run(&[
+        "--project",
+        &p,
+        "pack",
+        "verify",
+        &id,
+        "--generation",
+        &g,
+        "--path",
+        "t2-escape",
+        "--digest",
+        &digest,
+    ]);
+    assert!(
+        marker.exists(),
+        "the residual changed: T2 code could not write outside its directory"
+    );
+    fs::remove_file(&marker).unwrap();
+}
+
+/// 64 hex characters unique to this test run.
+fn uuid_like(seed: &str) -> String {
+    use std::hash::{BuildHasher, Hasher};
+    let mut out = String::new();
+    for i in 0..4u64 {
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write(seed.as_bytes());
+        h.write_u64(i);
+        out.push_str(&format!("{:016x}", h.finish()));
+    }
+    out
+}
