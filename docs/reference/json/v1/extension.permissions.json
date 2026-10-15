@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension permissions --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "effect_kinds": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "required_actions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "resource_kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "required_actions",
+            "resource_kind"
+          ]
+        }
+      },
+      "granted_host_capabilities": {
+        "type": "array",
+        "items": {}
+      },
+      "id": {
+        "type": "string"
+      },
+      "requested_host_capabilities": {
+        "type": "null"
+      },
+      "resource_kinds": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "description",
+            "kind"
+          ]
+        }
+      }
+    },
+    "required": [
+      "effect_kinds",
+      "granted_host_capabilities",
+      "id",
+      "requested_host_capabilities",
+      "resource_kinds"
+    ]
+  }
+}

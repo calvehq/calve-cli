@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve resource history --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "history": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "change": {
+              "type": "string"
+            },
+            "digest": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "from": {
+              "type": "null"
+            },
+            "generation": {
+              "type": "integer"
+            },
+            "pack": {
+              "type": "string"
+            },
+            "size": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "state": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "change",
+            "digest",
+            "from",
+            "generation",
+            "pack",
+            "size",
+            "state",
+            "title",
+            "to"
+          ]
+        }
+      },
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "history",
+      "path"
+    ]
+  }
+}

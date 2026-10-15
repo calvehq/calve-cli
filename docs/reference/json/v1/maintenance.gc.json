@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve maintenance gc --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "dry_run": {
+        "type": "boolean"
+      },
+      "grace_secs": {
+        "type": "integer"
+      },
+      "plan": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "dry_run",
+      "grace_secs",
+      "plan"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve project identity --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "created_at": {
+        "type": "integer"
+      },
+      "created_by": {
+        "type": "string"
+      },
+      "format_version": {
+        "type": "integer"
+      },
+      "namespace_id": {
+        "type": "string"
+      },
+      "project_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "created_at",
+      "created_by",
+      "format_version",
+      "namespace_id",
+      "project_id"
+    ]
+  }
+}

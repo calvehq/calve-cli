@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve workspace show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "default_project_id": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "projects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "namespace_id": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "project_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "namespace_id",
+            "path",
+            "pinned",
+            "project_id"
+          ]
+        }
+      },
+      "selected": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "default_project_id",
+      "id",
+      "name",
+      "projects",
+      "selected"
+    ]
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve execution show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "actor": {
+        "type": "string"
+      },
+      "allowed_effects": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "allowed_resources": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "locator_prefix": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "locator_prefix"
+          ]
+        }
+      },
+      "attempt": {
+        "type": "integer"
+      },
+      "context": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "created_at": {
+        "type": "string"
+      },
+      "effects": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "extensions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "manifest_digest": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "manifest_digest",
+            "version"
+          ]
+        }
+      },
+      "failure": {
+        "type": "string"
+      },
+      "finished_at": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "harness": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "idempotency_key": {
+        "type": "string"
+      },
+      "lease": {
+        "type": "object",
+        "properties": {
+          "execution": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "heartbeat_interval_ms": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "execution",
+          "expires_at",
+          "generation",
+          "heartbeat_interval_ms",
+          "id",
+          "provider"
+        ]
+      },
+      "max_attempts": {
+        "type": "integer"
+      },
+      "namespace": {
+        "type": "string"
+      },
+      "observations": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "pack": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "timeout_ms": {
+        "type": "integer"
+      },
+      "updated_at": {
+        "type": "string"
+      },
+      "work_unit": {
+        "type": "string"
+      },
+      "worker": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ]
+      }
+    },
+    "required": [
+      "actor",
+      "attempt",
+      "created_at",
+      "finished_at",
+      "generation",
+      "harness",
+      "id",
+      "idempotency_key",
+      "lease",
+      "max_attempts",
+      "namespace",
+      "pack",
+      "provider",
+      "request_id",
+      "state",
+      "timeout_ms",
+      "updated_at",
+      "work_unit",
+      "worker"
+    ]
+  }
+}

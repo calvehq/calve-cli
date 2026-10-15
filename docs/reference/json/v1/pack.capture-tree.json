@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve pack capture-tree --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "captured": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "change": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "previous_digest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "change",
+            "path"
+          ]
+        }
+      },
+      "directory": {
+        "type": "string"
+      },
+      "execution": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "refused": {
+        "type": "array",
+        "items": {}
+      },
+      "relations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "payload"
+          ]
+        }
+      },
+      "unchanged": {
+        "type": "array",
+        "items": {}
+      },
+      "work_unit": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "captured",
+      "directory",
+      "execution",
+      "generation",
+      "refused",
+      "relations",
+      "unchanged",
+      "work_unit"
+    ]
+  }
+}

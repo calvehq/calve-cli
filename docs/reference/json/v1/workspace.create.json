@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve workspace create --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "default_project_id": {
+        "type": "null"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "selected": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "default_project_id",
+      "id",
+      "name",
+      "selected"
+    ]
+  }
+}

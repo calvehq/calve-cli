@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve execution retry --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "context": {
+        "type": "string"
+      },
+      "effects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "digest",
+            "path"
+          ]
+        }
+      },
+      "execution": {
+        "type": "string"
+      },
+      "exit_code": {
+        "type": "integer"
+      },
+      "harness": {
+        "type": "string"
+      },
+      "log_lines": {
+        "type": "integer"
+      },
+      "output_truncated": {
+        "type": "boolean"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "reason": {
+        "type": "null"
+      },
+      "retry_of": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "work_unit": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "context",
+      "effects",
+      "execution",
+      "exit_code",
+      "harness",
+      "log_lines",
+      "output_truncated",
+      "provider",
+      "reason",
+      "retry_of",
+      "state",
+      "work_unit"
+    ]
+  }
+}

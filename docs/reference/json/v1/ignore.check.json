@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve ignore check --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "ignored": {
+        "type": "boolean"
+      },
+      "path": {
+        "type": "string"
+      },
+      "rule": {
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ignored",
+      "path",
+      "rule",
+      "source"
+    ]
+  }
+}

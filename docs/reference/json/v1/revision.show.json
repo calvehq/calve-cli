@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve revision show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "candidate_effects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest"
+              ]
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content",
+                "digest",
+                "size"
+              ]
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "actor": {
+                  "type": "string"
+                },
+                "caller": {
+                  "type": "string"
+                },
+                "execution": {
+                  "type": "string"
+                },
+                "extension": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "manifest_digest": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "manifest_digest",
+                    "version"
+                  ]
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "harness": {
+                  "type": "string"
+                },
+                "pack": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "request_id": {
+                  "type": "string"
+                },
+                "runtime_instance": {
+                  "type": "string"
+                },
+                "worker": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor",
+                "caller",
+                "execution",
+                "extension",
+                "generation",
+                "harness",
+                "pack",
+                "provider",
+                "request_id",
+                "runtime_instance",
+                "worker"
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "extension": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "locator": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "extension",
+                "kind",
+                "locator"
+              ]
+            },
+            "work_unit": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "outcome",
+            "payload",
+            "provenance",
+            "target",
+            "work_unit"
+          ]
+        }
+      },
+      "created_at": {
+        "type": "string"
+      },
+      "created_by": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "namespace": {
+        "type": "string"
+      },
+      "required_policies": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "revision": {
+        "type": "object",
+        "properties": {
+          "relation": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "relation",
+          "targets"
+        ]
+      },
+      "state": {
+        "type": "string"
+      },
+      "updated_at": {
+        "type": "string"
+      },
+      "work_units": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "state"
+          ]
+        }
+      }
+    },
+    "required": [
+      "created_at",
+      "created_by",
+      "generation",
+      "id",
+      "namespace",
+      "revision",
+      "state",
+      "updated_at"
+    ]
+  }
+}

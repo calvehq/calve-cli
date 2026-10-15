@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve config set --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "scope": {
+        "type": "string"
+      },
+      "value": {
+        "type": [
+          "integer",
+          "string"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "scope",
+      "value"
+    ]
+  }
+}

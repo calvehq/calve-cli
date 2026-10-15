@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension disable --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "first_seq": {
+        "type": "integer"
+      },
+      "last_seq": {
+        "type": "integer"
+      },
+      "receipt": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "required": [
+      "first_seq",
+      "last_seq",
+      "receipt",
+      "request_id",
+      "result"
+    ]
+  }
+}

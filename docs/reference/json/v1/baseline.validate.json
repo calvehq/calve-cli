@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve baseline validate --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "digest": {
+        "type": "string"
+      },
+      "graph_digest": {
+        "type": "string"
+      },
+      "problems": {
+        "type": "array",
+        "items": {}
+      },
+      "valid": {
+        "type": "boolean"
+      },
+      "validators": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "digest",
+      "graph_digest",
+      "problems",
+      "valid",
+      "validators"
+    ]
+  }
+}

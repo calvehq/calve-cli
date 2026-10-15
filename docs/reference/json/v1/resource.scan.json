@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve resource scan --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "resources": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "captureable": {
+              "type": "boolean"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "captureable",
+            "digest",
+            "kind",
+            "path",
+            "size"
+          ]
+        }
+      },
+      "uncaptured": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "digest",
+            "path",
+            "state"
+          ]
+        }
+      }
+    },
+    "required": [
+      "resources",
+      "uncaptured"
+    ]
+  }
+}

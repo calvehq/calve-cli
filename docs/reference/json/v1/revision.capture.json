@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve revision capture --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "digest": {
+        "type": "string"
+      },
+      "execution": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "unchanged": {
+        "type": "boolean"
+      },
+      "work_unit": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "digest",
+      "execution",
+      "generation",
+      "path",
+      "unchanged",
+      "work_unit"
+    ]
+  }
+}

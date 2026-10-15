@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view execution --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "effects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "digest",
+            "kind",
+            "target"
+          ]
+        }
+      },
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string"
+                },
+                "effects": {
+                  "type": "integer"
+                },
+                "execution": {
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "lease": {
+                  "type": "string"
+                },
+                "observation": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "object",
+                  "properties": {
+                    "digest": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "digest"
+                  ]
+                },
+                "resumed": {
+                  "type": "boolean"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "extension": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "locator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "extension",
+                    "kind",
+                    "locator"
+                  ]
+                },
+                "work_unit": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "execution"
+              ]
+            },
+            "hash": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "previous_hash": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "runtime_instance": {
+              "type": "string"
+            },
+            "sequence": {
+              "type": "integer"
+            },
+            "subjects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor",
+            "body",
+            "hash",
+            "id",
+            "kind",
+            "namespace",
+            "previous_hash",
+            "request_id",
+            "runtime_instance",
+            "sequence",
+            "subjects",
+            "timestamp"
+          ]
+        }
+      },
+      "execution": {
+        "type": "object",
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "allowed_effects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowed_resources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          },
+          "attempt": {
+            "type": "integer"
+          },
+          "context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "manifest_digest": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "manifest_digest",
+                "version"
+              ]
+            }
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "lease": {
+            "type": "object",
+            "properties": {
+              "execution": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "heartbeat_interval_ms": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "execution",
+              "expires_at",
+              "generation",
+              "heartbeat_interval_ms",
+              "id",
+              "provider"
+            ]
+          },
+          "max_attempts": {
+            "type": "integer"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pack": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "work_unit": {
+            "type": "string"
+          },
+          "worker": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ]
+          }
+        },
+        "required": [
+          "actor",
+          "allowed_effects",
+          "allowed_resources",
+          "attempt",
+          "context",
+          "created_at",
+          "effects",
+          "extensions",
+          "finished_at",
+          "generation",
+          "harness",
+          "id",
+          "idempotency_key",
+          "lease",
+          "max_attempts",
+          "namespace",
+          "observations",
+          "pack",
+          "provider",
+          "request_id",
+          "state",
+          "timeout_ms",
+          "updated_at",
+          "work_unit",
+          "worker"
+        ]
+      },
+      "observations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "lines": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stream": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "stream",
+                      "text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "lines"
+              ]
+            },
+            "resources": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "at",
+            "digest",
+            "kind",
+            "payload",
+            "resources"
+          ]
+        }
+      },
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "stream": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "stream",
+            "text"
+          ]
+        }
+      }
+    },
+    "required": [
+      "effects",
+      "events",
+      "execution",
+      "observations",
+      "output"
+    ]
+  }
+}

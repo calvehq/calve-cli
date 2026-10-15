@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension catalog list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer"
+        },
+        "last_success": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "root_digest": {
+          "type": "string"
+        },
+        "root_version": {
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "last_success",
+        "name",
+        "root_digest",
+        "root_version",
+        "state",
+        "url"
+      ]
+    }
+  }
+}

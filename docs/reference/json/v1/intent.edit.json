@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve intent edit --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "actors": {
+        "type": "array",
+        "items": {}
+      },
+      "closed": {
+        "type": "boolean"
+      },
+      "created_at": {
+        "type": "integer"
+      },
+      "description": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "graph_node": {
+        "type": "null"
+      },
+      "id": {
+        "type": "string"
+      },
+      "linked_packs": {
+        "type": "array",
+        "items": {}
+      },
+      "state": {
+        "type": "string"
+      },
+      "tags": {
+        "type": "array",
+        "items": {}
+      },
+      "title": {
+        "type": "string"
+      },
+      "updated_at": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "actors",
+      "closed",
+      "created_at",
+      "description",
+      "graph_node",
+      "id",
+      "linked_packs",
+      "state",
+      "tags",
+      "title",
+      "updated_at"
+    ]
+  }
+}

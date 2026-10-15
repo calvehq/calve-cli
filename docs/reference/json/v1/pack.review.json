@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve pack review --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "candidate_digest": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "evidence_digest": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "pack_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "candidate_digest",
+        "created_at",
+        "decision",
+        "evidence_digest",
+        "generation",
+        "id",
+        "pack_id",
+        "reason",
+        "reviewer",
+        "stale"
+      ]
+    }
+  }
+}

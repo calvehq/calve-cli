@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view change-graph --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "edges": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ]
+        }
+      },
+      "intent": {
+        "type": "null"
+      },
+      "nodes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "assignee": {
+              "type": "null"
+            },
+            "id": {
+              "type": "string"
+            },
+            "intent": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "assignee",
+            "id",
+            "intent",
+            "kind",
+            "label",
+            "state"
+          ]
+        }
+      }
+    },
+    "required": [
+      "edges",
+      "intent",
+      "nodes"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve intent link-pack --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "created_at": {
+        "type": "string"
+      },
+      "created_by": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "intent": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "namespace": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "updated_at": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "created_at",
+      "created_by",
+      "generation",
+      "id",
+      "intent",
+      "namespace",
+      "state",
+      "updated_at"
+    ]
+  }
+}

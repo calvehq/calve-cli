@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension enable --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "artifact_digest": {
+        "type": "string"
+      },
+      "catalog": {
+        "type": "string"
+      },
+      "granted": {
+        "type": "array",
+        "items": {}
+      },
+      "id": {
+        "type": "string"
+      },
+      "manifest_digest": {
+        "type": "string"
+      },
+      "native_acknowledged": {
+        "type": "boolean"
+      },
+      "publisher": {
+        "type": "string"
+      },
+      "trust_tier": {
+        "type": "string"
+      },
+      "ungranted_requests": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "artifact_digest",
+      "catalog",
+      "granted",
+      "id",
+      "manifest_digest",
+      "native_acknowledged",
+      "publisher",
+      "trust_tier",
+      "ungranted_requests",
+      "version"
+    ]
+  }
+}

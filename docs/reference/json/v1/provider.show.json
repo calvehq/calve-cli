@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve provider show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "harnesses": {
+        "type": "array",
+        "items": {}
+      },
+      "id": {
+        "type": "string"
+      },
+      "profile": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "executable": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "executable",
+          "kind"
+        ]
+      },
+      "source": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "harnesses",
+      "id",
+      "profile",
+      "source"
+    ]
+  }
+}

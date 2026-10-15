@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve pack check --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "candidate": {
+        "type": "string"
+      },
+      "drift": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "languages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "check": {
+                    "type": "string"
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tool_available": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "check",
+                  "evidence",
+                  "exit_code",
+                  "tool_available"
+                ]
+              }
+            },
+            "extension": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "verification": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "findings": {
+                  "type": "null"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "verifier": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest",
+                "findings",
+                "status",
+                "verifier"
+              ]
+            }
+          },
+          "required": [
+            "checks",
+            "extension",
+            "language",
+            "verification"
+          ]
+        }
+      },
+      "pack": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "candidate",
+      "drift",
+      "generation",
+      "languages",
+      "pack"
+    ]
+  }
+}

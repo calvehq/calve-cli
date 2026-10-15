@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve receipt show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "canonical": {
+        "type": "string"
+      },
+      "digest": {
+        "type": "string"
+      },
+      "envelope": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "caller": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
+              "completed_at": {
+                "type": "string"
+              },
+              "envelope_digest": {
+                "type": "string"
+              },
+              "first_seq": {
+                "type": "integer"
+              },
+              "last_seq": {
+                "type": "integer"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "result": {
+                "type": "object",
+                "properties": {
+                  "generation": {
+                    "type": "integer"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "generation",
+                  "id",
+                  "state"
+                ]
+              },
+              "runtime_instance": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "caller",
+              "command",
+              "completed_at",
+              "envelope_digest",
+              "first_seq",
+              "last_seq",
+              "request_id",
+              "result",
+              "runtime_instance"
+            ]
+          },
+          "created_seq": {
+            "type": "integer"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "protocol_version": {
+            "type": "string"
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "public_key": {
+                  "type": "string"
+                },
+                "signature": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "public_key",
+                "signature"
+              ]
+            }
+          }
+        },
+        "required": [
+          "body",
+          "created_seq",
+          "creator",
+          "id",
+          "kind",
+          "namespace",
+          "protocol_version",
+          "signatures"
+        ]
+      }
+    },
+    "required": [
+      "canonical",
+      "digest",
+      "envelope"
+    ]
+  }
+}

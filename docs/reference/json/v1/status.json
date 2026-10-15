@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve status --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "active_baseline": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "active_executions": {
+        "type": "array",
+        "items": {}
+      },
+      "attention_items": {
+        "type": "integer"
+      },
+      "blocked_tasks": {
+        "type": "integer"
+      },
+      "extension_problems": {
+        "type": "array",
+        "items": {}
+      },
+      "packs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "candidate_digest": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "changed": {
+              "type": "integer"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "generation": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "intent": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "promoted_digest": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "revision": {
+              "type": "boolean"
+            },
+            "state": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "candidate_digest",
+            "changed",
+            "created_at",
+            "generation",
+            "id",
+            "intent",
+            "promoted_digest",
+            "revision",
+            "state",
+            "title",
+            "updated_at"
+          ]
+        }
+      },
+      "project": {
+        "type": "object",
+        "properties": {
+          "created_at": {
+            "type": "integer"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "format_version": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "created_by",
+          "format_version",
+          "name",
+          "namespace_id",
+          "project_id"
+        ]
+      },
+      "tasks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "assignee": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "blocked_by": {
+              "type": "array",
+              "items": {}
+            },
+            "blocked_reason": {
+              "type": "null"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "depends_on": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "execution_states": {
+              "type": "array",
+              "items": {}
+            },
+            "id": {
+              "type": "string"
+            },
+            "inconsistencies": {
+              "type": "array",
+              "items": {}
+            },
+            "intent_id": {
+              "type": "string"
+            },
+            "linked_executions": {
+              "type": "array",
+              "items": {}
+            },
+            "linked_packs": {
+              "type": "array",
+              "items": {}
+            },
+            "linked_work_units": {
+              "type": "array",
+              "items": {}
+            },
+            "pack_states": {
+              "type": "array",
+              "items": {}
+            },
+            "priority": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "updated_at": {
+              "type": "integer"
+            },
+            "work_unit_states": {
+              "type": "array",
+              "items": {}
+            }
+          },
+          "required": [
+            "assignee",
+            "blocked_by",
+            "blocked_reason",
+            "created_at",
+            "depends_on",
+            "description",
+            "execution_states",
+            "id",
+            "inconsistencies",
+            "intent_id",
+            "linked_executions",
+            "linked_packs",
+            "linked_work_units",
+            "pack_states",
+            "priority",
+            "state",
+            "title",
+            "updated_at",
+            "work_unit_states"
+          ]
+        }
+      },
+      "uncaptured_changes": {
+        "type": [
+          "integer",
+          "object"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "required": [
+      "active_baseline",
+      "active_executions",
+      "attention_items",
+      "blocked_tasks",
+      "extension_problems",
+      "packs",
+      "project",
+      "tasks",
+      "uncaptured_changes"
+    ]
+  }
+}

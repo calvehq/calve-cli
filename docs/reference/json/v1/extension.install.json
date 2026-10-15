@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension install --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "catalog": {
+        "type": "string"
+      },
+      "digests": {
+        "type": "object",
+        "properties": {
+          "native": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "native"
+        ]
+      },
+      "entrypoint": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "installed_at": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "native_acknowledged": {
+        "type": "boolean"
+      },
+      "publisher": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "catalog",
+      "digests",
+      "entrypoint",
+      "id",
+      "installed_at",
+      "kind",
+      "native_acknowledged",
+      "publisher",
+      "version"
+    ]
+  }
+}

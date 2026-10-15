@@ -1,0 +1,767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view pack --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "actions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "destructive": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "args",
+            "destructive",
+            "id",
+            "key",
+            "label"
+          ]
+        }
+      },
+      "candidate": {
+        "type": "string"
+      },
+      "created_at": {
+        "type": "string"
+      },
+      "created_by": {
+        "type": "string"
+      },
+      "dependencies": {
+        "type": "array",
+        "items": {}
+      },
+      "evaluations": {
+        "type": "array",
+        "items": {}
+      },
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "candidate": {
+                  "type": "string"
+                },
+                "decision": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string"
+                },
+                "effects": {
+                  "type": "integer"
+                },
+                "execution": {
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "lease": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": [
+                    "object",
+                    "string"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "digest": {
+                      "type": "string"
+                    }
+                  },
+                  "required": []
+                },
+                "pack": {
+                  "type": "string"
+                },
+                "promoted_pack": {
+                  "type": "string"
+                },
+                "promotion_record": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "extension": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "locator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "extension",
+                    "kind",
+                    "locator"
+                  ]
+                },
+                "work_unit": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            },
+            "kind": {
+              "type": "string"
+            },
+            "sequence": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "actor",
+            "at",
+            "body",
+            "kind",
+            "sequence"
+          ]
+        }
+      },
+      "evidence": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "next": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ]
+      },
+      "explain": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "rules": {
+                "type": "array",
+                "items": {}
+              }
+            },
+            "required": [
+              "digest",
+              "outcome",
+              "rules"
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "condition": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "condition",
+                "detail"
+              ]
+            }
+          },
+          "next": {
+            "type": "null"
+          },
+          "satisfied": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "condition": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "condition",
+                "detail"
+              ]
+            }
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "missing",
+          "next",
+          "satisfied",
+          "source",
+          "state"
+        ]
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "added": {
+              "type": "integer"
+            },
+            "binary": {
+              "type": "boolean"
+            },
+            "digest": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "removed": {
+              "type": "integer"
+            },
+            "size": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "added",
+            "binary",
+            "digest",
+            "kind",
+            "path",
+            "removed",
+            "size",
+            "status"
+          ]
+        }
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "intent": {
+        "type": "null"
+      },
+      "promoted": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "quarantine": {
+        "type": "null"
+      },
+      "raw": {
+        "type": "object",
+        "properties": {
+          "candidate_effects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "digest": {
+                      "type": "string"
+                    }
+                  },
+                  "required": []
+                },
+                "payload": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "digest": {
+                      "type": "string"
+                    },
+                    "previous_digest": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": []
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "actor": {
+                      "type": "string"
+                    },
+                    "caller": {
+                      "type": "string"
+                    },
+                    "execution": {
+                      "type": "string"
+                    },
+                    "extension": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "manifest_digest": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "manifest_digest",
+                        "version"
+                      ]
+                    },
+                    "generation": {
+                      "type": "integer"
+                    },
+                    "harness": {
+                      "type": "string"
+                    },
+                    "pack": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "runtime_instance": {
+                      "type": "string"
+                    },
+                    "worker": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "actor",
+                    "caller",
+                    "execution",
+                    "extension",
+                    "generation",
+                    "harness",
+                    "pack",
+                    "provider",
+                    "request_id",
+                    "runtime_instance",
+                    "worker"
+                  ]
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "extension": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "locator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "extension",
+                    "kind",
+                    "locator"
+                  ]
+                },
+                "work_unit": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "outcome",
+                "payload",
+                "provenance",
+                "target",
+                "work_unit"
+              ]
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "promotion": {
+            "type": "object",
+            "properties": {
+              "promoted_pack": {
+                "type": "string"
+              },
+              "promotion_record": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "promoted_pack",
+              "promotion_record"
+            ]
+          },
+          "qualification": {
+            "type": "object",
+            "properties": {
+              "candidate": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate",
+              "decision",
+              "generation"
+            ]
+          },
+          "required_policies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sealed": {
+            "type": "object",
+            "properties": {
+              "candidate": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "sealed_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "candidate",
+              "generation",
+              "sealed_at"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "work_units": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "state"
+              ]
+            }
+          }
+        },
+        "required": [
+          "candidate_effects",
+          "created_at",
+          "created_by",
+          "generation",
+          "id",
+          "namespace",
+          "sealed",
+          "state",
+          "updated_at",
+          "work_units"
+        ]
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "caller": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "lease": {
+                  "type": "object",
+                  "properties": {
+                    "execution": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "integer"
+                    },
+                    "heartbeat_interval_ms": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "execution",
+                    "expires_at",
+                    "generation",
+                    "heartbeat_interval_ms",
+                    "id",
+                    "provider"
+                  ]
+                },
+                "state": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            }
+          },
+          "required": [
+            "at",
+            "caller",
+            "command",
+            "digest",
+            "result"
+          ]
+        }
+      },
+      "requires_review": {
+        "type": "boolean"
+      },
+      "reviews": {
+        "type": "array",
+        "items": {}
+      },
+      "revision": {
+        "type": "null"
+      },
+      "state": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "integer"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "removed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "files",
+          "removed"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "unavailable_actions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "reason"
+          ]
+        }
+      },
+      "updated_at": {
+        "type": "string"
+      },
+      "verifications": {
+        "type": "array",
+        "items": {}
+      }
+    },
+    "required": [
+      "actions",
+      "candidate",
+      "created_at",
+      "created_by",
+      "dependencies",
+      "evaluations",
+      "events",
+      "evidence",
+      "explain",
+      "files",
+      "generation",
+      "id",
+      "intent",
+      "promoted",
+      "quarantine",
+      "raw",
+      "receipts",
+      "requires_review",
+      "reviews",
+      "revision",
+      "state",
+      "summary",
+      "title",
+      "unavailable_actions",
+      "updated_at",
+      "verifications"
+    ]
+  }
+}

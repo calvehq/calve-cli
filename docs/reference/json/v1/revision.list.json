@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve revision list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "promoted_digest": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "relation": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "id",
+        "promoted_digest",
+        "relation",
+        "state",
+        "targets",
+        "title"
+      ]
+    }
+  }
+}

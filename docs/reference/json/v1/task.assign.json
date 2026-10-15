@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve task assign --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "assignee": {
+        "type": "string"
+      },
+      "blocked_by": {
+        "type": "array",
+        "items": {}
+      },
+      "blocked_reason": {
+        "type": "null"
+      },
+      "created_at": {
+        "type": "integer"
+      },
+      "depends_on": {
+        "type": "array",
+        "items": {}
+      },
+      "description": {
+        "type": "null"
+      },
+      "execution_states": {
+        "type": "array",
+        "items": {}
+      },
+      "id": {
+        "type": "string"
+      },
+      "inconsistencies": {
+        "type": "array",
+        "items": {}
+      },
+      "intent_id": {
+        "type": "string"
+      },
+      "linked_executions": {
+        "type": "array",
+        "items": {}
+      },
+      "linked_packs": {
+        "type": "array",
+        "items": {}
+      },
+      "linked_work_units": {
+        "type": "array",
+        "items": {}
+      },
+      "pack_states": {
+        "type": "array",
+        "items": {}
+      },
+      "priority": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "updated_at": {
+        "type": "integer"
+      },
+      "work_unit_states": {
+        "type": "array",
+        "items": {}
+      }
+    },
+    "required": [
+      "assignee",
+      "blocked_by",
+      "blocked_reason",
+      "created_at",
+      "depends_on",
+      "description",
+      "execution_states",
+      "id",
+      "inconsistencies",
+      "intent_id",
+      "linked_executions",
+      "linked_packs",
+      "linked_work_units",
+      "pack_states",
+      "priority",
+      "state",
+      "title",
+      "updated_at",
+      "work_unit_states"
+    ]
+  }
+}

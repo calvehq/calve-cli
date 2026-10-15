@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve activity --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "actor": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "body": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "already_present": {
+              "type": "boolean"
+            },
+            "artifact": {
+              "type": "string"
+            },
+            "attempt": {
+              "type": "integer"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "execution": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "extension": {
+              "type": "string"
+            },
+            "generation": {
+              "type": "integer"
+            },
+            "granted_host_capabilities": {
+              "type": "array",
+              "items": {}
+            },
+            "kind": {
+              "type": "string"
+            },
+            "lease": {
+              "type": "string"
+            },
+            "manifest": {
+              "type": "string"
+            },
+            "observation": {
+              "type": "string"
+            },
+            "pack": {
+              "type": "string"
+            },
+            "principal": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "public_key": {
+                  "type": "string"
+                },
+                "registered_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "namespace",
+                "public_key",
+                "registered_at"
+              ]
+            },
+            "provider": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "resumed": {
+              "type": "boolean"
+            },
+            "unsupported_host_capabilities": {
+              "type": "array",
+              "items": {}
+            },
+            "version": {
+              "type": "string"
+            },
+            "work_unit": {
+              "type": "string"
+            }
+          },
+          "required": []
+        },
+        "detail": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "namespace_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_event_id": {
+          "type": "string"
+        },
+        "source_sequence": {
+          "type": "integer"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "subjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "actor",
+        "body",
+        "detail",
+        "id",
+        "kind",
+        "namespace_id",
+        "project_id",
+        "source",
+        "source_event_id",
+        "source_sequence",
+        "subject",
+        "subjects",
+        "summary",
+        "timestamp"
+      ]
+    }
+  }
+}

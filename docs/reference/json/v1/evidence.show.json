@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve evidence show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "canonical": {
+        "type": "string"
+      },
+      "digest": {
+        "type": "string"
+      },
+      "envelope": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "candidate": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "pack": {
+                "type": "string"
+              },
+              "payload": {
+                "type": "string"
+              },
+              "producer": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "candidate",
+              "created_at",
+              "generation",
+              "id",
+              "kind",
+              "media_type",
+              "pack",
+              "payload",
+              "producer"
+            ]
+          },
+          "created_seq": {
+            "type": "integer"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "protocol_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "created_seq",
+          "creator",
+          "id",
+          "kind",
+          "namespace",
+          "protocol_version"
+        ]
+      }
+    },
+    "required": [
+      "canonical",
+      "digest",
+      "envelope"
+    ]
+  }
+}

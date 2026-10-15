@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve recover inspect --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "disposable_leftovers": {
+        "type": "integer"
+      },
+      "open_error": {
+        "type": "null"
+      },
+      "opens": {
+        "type": "boolean"
+      },
+      "root": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "disposable_leftovers",
+      "open_error",
+      "opens",
+      "root"
+    ]
+  }
+}

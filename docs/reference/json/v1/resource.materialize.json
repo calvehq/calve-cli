@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve resource materialize --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "applied": {
+        "type": "boolean"
+      },
+      "blocked": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "execution": {
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "plan": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "current": {
+              "type": "string"
+            },
+            "desired": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "current",
+            "desired",
+            "path"
+          ]
+        }
+      },
+      "provenance_pack": {
+        "type": "string"
+      },
+      "written": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "applied",
+      "plan"
+    ]
+  }
+}

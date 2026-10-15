@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension info --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "extension": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "granted_host_capabilities": {
+            "type": "array",
+            "items": {}
+          },
+          "id": {
+            "type": "string"
+          },
+          "manifest": {
+            "type": "string"
+          },
+          "unsupported_host_capabilities": {
+            "type": "array",
+            "items": {}
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "granted_host_capabilities",
+          "id",
+          "manifest",
+          "unsupported_host_capabilities",
+          "version"
+        ]
+      },
+      "manifest": {
+        "type": "object",
+        "properties": {
+          "artifact_digest": {
+            "type": "string"
+          },
+          "contract": {
+            "type": "object",
+            "properties": {
+              "max": {
+                "type": "string"
+              },
+              "min": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "max",
+              "min"
+            ]
+          },
+          "effect_kinds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "required_actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "resource_kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "required_actions",
+                "resource_kind"
+              ]
+            }
+          },
+          "entrypoint": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          },
+          "evaluator_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "execution_modes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "object",
+            "properties": {
+              "max": {
+                "type": "string"
+              },
+              "min": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "max",
+              "min"
+            ]
+          },
+          "resource_kinds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "kind"
+              ]
+            }
+          },
+          "verifier_kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_digest",
+          "contract",
+          "effect_kinds",
+          "entrypoint",
+          "evaluator_kinds",
+          "execution_modes",
+          "id",
+          "protocol",
+          "resource_kinds",
+          "verifier_kinds",
+          "version"
+        ]
+      }
+    },
+    "required": [
+      "extension",
+      "manifest"
+    ]
+  }
+}

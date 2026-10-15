@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve inbox show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "acknowledged_at": {
+        "type": "null"
+      },
+      "first_seen": {
+        "type": "integer"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "last_seen": {
+        "type": "integer"
+      },
+      "needs_attention": {
+        "type": "boolean"
+      },
+      "read_at": {
+        "type": "null"
+      },
+      "resolved_at": {
+        "type": "null"
+      },
+      "severity": {
+        "type": "string"
+      },
+      "snoozed_until": {
+        "type": "null"
+      },
+      "source_key": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "acknowledged_at",
+      "first_seen",
+      "kind",
+      "last_seen",
+      "needs_attention",
+      "read_at",
+      "resolved_at",
+      "severity",
+      "snoozed_until",
+      "source_key",
+      "subject",
+      "summary"
+    ]
+  }
+}

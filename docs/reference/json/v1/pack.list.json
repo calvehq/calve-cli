@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve pack list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "candidate_digest": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "changed": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "null"
+        },
+        "promoted_digest": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "revision": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_digest",
+        "changed",
+        "created_at",
+        "generation",
+        "id",
+        "intent",
+        "promoted_digest",
+        "revision",
+        "state",
+        "title",
+        "updated_at"
+      ]
+    }
+  }
+}

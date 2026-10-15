@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve daemon start --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "pid": {
+        "type": "integer"
+      },
+      "running": {
+        "type": "boolean"
+      },
+      "version": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "type": "integer"
+          },
+          "calve": {
+            "type": "string"
+          },
+          "openaevc_crate_version": {
+            "type": "string"
+          },
+          "openaevc_revision": {
+            "type": "string"
+          },
+          "openaevc_tag": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_version",
+          "calve",
+          "openaevc_crate_version",
+          "openaevc_revision",
+          "openaevc_tag",
+          "protocol"
+        ]
+      }
+    },
+    "required": [
+      "pid",
+      "running",
+      "version"
+    ]
+  }
+}

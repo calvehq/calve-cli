@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve doctor --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "compatibility": {
+        "type": "object",
+        "properties": {
+          "extension_contract": {
+            "type": "string"
+          },
+          "openaevc_crate_version": {
+            "type": "string"
+          },
+          "openaevc_revision": {
+            "type": "string"
+          },
+          "openaevc_tag": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "runtime_name": {
+            "type": "string"
+          },
+          "runtime_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "extension_contract",
+          "openaevc_crate_version",
+          "openaevc_revision",
+          "openaevc_tag",
+          "protocol",
+          "runtime_name",
+          "runtime_version"
+        ]
+      },
+      "extensions": {
+        "type": "array",
+        "items": {}
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "findings": {
+        "type": "array",
+        "items": {}
+      },
+      "healthy": {
+        "type": "boolean"
+      },
+      "metrics": {
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "max_ms": {
+                  "type": "integer"
+                },
+                "p50_ms": {
+                  "type": "integer"
+                },
+                "p95_ms": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "action",
+                "count",
+                "errors",
+                "max_ms",
+                "p50_ms",
+                "p95_ms"
+              ]
+            }
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "actions",
+          "window"
+        ]
+      },
+      "namespace": {
+        "type": "object",
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "root_principals": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "created_at",
+          "created_by",
+          "id",
+          "root_principals"
+        ]
+      },
+      "product_db": {
+        "type": "object",
+        "properties": {
+          "foreign_key_violations": {
+            "type": "integer"
+          },
+          "integrity": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "foreign_key_violations",
+          "integrity",
+          "ok"
+        ]
+      },
+      "project_id": {
+        "type": "string"
+      },
+      "root": {
+        "type": "string"
+      },
+      "written": {
+        "type": "string"
+      }
+    },
+    "required": []
+  }
+}

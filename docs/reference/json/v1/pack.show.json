@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve pack show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "candidate_effects": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "object",
+              "properties": {
+                "deleted": {
+                  "type": "boolean"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "removed": {
+                  "type": "boolean"
+                },
+                "value": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ]
+                }
+              },
+              "required": []
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "previous_digest": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "actor": {
+                  "type": "string"
+                },
+                "caller": {
+                  "type": "string"
+                },
+                "execution": {
+                  "type": "string"
+                },
+                "extension": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "manifest_digest": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "manifest_digest",
+                    "version"
+                  ]
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "harness": {
+                  "type": "string"
+                },
+                "inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "pack": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "request_id": {
+                  "type": "string"
+                },
+                "runtime_instance": {
+                  "type": "string"
+                },
+                "worker": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actor",
+                "caller",
+                "execution",
+                "extension",
+                "generation",
+                "harness",
+                "pack",
+                "provider",
+                "request_id",
+                "runtime_instance",
+                "worker"
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "extension": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "locator": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "extension",
+                "kind",
+                "locator"
+              ]
+            },
+            "work_unit": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "outcome",
+            "payload",
+            "provenance",
+            "target",
+            "work_unit"
+          ]
+        }
+      },
+      "created_at": {
+        "type": "string"
+      },
+      "created_by": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "intent": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "namespace": {
+        "type": "string"
+      },
+      "promotion": {
+        "type": "object",
+        "properties": {
+          "promoted_pack": {
+            "type": "string"
+          },
+          "promotion_record": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "promoted_pack",
+          "promotion_record"
+        ]
+      },
+      "qualification": {
+        "type": "object",
+        "properties": {
+          "candidate": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate",
+          "decision",
+          "generation"
+        ]
+      },
+      "quarantine": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string"
+          },
+          "previous_state": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "by",
+          "previous_state",
+          "reason"
+        ]
+      },
+      "required_policies": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "revision": {
+        "type": "object",
+        "properties": {
+          "relation": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "relation",
+          "targets"
+        ]
+      },
+      "sealed": {
+        "type": "object",
+        "properties": {
+          "candidate": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "sealed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate",
+          "generation",
+          "sealed_at"
+        ]
+      },
+      "state": {
+        "type": "string"
+      },
+      "updated_at": {
+        "type": "string"
+      },
+      "work_units": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "state"
+          ]
+        }
+      }
+    },
+    "required": [
+      "created_at",
+      "created_by",
+      "generation",
+      "id",
+      "namespace",
+      "state",
+      "updated_at"
+    ]
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve config list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "color": {
+        "type": "string"
+      },
+      "console": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "harnesses": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "integrations": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "page_size": {
+        "type": "integer"
+      },
+      "provider_sources": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "providers": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "secrets": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "sources": {
+        "type": "array",
+        "items": {}
+      },
+      "warnings": {
+        "type": "array",
+        "items": {}
+      }
+    },
+    "required": [
+      "color",
+      "console",
+      "harnesses",
+      "integrations",
+      "page_size",
+      "provider_sources",
+      "providers",
+      "secrets",
+      "sources",
+      "warnings"
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve revision diff --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "captured_digest": {
+              "type": "string"
+            },
+            "current_digest": {
+              "type": "string"
+            },
+            "pack": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "captured_digest",
+            "current_digest",
+            "pack",
+            "path",
+            "state"
+          ]
+        }
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "pack": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "files",
+      "generation",
+      "pack"
+    ]
+  }
+}

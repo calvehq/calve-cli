@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve project adopt-copy --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "adopted_from": {
+        "type": "string"
+      },
+      "namespace_id": {
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "project_id": {
+        "type": "string"
+      },
+      "registration": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "namespace_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "namespace_id",
+          "path",
+          "pinned",
+          "project_id"
+        ]
+      },
+      "transferred_objects": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "adopted_from",
+      "namespace_id",
+      "note",
+      "project_id",
+      "registration",
+      "transferred_objects"
+    ]
+  }
+}

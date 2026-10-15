@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve init --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "integrity": {
+        "type": "object",
+        "properties": {
+          "foreign_key_violations": {
+            "type": "integer"
+          },
+          "integrity": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "foreign_key_violations",
+          "integrity",
+          "ok"
+        ]
+      },
+      "namespace_id": {
+        "type": "string"
+      },
+      "next_actions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "project_id": {
+        "type": "string"
+      },
+      "recommended_extensions": {
+        "type": "array",
+        "items": {}
+      },
+      "registered": {
+        "type": "boolean"
+      },
+      "root": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "integrity",
+      "namespace_id",
+      "next_actions",
+      "project_id",
+      "recommended_extensions",
+      "registered",
+      "root"
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve receipt list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "caller": {
+                  "type": "string"
+                },
+                "command": {
+                  "type": "string"
+                },
+                "completed_at": {
+                  "type": "string"
+                },
+                "envelope_digest": {
+                  "type": "string"
+                },
+                "first_seq": {
+                  "type": "integer"
+                },
+                "last_seq": {
+                  "type": "integer"
+                },
+                "request_id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "object",
+                  "properties": {
+                    "digest": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": []
+                },
+                "runtime_instance": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "caller",
+                "command",
+                "completed_at",
+                "envelope_digest",
+                "first_seq",
+                "last_seq",
+                "request_id",
+                "result",
+                "runtime_instance"
+              ]
+            }
+          },
+          "required": [
+            "digest",
+            "receipt"
+          ]
+        }
+      },
+      "next": {
+        "type": [
+          "null",
+          "string"
+        ]
+      }
+    },
+    "required": [
+      "items",
+      "next"
+    ]
+  }
+}

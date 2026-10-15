@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve receipt verify --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "digest": {
+        "type": "string"
+      },
+      "digest_verified": {
+        "type": "boolean"
+      },
+      "problems": {
+        "type": "array",
+        "items": {}
+      },
+      "valid": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "digest",
+      "digest_verified",
+      "problems",
+      "valid"
+    ]
+  }
+}

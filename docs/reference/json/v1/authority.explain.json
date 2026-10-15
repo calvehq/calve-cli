@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve authority explain --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      },
+      "decision": {
+        "type": "object",
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "missing_action": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "code",
+              "message",
+              "missing_action",
+              "retryable"
+            ]
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "root": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allowed"
+        ]
+      },
+      "grant_limits": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "actions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "constraints": {
+              "type": "null"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "grant_id": {
+              "type": "string"
+            },
+            "not_before": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "null"
+            },
+            "revoked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "actions",
+            "constraints",
+            "expires_at",
+            "grant_id",
+            "not_before",
+            "resources",
+            "revoked"
+          ]
+        }
+      },
+      "matching_grants": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "object",
+              "properties": {
+                "body": {
+                  "type": "object",
+                  "properties": {
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "delegation_depth": {
+                      "type": "integer"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "not_before": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "actions",
+                    "delegation_depth",
+                    "expires_at",
+                    "id",
+                    "issuer",
+                    "namespace",
+                    "nonce",
+                    "not_before",
+                    "subject"
+                  ]
+                },
+                "signature": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "signature"
+              ]
+            },
+            "revoked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "digest",
+            "grant",
+            "revoked"
+          ]
+        }
+      },
+      "namespace_id": {
+        "type": "string"
+      },
+      "principal": {
+        "type": "string"
+      },
+      "project_id": {
+        "type": "string"
+      },
+      "related_grants": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "grant": {
+              "type": "object",
+              "properties": {
+                "body": {
+                  "type": "object",
+                  "properties": {
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "delegation_depth": {
+                      "type": "integer"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "not_before": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "actions",
+                    "delegation_depth",
+                    "expires_at",
+                    "id",
+                    "issuer",
+                    "namespace",
+                    "nonce",
+                    "not_before",
+                    "subject"
+                  ]
+                },
+                "signature": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "signature"
+              ]
+            },
+            "revoked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "digest",
+            "grant",
+            "revoked"
+          ]
+        }
+      },
+      "required_capability": {
+        "type": "string"
+      },
+      "resource": {
+        "type": "null"
+      },
+      "revocations": {
+        "type": "array",
+        "items": {}
+      }
+    },
+    "required": [
+      "action",
+      "decision",
+      "grant_limits",
+      "matching_grants",
+      "namespace_id",
+      "principal",
+      "project_id",
+      "related_grants",
+      "required_capability",
+      "resource",
+      "revocations"
+    ]
+  }
+}

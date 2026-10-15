@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve execution logs --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "digest": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string"
+                },
+                "effects": {
+                  "type": "integer"
+                },
+                "execution": {
+                  "type": "string"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "lease": {
+                  "type": "string"
+                },
+                "observation": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "digest": {
+                      "type": "string"
+                    }
+                  },
+                  "required": []
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "resumed": {
+                  "type": "boolean"
+                },
+                "retry_of": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "extension": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "locator": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "extension",
+                    "kind",
+                    "locator"
+                  ]
+                },
+                "work_unit": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "execution"
+              ]
+            },
+            "hash": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "previous_hash": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "runtime_instance": {
+              "type": "string"
+            },
+            "sequence": {
+              "type": "integer"
+            },
+            "subjects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor",
+            "body",
+            "hash",
+            "id",
+            "kind",
+            "namespace",
+            "previous_hash",
+            "request_id",
+            "runtime_instance",
+            "sequence",
+            "subjects",
+            "timestamp"
+          ]
+        }
+      },
+      "execution": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "events",
+      "execution",
+      "state"
+    ]
+  }
+}

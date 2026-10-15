@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve resource diff --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "captured_digest": {
+        "type": "string"
+      },
+      "changes": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "new_lines": {
+              "type": "integer"
+            },
+            "new_start": {
+              "type": "integer"
+            },
+            "old_lines": {
+              "type": "integer"
+            },
+            "old_start": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "lines",
+            "new_lines",
+            "new_start",
+            "old_lines",
+            "old_start"
+          ]
+        }
+      },
+      "current_digest": {
+        "type": "string"
+      },
+      "pack": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "captured_digest",
+      "changes",
+      "current_digest",
+      "pack",
+      "path",
+      "state"
+    ]
+  }
+}
