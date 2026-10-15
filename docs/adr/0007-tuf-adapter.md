@@ -25,3 +25,7 @@ FG2 (M0), G1-TUF report (`docs/audit/milestones/G1-TUF.md`): conformance 119/119
 
 ## Residuals
 aws-lc-rs/aws-lc-sys (C) in the trust path (vetted; reproducible build checked; no FIPS claim). Pre-1.0 dependency with frequent releases (exact pin). Conformance on Windows/macOS/aarch64 PENDING CI / BLOCKED.
+
+## M2 production implementation (2026-10-15)
+- Production adapter `catalog::tuf` (Mirror over ureq with caps/deadlines/no redirects, `TrustClient` exposing only Calve types; an xtask rule allows `sigstore_tuf` only in `catalog/{tuf,state}.rs`). Root and delegated-role policy (computed key ids, unique key material, ed25519/sha256 only) is enforced before acceptance, and re-checked in `resolve()`.
+- Production PASS (Linux): tuf-conformance 119/119 in runs 1–3 (`examples/tuf-conformance-client`, logs `evidence/m2/logs/tuf-conformance-prod-run{1,2,3}*`); catalog_delegation 13, catalog_mirror 8, catalog_policy 5, catalog_fg2a 5, catalog_fg15 9 — also PASS natively on Windows (gnu). The G1-TUF spike results remain historical evidence; G1 stays PENDING CI.

@@ -1,6 +1,6 @@
 # Catalog trust
 
-Status: M0 design proven (FG2a, FG2b, FG15); delegation conformance shown locally by the G1-TUF phase (tuf-conformance 119/119 ×3; release gate G1 PENDING CI). Decision records: ADR 0007, ADR 0008, ADR 0021.
+Status: production implementation (M2): `calve-app::catalog::{tuf, state, install}`; tuf-conformance 119/119 against the production client in three runs (2026-10-14/15); FG2a, FG15 and the delegation/mirror regressions pass as production tests on Linux and Windows (gnu). Release gate G1 PENDING CI. Decision records: ADR 0007, ADR 0008, ADR 0021.
 
 - The catalog is a TUF repository; Calve's verifier is `sigstore-tuf` 0.15.0 (exact pin) behind the `TrustClient` adapter, with Calve's own HTTP transport (ureq; no hyper/reqwest): per-fetch byte caps enforced while reading, connect and whole-request deadlines, no redirects, mirror-relative path validation.
 - Bootstrap pins the root by SHA-256 (`repo_id`), written to `REPO_ID`; every generation must match it.
@@ -10,3 +10,5 @@ Status: M0 design proven (FG2a, FG2b, FG15); delegation conformance shown locall
 - Policy (on top of TUF; ADR 0021): ed25519 keys whose ids are the sha256 of the canonical key and whose material is unique, no non-standard key fields, sha256 target hashes, consistent snapshots, target paths `<extension-id>/<version>/<file>` authorized by delegation paths and the catalog's `custom.calve.id_policy`; cross-catalog id pinning.
 - Delegation resolution: lazy pre-order search; `terminating` and path patterns (per-segment globs) prune it; out-of-path entries are untrusted without failing the role; roles absent from the snapshot are never fetched; the walk is bounded (`max_delegations`). A target is fetched once with its pinned length as the cap and verified by length and sha256; consistent-snapshot target path `dir/<sha256>.name`.
 - Superseded M0 issues (tough 0.24, FG2c): eager delegation loading, whole-load failure on one out-of-path target, wrong sub-directory URL, non-terminating error streams, "time stepped backward" refusals — none apply to the selected verifier (G1-TUF report).
+- Catalog conventions (M2): `index.json` (search), `revocations.json`, `id-policy.json` (top-level), `<id>/package.json` listing versions with `kind`, per-platform `native` file, `cic`, `metadata`; every file at `<id>/<version>/<file>`. Publisher identity = the percent-encoded delegation chain that signed `<id>/package.json`; pins keyed by it (`switch-publisher --yes` to change).
+- Commands: `calve extension catalog add|list|refresh|reset|remove`, `extension install|switch-publisher|uninstall`. First-party catalogs are produced by calve-extensions `cargo xtask publish` (staged, timestamp last, `--resume`).

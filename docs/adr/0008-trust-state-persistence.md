@@ -20,3 +20,6 @@ FG15 6/6 on tough (M0); G1-TUF rerun 8/8 on sigstore-tuf, Linux and Windows (add
 
 ## Residuals
 **User-approved limitation:** no tamper resistance against the same OS user. Rollback resistance is claimed against network/mirror attackers only.
+
+## M2 production implementation (2026-10-15)
+- Production `catalog::state`: generations `gen-N/` with verifier files under `gen-N/tuf/` (fix 79033ad: a role named `state` collided with Calve's `state.json`), `CURRENT`, floors, audited reset. FG15 suite as production tests: 9/9 Linux and Windows (gnu).

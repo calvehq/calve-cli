@@ -1,6 +1,6 @@
 # Threat model
 
-Status: M0 baseline (2026-10-14). Updated at every milestone; re-audited in M7 against the code.
+Status: M0 baseline (2026-10-14), M2 update (2026-10-15: production catalog, installer, CIC host, check plans). Updated at every milestone; re-audited in M7 against the code.
 
 This document states what Calve defends, what it deliberately does not, and where each claim is tested. A claim without a passing test or recorded result is not made; anything that cannot be run locally is marked **PENDING** with its release gate.
 
@@ -20,8 +20,9 @@ This document states what Calve defends, what it deliberately does not, and wher
 | **Same OS user** | every process of the user running Calve | — | none: same-user processes are **trusted** (user decision; like ssh-agent/gpg-agent) | asserted by tests (ADR 0016) |
 | Other local users | the user | other accounts | Unix: 0700/0600 permissions; Windows: owner-only DACLs, pipe DACL, impersonation SID check | M5 (Windows PENDING native) |
 | Network / catalog mirrors | the pinned root of trust | mirrors, CDNs, the network | TUF (sigstore-tuf 0.15.0) + Calve catalog policy, bounded transport, floors and a pinned repository identity | FG2a, FG15 reruns; G1-TUF conformance 119/119 ×3, malicious-mirror tests; G1 PENDING CI |
-| Extension planning code (T1) | the host | `cic.wasm` | wasm without imports, memory/fuel caps, supervised child with a hard wall-clock kill | FG3, FG4, FG13 |
-| Native extensions (T2) | — | — | **not confined** (OpenAEVC spawns them directly, F4); TUF-verified package, per-spawn re-hash, cleared env, grants for host-mediated calls, explicit user acknowledgment | ADR 0005 |
+| Extension planning code (T1) | the host | `cic.wasm` | wasm without imports, memory/fuel caps, supervised child (`calve __cic-sandbox`, Linux Landlock deny-all) with a hard wall-clock kill; every response validated (cardinality, order, paths, canonical JSON) | FG3, FG4, FG13; M2 `cic_host`, `cic_sessions`, `cic_fixture`, calve-extensions conformance |
+| Check plans (T1 output run as T3) | the user's approval | a package's `check_plan` | runs only after the user approves the exact plan digest per artifact; bare program on absolute `PATH` entries only; candidate copied without following symlinks; credential/loader environment names refused (defence in depth) | M2 `checks` unit tests, `domains` e2e |
+| Native extensions (T2) | — | — | **not confined** (OpenAEVC spawns them directly, F4); TUF-verified package, per-spawn re-hash, cleared env, grants for host-mediated calls, explicit user acknowledgment (`--acknowledge-native`, recorded per artifact) | ADR 0005; `t2_native_code_is_not_confined_residual` (M2) |
 | Workers and checks (T3) | the host | the worker | process group / Job Object; Linux Landlock via the helper | FG12 (Linux); M5 |
 
 ## 3. In scope (defended)
@@ -43,7 +44,9 @@ This document states what Calve defends, what it deliberately does not, and wher
 
 | Area | Not guaranteed | Where asserted |
 |---|---|---|
-| T2 native extensions | not OS-confined; self-applied Landlock in first-party binaries is author self-restriction | `fixture_t2_escape` (M2) |
+| T2 native extensions | not OS-confined; self-applied Landlock in first-party binaries is author self-restriction | `apps/calve/tests/extensions.rs::t2_native_code_is_not_confined_residual` (M2, Linux): the write outside the install dir succeeds |
+| Check plans | approval binds the exact plan, not what the program then does: an approved `sh -c …` runs with the user's permissions | M2 `checks` tests (refusal, digest binding) |
+| Package publishers | a catalog's delegated publisher may publish any id its delegation paths and `id-policy.json` allow; first-party catalog uses the top-level `targets` role (no delegation yet) | M2 `install` tests (publisher chain, id policy) |
 | Secret redaction | best effort per stream; misses cross-stream splits, transformations, base64 edge bytes, channels outside Calve's sinks | M3 residual tests |
 | Process containment | Unix descendants that `setsid`/`setpgid` escape; a SIGKILLed helper does not propagate until restart reaping; macOS has no parent-death signal; Windows out-of-job processes started by other services | FG12 (Linux), M5 |
 | Filesystem concurrency | no conflict-free concurrency; atomic exchange/replace prevents partial reads and preserves displaced content but does not prevent every lost update; weak filesystems refused by default | FG11 (Linux, Windows), M4 |
@@ -57,8 +60,8 @@ This document states what Calve defends, what it deliberately does not, and wher
 
 | Platform | Status |
 |---|---|
-| Linux (x86_64) | M0 gates run locally (WSL2 kernel 6.6, ext4/tmpfs/overlayfs) |
-| Windows (x86_64) | FG5, FG11 (A15) and FG3/FG4/FG13 run natively on a Windows 11 host from cross-compiled binaries; named pipes, Job Objects and ACLs PENDING (M5, G5) |
+| Linux (x86_64) | M0 gates and the M2 production suites run locally (WSL2 kernel 6.6, ext4/tmpfs/overlayfs) |
+| Windows (x86_64, gnu) | FG5, FG11 (A15), FG3/FG4/FG13 and the M2 calve-app suites (catalog, install, journal, CIC host/sessions, workspace_io, calve-win-sec) run natively on a Windows 11 host from cross-compiled binaries; MSVC not built; named pipes, Job Objects and ACLs PENDING (M5, G5) |
 | macOS | **BLOCKED**: no Mac available. Running macOS in Docker (Docker-OSX) on non-Apple hardware breaks Apple's licence, so it was declined. PENDING native CI (G5) |
 | aarch64 | BLOCKED: no runner (A12 float determinism unproven) |
 
@@ -67,3 +70,11 @@ This document states what Calve defends, what it deliberately does not, and wher
 1. **TUF delegation conformance (mandatory G1):** resolved locally by replacing tough with sigstore-tuf 0.15.0 behind `TrustClient` (G1-TUF phase, no fork). L2 still needs G1 on real runners.
 2. **`unsafe` in wasm guest ABI glue:** extension `cic` crates and testkit wasm fixtures need a scoped exemption from the "only calve-win-sec has `unsafe`" rule (calve-cli crates keep the rule).
 3. **aws-lc-sys (C) in the trust path** through sigstore-crypto (signature verification) and rustls: approved at M0 review (Decision 3); license/advisory checks and a reproducible double build passed in G1-TUF; native CI builds PENDING (G6). No FIPS claim.
+
+## 8. M2 security-review findings (fixed)
+
+- Locator differentials (`.CALVE`, trailing dot/space, `:` streams, device names incl. superscript COM/LPT, 8.3 aliases) — d6de1f3, bdfd496; the validator now lives in the contract crate and is shared with extensions (1e452de).
+- Verifier state colliding with a role named `state` — 79033ad. Publisher identity by bare role name, then by unescaped chain — ec59f58, dfe4e46.
+- Check plans from CIC modules executing candidate content / arbitrary paths, leaking credential env vars, following symlinks when copying — 66c3d8b; consent by digest-bound approval — abaeae0, 1e452de.
+- Relate output order depended on chunking (found by the Windows property run) — f7f6a37.
+- calve-extensions: native locator check replaced by the shared validator; verifier ignored a later rename away; diff decoded the wrong base64 alphabet — 5fe22e5.

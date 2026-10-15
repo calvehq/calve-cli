@@ -17,3 +17,6 @@ M5: reproducible double build, clean-install verification, attestation verificat
 
 ## Residuals
 None.
+
+## M2 production implementation (2026-10-15)
+- The catalog key/hash policy part of this ADR is implemented in M2 (`catalog::tuf` policy, `catalog_policy` tests). Release signing, provenance and the remaining release policy stay M5.
