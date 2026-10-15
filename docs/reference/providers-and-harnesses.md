@@ -33,7 +33,7 @@ command = ["-c", "cargo fmt"]
 timeout_ms = 600000
 ```
 
-`calve harness list|show|test` inspect them; `org.calve.software.capture` is built in. Run one with `calve execution start <pack> --harness fmt --generation <n> [--task <id>]`.
+`calve harness list|show|test` inspect them; the `capture` harness is built in (its protocol ids derive from the enabled file package). Run one with `calve execution start <pack> --harness fmt --generation <n> [--task <id>]`.
 
 ## What a run guarantees
 

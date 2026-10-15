@@ -20,7 +20,7 @@ Intent → Task → ChangePack → capture / agent run → seal → verify & rev
 ## Build
 
 ```sh
-cargo build --workspace --locked      # Rust 1.95+; builds calve, calved and the calve_ext_* extensions
+cargo build --workspace --locked      # Rust 1.95+; builds calve and calved
 ```
 
 Calve currently tracks the `main` branch of OpenAEVC over SSH until a release tag exists; see [compatibility](docs/compatibility/openaevc.md).
@@ -29,7 +29,8 @@ Calve currently tracks the `main` branch of OpenAEVC over SSH until a release ta
 
 ```sh
 calve init my-project && cd my-project
-calve extension enable                                   # bundled software extension
+calve extension catalog add first-party <url> --root root.json --root-digest <sha256>
+calve extension enable org.calve.software --acknowledge-native   # from the signed catalog
 calve intent create "Say hello"
 calve pack create "Add README" --intent <intent> --require-review
 echo hello > README.md

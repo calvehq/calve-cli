@@ -5,7 +5,7 @@ Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signe
 ## Crates
 
 ```text
-apps/calve ──────────┐                 (binaries: calve, calved, calve_ext_*)
+apps/calve ──────────┐                 (binaries: calve, calved)
                      ├──> calve-client ──> calve-ipc ──> calve-api
 calve-console ───────┘         │
                                └──────────> calve-app ──> calve-api, calve-domain

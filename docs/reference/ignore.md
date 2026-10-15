@@ -1,21 +1,9 @@
-# Resource ignore rules
+# Ignore rules
 
-Put `.calveignore` at the Project root to control first-party software resource discovery. Rules are evaluated in file order; the last matching rule wins. The file must be UTF-8, at most 64 KiB, and contain at most 512 rules. Calve does not read `.gitignore` or depend on Git.
+Which paths a scan skips is decided by the enabled file package (its `classify` operation), so the rule language and built-in defaults are the package's (the software extension documents its `.calveignore` grammar). Calve itself always excludes `.calve/` and never follows symlinks.
 
-```text
-# Comments begin with #
-*.log
-!keep.log
-build/
-/private.txt
-src/**/generated?.rs
-\#literal-name
-```
+The package declares its ignore-file names; Calve reads those files (at the root and in ancestor directories of each scanned entry) and passes their text to `classify`, one directory batch at a time, so ignored directories are never traversed or hashed.
 
-`*` matches any number of characters within one path segment, `?` matches one character within a segment, and `**` crosses directory separators. `**/` also matches zero directory levels. An unprefixed pattern can match at any directory level; `/` at the start anchors it to the Project root. A trailing `/` limits a rule to directories and everything below them. `!` at the start negates an earlier ignore rule. Use `\` to treat the following special character literally, including `#`, `!`, `*`, and `?`. Blank lines and lines starting with `#` are ignored. Paths are normalized to `/` separators for matching.
-
-Calve always excludes `.calve/`. The software integration also defaults to excluding `.git/`, `target/`, `node_modules/`, and `.venv/`; `.calveignore` rules can override these defaults. An ignored directory is not traversed during a scan, so a negation for a child also needs a rule that makes its parent directory visible. Explicit `pack capture <path>` is allowed for ignored files outside `.calve`.
-
-Use `calve ignore check <relative-path>` to see whether a path is ignored and which source, line, and pattern decided it. A trailing `/` checks a directory path even if it does not exist yet.
-
-`calve ignore list` shows every effective rule with its source: hard safety (`.calve/`), software defaults (`.git/`, `target/`, `node_modules/`, `.venv/`), language defaults for languages detected at the Project root (for example `__pycache__/` for Python or `.terraform/` for HCL), and `.calveignore` lines. `calve ignore add <pattern>` and `calve ignore remove <pattern>` edit `.calveignore`; the new content is validated before it replaces the file.
+- `calve ignore check <path>`: the package's decision and the rule it reports (a trailing `/` checks a directory).
+- `calve ignore list`: Calve's hard rule, then each line of the root ignore file; built-in defaults are applied by the package.
+- `calve ignore add <pattern>` / `remove <pattern>`: edit the root ignore file; the package validates the new rules before the file is replaced.

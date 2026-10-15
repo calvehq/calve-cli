@@ -14,8 +14,8 @@
 Recovery only ever acts on provably disposable or restorable state:
 
 - `.calve-init-*` staging from an interrupted `init`;
-- a staged `.calveignore` edit;
-- extension install staging in the shared cache;
+- a staged ignore-file edit;
+- interrupted package installs or retirements (journaled; staging is removed or the install completes);
 - an interrupted `project adopt-copy`: if the new state does not open, the copy's original `.calve` is restored; if it does, the leftover source state is removed.
 
 Staging younger than ten minutes is left alone so a running operation is never disturbed. Recovery never edits OpenAEVC data or the product database. Store verification and GC need exclusive access to the OpenAEVC data directory, so the daemon releases its cached runtime for them.

@@ -1,7 +1,7 @@
 # Getting started
 
 ```sh
-cargo build --workspace --locked          # builds calve, calved and the calve_ext_* extensions
+cargo build --workspace --locked          # builds calve and calved
 export PATH="$PWD/target/debug:$PATH"
 ```
 
@@ -10,7 +10,8 @@ Create a Project and enable the software extension:
 ```sh
 mkdir hello && cd hello
 calve init                     # prints recommended extensions and next actions
-calve extension enable         # bundled software extension
+calve extension catalog add first-party <url> --root root.json --root-digest <sha256>
+calve extension enable org.calve.software --acknowledge-native
 echo "hello" > README.md
 ```
 

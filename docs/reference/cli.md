@@ -183,16 +183,19 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 
 | Command | Description |
 |---|---|
-| `calve extension list [--installed]` | Extensions registered in this Project; `--installed` lists the package cache instead |
-| `calve extension catalogs` | List bundled and trusted catalogs |
-| `calve extension catalog-trust <name> <location> [--root-digest <root_digest>]` | Trust a signed catalog directory by pinning its keys |
-| `calve extension catalog-untrust <name>` | Stop trusting a catalog |
+| `calve extension list [--installed]` | Extensions registered in this Project; `--installed` lists installed packages instead |
+| `calve extension catalog add <name> <url> --root <root> --root-digest <root_digest>` | Trust a signed TUF catalog; its root is pinned by SHA-256 (obtained out of band) |
+| `calve extension catalog list` | Trusted catalogs with their state (fresh, stale, expired, recovery required) |
+| `calve extension catalog refresh [<name>]` | Refresh one catalog or all of them |
+| `calve extension catalog reset <name> --root <root> --root-digest <root_digest> [--yes] [--i-understand-rollback-risk]` | Audited privileged reset to a new pinned root (never automatic) |
+| `calve extension catalog remove <name>` | Stop trusting a catalog (installed packages stay) |
 | `calve extension search [<query>]` | Search trusted catalogs |
 | `calve extension info <id>` | Show an enabled extension and its manifest |
-| `calve extension install <id> [--version <version>]` | Install a package into the shared cache |
-| `calve extension update <id> [--grant <grants>]` | Install and switch to the newest version (widening needs --grant) |
-| `calve extension uninstall <id> [--version <version>]` | Remove a package that no Project uses |
-| `calve extension enable [<spec>] [--grant <grants>]` | Enable by extension id (cache or catalog) or local artifact path; defaults to the bundled software extension |
+| `calve extension install <id> [--version <version>] [--catalog <catalog>] [--acknowledge-native]` | Install a package from a trusted catalog (verified, immutable, content-addressed) |
+| `calve extension switch-publisher <id> --catalog <catalog> [--yes] [--acknowledge-native]` | Move an id's pinned publisher to another catalog (audited) |
+| `calve extension update <id> [--grant <grants>] [--acknowledge-native]` | Install and switch to the newest version (widening needs --grant) |
+| `calve extension uninstall <id> [--version <version>]` | Remove installed versions that no Project uses |
+| `calve extension enable <id> [--grant <grants>] [--acknowledge-native]` | Enable an installed (or installable) extension in this Project |
 | `calve extension disable <id>` | Unregister an extension from this Project |
 | `calve extension permissions <id>` | Requested versus granted host capabilities |
 | `calve extension grant <id> <capabilities>` | Grant requested host capabilities |
