@@ -27,6 +27,15 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
 - `ignore list` shows Calve's hard rule and the lines of the package's ignore file; the package's
   built-in defaults are reported by `ignore check`.
 - The built-in capture harness is listed as `capture`.
+- **Native builds are selected by exact target triple and digest.** A catalog's `package.json`
+  lists each native build under its Rust target triple with its sha256, stored at
+  `<id>/<version>/<triple>/<file>`; Calve installs only its own triple and requires the catalog,
+  index and handshake digests to agree. After registration, the manifest OpenAEVC recorded must
+  equal the installed one (`EXTENSION_IDENTITY_MISMATCH` otherwise).
+- **Check-plan approvals cover the executable.** The approval digest now also covers the package
+  and the executable `PATH` resolves the program to (path and sha256), checked again before each
+  run; replacing the executable or changing `PATH` asks for approval again (`CHECK_PLAN_CHANGED`
+  if it changes mid-run).
 
 ### Security
 

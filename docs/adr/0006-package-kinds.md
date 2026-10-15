@@ -25,3 +25,10 @@ Same-user modification of an installed directory is detected by OpenAEVC's per-s
 ## M2 production implementation (2026-10-15)
 - Schema 1 gained optional `files`, `resources` and `checks` declarations (validated by `Metadata::validate`: kinds prefixed by the extension id, required capabilities, plain ignore-file names). The host derives every domain kind from them (INV-022; `xtask` refuses first-party domain literals in calve-cli).
 - Installer: I0–I4 journal, read-only `<id>/<native-sha>/`, `recover()`, `retire()`, pins and id-policy keyed by the percent-encoded delegation chain, upgrade guard `EXTENSION_IN_USE`.
+
+## M2 closeout (2026-10-15): native artifact identity
+- Native builds are keyed by the **exact Rust target triple** (`calve_integration_contract::catalog::HOST_TARGET`, e.g. `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` are different builds) with the executable's sha256, at `<id>/<version>/<triple>/<file>`. Two platforms never share a target path, even with equal file names (previously one file name per version, so Linux and macOS builds would have collided).
+- The installer selects only its own triple and requires three digests to be equal: the TUF target hash, the `package.json` native digest and the handshake's `artifact_digest`. The record stores `target`; a record for another triple is refused at activation (`EXTENSION_INCOMPATIBLE`).
+- After `RegisterExtension`, the manifest OpenAEVC recorded (it re-runs the handshake) must equal the installed manifest field for field; otherwise the registration is removed and activation fails with `EXTENSION_IDENTITY_MISMATCH` (a failed removal is reported, never ignored).
+- The layout types (`PackageIndex`, `VersionEntry`, `NativeBuild`, `Kind`) live in the contract crate, shared by the installer and calve-extensions' `xtask publish`.
+- Tests: `install::native_builds_are_selected_by_exact_target_triple_and_digest`, `install::the_registered_manifest_must_be_exactly_the_installed_one`, contract `catalog` tests.

@@ -20,3 +20,6 @@ None.
 
 ## M2 production implementation (2026-10-15)
 - The catalog key/hash policy part of this ADR is implemented in M2 (`catalog::tuf` policy, `catalog_policy` tests). Release signing, provenance and the remaining release policy stay M5.
+
+## M2 closeout (2026-10-15): first-party publisher role — outstanding, release-blocking
+The first-party catalog produced by calve-extensions' `xtask publish` is signed by the top-level `targets` role; there is no delegated first-party publisher role and no `id-policy.json` for it. Plan §9.1 lets M2 use top-level targets only (the mandatory delegation gate is client conformance, 119/119), so this is **not** an M2 deliverable, but per the M2 review it is recorded as an **outstanding requirement that blocks release**: before v0.1.0 the first-party catalog must sign packages through a delegated publisher role (paths `<id>/**` per first-party id, a separate offline-capable key, `id-policy.json` naming its id prefix) and the installer must record that role as the publisher. Calve's installer already enforces delegated roles, id policy and publisher pins (`install::publisher_identity_id_policy_and_path_authorization`); the missing part is the publisher side (`xtask keygen`/`publish`).

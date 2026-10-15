@@ -39,7 +39,7 @@ The host has no domain knowledge (INV-022); everything comes from the package's 
 Every kind must be prefixed with the extension id. Harness and provider ids are derived (`<id>.capture`, `.materialize`, `.edit`, `.local`).
 
 ## Operation bodies (M2)
-- `detect {markers, extensions}` → `{languages}`; `check_plan {languages, markers}` → `{checks:[{language, name, argv, takes_files, env, sources}]}`. A plan runs only after the user approved its digest (`pack check --approve-plan`); `argv[0]` must be a bare program name.
+- `detect {markers, extensions}` → `{languages}`; `check_plan {languages, markers}` → `{checks:[{language, name, argv, takes_files, env, sources}]}`. A plan runs only after the user approved its digest (`pack check --approve-plan`), which also covers the package and the resolved executable; `argv[0]` must be a bare program name.
 - `classify {entries:[{path, kind, size?}], ignore_sources:{path: text}, markers?}` → `{decisions:[{path, ignored, rule?}]}` — one decision per entry, same order; `markers` are the names of the files at the Workspace root (≤ 1024), so an extension can apply defaults that depend on them.
 - `diff {path, before?, after?, context}` → `{kind: "hunks", hunks} | {kind: "binary"} | {kind: "too_large"}`; content is OpenAEVC base64 (URL-safe alphabet, no padding), ≤ 1 MiB per side.
 - Locators in every body follow ADR 0014; the validator is in the contract crate (`locator::validate`) and shared by the host and extensions.
