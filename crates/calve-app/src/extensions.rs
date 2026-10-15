@@ -343,9 +343,7 @@ impl Project {
 
     pub(crate) fn check_plan_approved(&self, r: &PackageRecord, plan: &str) -> Result<bool> {
         let marker = format!("{CHECK_PLAN_APPROVED}{plan}");
-        Ok(self
-            .grant_rows(&r.id, r.native_digest())?
-            .contains(&marker))
+        Ok(self.grant_rows(&r.id, r.native_digest())?.contains(&marker))
     }
 
     pub(crate) fn approve_check_plan(&self, r: &PackageRecord, plan: &str) -> Result<()> {
