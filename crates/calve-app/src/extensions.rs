@@ -508,20 +508,33 @@ impl Project {
             .await?;
         // A1b: what OpenAEVC registered (it re-runs the handshake) must be exactly the installed
         // manifest; a binary that answers differently now is unregistered, never activated.
-        let registered = self
+        let checked = match self
             .client
             .query(Query::GetObject {
                 digest: manifest_digest,
             })
-            .await?;
-        if let Err(why) = registration_matches(r, &registered["envelope"]["body"]) {
-            let _ = self
+            .await
+        {
+            Ok(registered) => registration_matches(r, &registered["envelope"]["body"]),
+            Err(e) => Err(format!("the registered manifest could not be read: {e}")),
+        };
+        if let Err(why) = checked {
+            // Fail closed: never leave an unverified registration active.
+            let rollback = self
                 .client
                 .command(openaevc::protocol::Command::UnregisterExtension {
                     extension: r.manifest.id.clone(),
                 })
                 .await;
-            return Err(invalid(format!("EXTENSION_IDENTITY_MISMATCH: {why}")));
+            return Err(invalid(match rollback {
+                Ok(_) => {
+                    format!("EXTENSION_IDENTITY_MISMATCH: {why}; the registration was removed")
+                }
+                Err(e) => format!(
+                    "EXTENSION_IDENTITY_MISMATCH: {why}; removing the registration FAILED ({e}) — run `calve extension disable {}` before using this Project",
+                    r.manifest.id
+                ),
+            }));
         }
         // A2: the desired state.
         self.record_grants(r, grants, true)?;

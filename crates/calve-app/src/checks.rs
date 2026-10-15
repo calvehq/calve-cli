@@ -58,7 +58,7 @@ fn overrides(r: &PackageRecord, config: &EffectiveConfig) -> Option<Vec<(String,
 
 /// A package's check plan comes from its sandboxed CIC module but runs with the user's
 /// permissions, so it runs only once the user approved that exact plan in this Project (see
-/// [`plan_digest`]). The program must also be a bare name found on an absolute PATH entry (a
+/// [`approval_digest`]). The program must also be a bare name found on an absolute PATH entry (a
 /// path could run candidate content). The argument and environment-name rules below are defence
 /// in depth, not the boundary: a denylist cannot confine an arbitrary program. Configured
 /// overrides are the user's own and are not restricted.
@@ -113,15 +113,44 @@ fn validate_plan(c: &PlannedCheck) -> Result<()> {
     Ok(())
 }
 
-/// SHA-256 of the canonical plan: what an approval covers.
-fn plan_digest(c: &PlannedCheck) -> Result<String> {
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The executable a plan's program resolves to on this machine now: its canonical path and
+/// sha256, or `None` when it is not installed.
+type Executable = Option<(PathBuf, String)>;
+
+fn executable_identity(program: &str) -> Result<Executable> {
     use sha2::{Digest as _, Sha256};
-    let canonical = calve_integration_contract::jcs::to_vec(&serde_json::to_value(c)?)
+    let Ok(path) = resolve_executable(program) else {
+        return Ok(None);
+    };
+    let mut h = Sha256::new();
+    std::io::copy(&mut fs::File::open(&path)?, &mut h)?;
+    Ok(Some((path, hex(&h.finalize()))))
+}
+
+/// SHA-256 of everything an approval covers: the exact plan (every field), the package that
+/// produced it (id, version, target, every file digest) and the executable it resolves to
+/// (canonical path and content digest). A changed plan, package, PATH resolution or executable
+/// is a different digest and needs a new approval.
+fn approval_digest(r: &PackageRecord, c: &PlannedCheck, exe: &Executable) -> Result<String> {
+    let package =
+        json!({"id": r.id, "version": r.version, "target": r.target, "digests": r.digests});
+    covered_digest(&package, c, exe)
+}
+
+fn covered_digest(package: &Value, c: &PlannedCheck, exe: &Executable) -> Result<String> {
+    use sha2::{Digest as _, Sha256};
+    let covered = json!({
+        "plan": c,
+        "package": package,
+        "executable": exe.as_ref().map(|(p, d)| json!({"path": p.to_string_lossy(), "sha256": d})),
+    });
+    let canonical = calve_integration_contract::jcs::to_vec(&covered)
         .map_err(|_| invalid("check plan is not canonical JSON"))?;
-    Ok(Sha256::digest(canonical)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
+    Ok(hex(&Sha256::digest(canonical)))
 }
 
 impl Project {
@@ -222,7 +251,7 @@ impl Project {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        let mut plans: Vec<(PackageRecord, String, PlannedCheck)> = Vec::new();
+        let mut plans: Vec<(PackageRecord, String, PlannedCheck, Executable)> = Vec::new();
         for (r, decl) in self.check_domains().await? {
             let mut s = crate::domains::open_session(&r)?;
             let wanted: Vec<String> = if languages.is_empty() {
@@ -257,12 +286,13 @@ impl Project {
                         c.language
                     )));
                 }
-                plans.push((r.clone(), decl.verifier.clone(), c));
+                let exe = executable_identity(&c.argv[0])?;
+                plans.push((r.clone(), decl.verifier.clone(), c, exe));
             }
         }
         if let Some(missing) = languages
             .iter()
-            .find(|l| !plans.iter().any(|(_, _, c)| &c.language == *l))
+            .find(|l| !plans.iter().any(|(_, _, c, _)| &c.language == *l))
         {
             return Err(invalid(format!(
                 "unknown language {missing}: no enabled checks package plans it"
@@ -273,11 +303,11 @@ impl Project {
         }
         // A package's own plan runs only when approved (configured overrides replace it).
         let mut unapproved = Vec::new();
-        for (r, _, c) in &plans {
+        for (r, _, c, exe) in &plans {
             if overrides(r, config).is_some() || !(only.is_empty() || only.contains(&c.name)) {
                 continue;
             }
-            let digest = plan_digest(c)?;
+            let digest = approval_digest(r, c, exe)?;
             if self.check_plan_approved(r, &digest)? {
                 continue;
             }
@@ -294,9 +324,14 @@ impl Project {
             } else {
                 String::new()
             };
+            let executable = match exe {
+                Some((path, sha)) => format!("{} (sha256:{sha})", path.display()),
+                None => "nothing (not installed; approving records that)".into(),
+            };
             unapproved.push(format!(
-                "{digest}  {}: runs {:?}{files}, passing environment variables {:?}; plan {}",
+                "{digest}  {}@{}: runs {:?} as {executable}{files}, passing environment variables {:?}; plan {}",
                 r.id,
+                r.version,
                 c.argv,
                 c.env,
                 String::from_utf8_lossy(
@@ -307,38 +342,40 @@ impl Project {
         }
         if !unapproved.is_empty() {
             return Err(invalid(format!(
-                "CHECK_PLAN_UNAPPROVED: these check plans run with your permissions. Review each, then approve it with --approve-plan <digest> (or configure [integrations.\"<id>\".checks]):\n  {}",
+                "CHECK_PLAN_UNAPPROVED: these check plans run with your user permissions and are not confined. Review each, then approve it with --approve-plan <digest> (or configure [integrations.\"<id>\".checks]):\n  {}",
                 unapproved.join("\n  ")
             )));
         }
         let mut report = Vec::new();
-        let mut by_language: BTreeMap<
-            (String, String),
-            (PackageRecord, String, Vec<PlannedCheck>),
-        > = BTreeMap::new();
-        for (r, verifier, c) in plans {
+        type Planned = (PackageRecord, String, Vec<(PlannedCheck, Executable)>);
+        let mut by_language: BTreeMap<(String, String), Planned> = BTreeMap::new();
+        for (r, verifier, c, exe) in plans {
             by_language
                 .entry((r.id.clone(), c.language.clone()))
                 .or_insert_with(|| (r, verifier, vec![]))
                 .2
-                .push(c);
+                .push((c, exe));
         }
         for ((_, language), (r, verifier, planned)) in by_language {
             let mut evidence = Vec::new();
             let mut results = Vec::new();
             let configured = overrides(&r, config);
-            let mut checks: Vec<(String, Vec<String>, PlannedCheck)> = match &configured {
-                Some(list) => list
-                    .iter()
-                    .map(|(n, a)| (n.clone(), a.clone(), planned[0].clone()))
-                    .collect(),
-                None => planned
-                    .iter()
-                    .map(|c| (c.name.clone(), c.argv.clone(), c.clone()))
-                    .collect(),
-            };
-            checks.retain(|(name, _, _)| only.is_empty() || only.contains(name));
-            for (name, mut argv, plan) in checks {
+            // The approved executable of a package plan; `None` for the user's own overrides.
+            let mut checks: Vec<(String, Vec<String>, PlannedCheck, Option<Executable>)> =
+                match &configured {
+                    Some(list) => list
+                        .iter()
+                        .map(|(n, a)| (n.clone(), a.clone(), planned[0].0.clone(), None))
+                        .collect(),
+                    None => planned
+                        .iter()
+                        .map(|(c, exe)| {
+                            (c.name.clone(), c.argv.clone(), c.clone(), Some(exe.clone()))
+                        })
+                        .collect(),
+                };
+            checks.retain(|(name, _, _, _)| only.is_empty() || only.contains(name));
+            for (name, mut argv, plan, approved) in checks {
                 let env: BTreeMap<String, String> = BASE_ENV
                     .iter()
                     .map(|s| s.to_string())
@@ -361,12 +398,28 @@ impl Project {
                 }
                 let mut result = json!({"language":language,"check":name,"argv":argv,
                     "candidate":candidate,"base":"working-copy","drift":drift});
-                match resolve_executable(&argv[0]) {
-                    Err(_) => {
+                let program = match approved {
+                    // Re-resolved and re-hashed right before the spawn: only the approved
+                    // executable runs. ponytail: a replacement between this hash and exec is
+                    // not caught (no exec-by-handle); M5 confinement bounds what it could do.
+                    Some(exe) => match (exe, executable_identity(&argv[0])?) {
+                        (None, None) => None,
+                        (Some(a), Some(now)) if a == now => Some(now.0),
+                        _ => {
+                            return Err(invalid(format!(
+                                "CHECK_PLAN_CHANGED: {:?} no longer resolves to the approved executable; run the checks again to review the new plan",
+                                argv[0]
+                            )));
+                        }
+                    },
+                    None => resolve_executable(&argv[0]).ok(),
+                };
+                match program {
+                    None => {
                         result["tool_available"] = json!(false);
                         result["exit_code"] = Value::Null;
                     }
-                    Ok(program) => {
+                    Some(program) => {
                         let mut resolved = argv.clone();
                         resolved[0] = program.display().to_string();
                         let root = scratch.0.clone();
@@ -449,12 +502,45 @@ mod tests {
     }
 
     #[test]
-    fn approval_covers_the_exact_plan() {
+    fn approval_covers_the_plan_the_package_and_the_executable() {
         let a = plan(&["cargo", "test"], &[]);
+        let pkg = json!({"id": "org.x.rust", "version": "1.0.0", "digests": {"native": "aa"}});
+        let exe: Executable = Some((PathBuf::from("/usr/bin/cargo"), "11".repeat(32)));
+        let base = covered_digest(&pkg, &a, &exe).unwrap();
+        assert_eq!(
+            base,
+            covered_digest(&pkg, &a.clone(), &exe.clone()).unwrap()
+        );
         let mut b = a.clone();
         b.env.push("CARGO_HOME".into());
-        assert_ne!(plan_digest(&a).unwrap(), plan_digest(&b).unwrap());
-        assert_eq!(plan_digest(&a).unwrap(), plan_digest(&a.clone()).unwrap());
+        let mut b2 = a.clone();
+        b2.takes_files = true;
+        let mut b3 = a.clone();
+        b3.sources.push("rs".into());
+        let mut other_pkg = pkg.clone();
+        other_pkg["digests"]["native"] = json!("bb");
+        let changed = [
+            covered_digest(&pkg, &b, &exe),
+            covered_digest(&pkg, &b2, &exe),
+            covered_digest(&pkg, &b3, &exe),
+            covered_digest(&other_pkg, &a, &exe),
+            // Same content, another PATH resolution.
+            covered_digest(
+                &pkg,
+                &a,
+                &Some((PathBuf::from("/tmp/cargo"), "11".repeat(32))),
+            ),
+            // Same path, replaced executable.
+            covered_digest(
+                &pkg,
+                &a,
+                &Some((PathBuf::from("/usr/bin/cargo"), "22".repeat(32))),
+            ),
+            covered_digest(&pkg, &a, &None),
+        ];
+        for (i, d) in changed.into_iter().enumerate() {
+            assert_ne!(d.unwrap(), base, "change {i} kept the approval");
+        }
     }
 
     #[test]

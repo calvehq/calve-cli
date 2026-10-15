@@ -269,3 +269,87 @@ fn declared_resources_follow_accepted_history() {
         "stale"
     );
 }
+
+/// A check-plan approval names the plan, the package and the executable PATH resolves to
+/// (path and content): replacing the executable or changing PATH needs a new approval.
+#[cfg(unix)]
+#[test]
+fn check_plan_approval_is_bound_to_the_resolved_executable() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&root);
+    fs::write(root.join("toy.toml"), "").unwrap();
+    let base = env.path().to_owned();
+    let tool = |dir: &str, body: &str| {
+        let d = base.join(dir);
+        fs::create_dir_all(&d).unwrap();
+        let f = d.join("toy-check");
+        fs::write(&f, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(&f, fs::Permissions::from_mode(0o755)).unwrap();
+        d
+    };
+    let system = std::env::var_os("PATH").unwrap_or_default();
+    let path_with = |d: &std::path::Path| {
+        let mut v = d.as_os_str().to_owned();
+        v.push(":");
+        v.push(&system);
+        ("PATH".to_owned(), v)
+    };
+    let a = tool("bin-a", "exit 0");
+    env.vars = vec![path_with(&a)];
+    let id = env.ok(&["--project", &p, "pack", "create", "Checked"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fs::write(root.join("x.toy"), "x").unwrap();
+    env.ok(&[
+        "--project",
+        &p,
+        "pack",
+        "capture",
+        &id,
+        "x.toy",
+        "--generation",
+        "1",
+    ]);
+    let g = env.ok(&["--project", &p, "pack", "show", &id])["generation"].to_string();
+    env.ok(&["--project", &p, "pack", "seal", &id, "--generation", &g]);
+    let check = ["--project", &p, "pack", "check", &id, "--generation", &g];
+    let digest_of = |refused: &str| {
+        assert!(refused.contains("CHECK_PLAN_UNAPPROVED"), "{refused}");
+        refused
+            .split_whitespace()
+            .find(|w| w.len() == 64 && w.bytes().all(|b| b.is_ascii_hexdigit()))
+            .expect("digest in the refusal")
+            .to_owned()
+    };
+    let refused = env.fails(&check);
+    assert!(refused.contains("bin-a/toy-check (sha256:"), "{refused}");
+    let first = digest_of(&refused);
+    let ran = env.ok(&[&check[..], &["--approve-plan", &first]].concat());
+    assert_eq!(
+        ran["languages"][0]["checks"][0]["tool_available"], true,
+        "{ran}"
+    );
+    assert_eq!(ran["languages"][0]["checks"][0]["exit_code"], 0, "{ran}");
+    // The approved plan keeps running unchanged.
+    env.ok(&check);
+
+    // The executable is replaced in place: the old approval no longer covers it.
+    tool("bin-a", "exit 7");
+    let second = digest_of(&env.fails(&check));
+    assert_ne!(second, first);
+    assert!(
+        env.fails(&[&check[..], &["--approve-plan", &first]].concat())
+            .contains("CHECK_PLAN_UNAPPROVED")
+    );
+
+    // PATH now resolves the name elsewhere (identical content): a new approval again.
+    let b = tool("bin-b", "exit 0");
+    env.vars = vec![path_with(&b)];
+    let third = digest_of(&env.fails(&check));
+    assert!(third != first && third != second);
+}

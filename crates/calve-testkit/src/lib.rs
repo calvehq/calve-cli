@@ -17,6 +17,8 @@ pub struct Env {
     pub calve: PathBuf,
     /// The signed fixture catalog trusted by [`Env::trust_fixture`].
     pub catalog: Option<tuf::Repo>,
+    /// Extra environment for every `calve` run (e.g. a test `PATH`).
+    pub vars: Vec<(String, std::ffi::OsString)>,
 }
 
 pub struct Run {
@@ -32,6 +34,7 @@ impl Env {
             temp: tempfile::tempdir().expect("temp dir"),
             calve: PathBuf::from(calve),
             catalog: None,
+            vars: vec![],
         }
     }
 
@@ -73,6 +76,7 @@ impl Env {
         let output = Command::new(&self.calve)
             .env("XDG_DATA_HOME", self.path().join("d"))
             .env("XDG_CONFIG_HOME", self.path().join("c"))
+            .envs(self.vars.iter().map(|(k, v)| (k, v)))
             .args(["--json", "--no-daemon-start"])
             .args(args)
             .output()
