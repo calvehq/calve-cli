@@ -34,7 +34,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve workspace add-project <workspace> <project>` | Add a registered Project to a Workspace |
 | `calve workspace remove-project <workspace> <project>` | Remove a Project from a Workspace |
 | `calve workspace set-default-project <workspace> <project>` | Choose the Project used outside Project directories |
-| `calve workspace delete <workspace>` | Delete an empty Workspace |
+| `calve workspace delete <workspace> [--force] [--yes]` | Delete a Workspace (`--force` also when it still lists Projects; their files and registrations stay) |
 
 ## `calve project`
 
@@ -43,7 +43,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve project list` | List registered Projects |
 | `calve project show <project>` | Show a Project registration |
 | `calve project register <path>` | Register an existing Project directory |
-| `calve project unregister <project>` | Forget a Project registration (keeps its files) |
+| `calve project unregister <project> [--yes]` | Forget a Project registration (keeps its files) |
 | `calve project relocate <project> <path>` | Point a registration at a moved Project |
 | `calve project adopt-copy <path> [--name <name>]` | Make a copied Project directory a new Project with its own identity and Namespace |
 | `calve project rename <project> <name>` | Change the Project display name |
@@ -103,7 +103,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve inbox read <source_key>` | Mark an item read |
 | `calve inbox ack <source_keys>` | Acknowledge items |
 | `calve inbox unack <source_keys>` | Remove acknowledgements |
-| `calve inbox clear-resolved` | Forget resolved items (audit history is untouched) |
+| `calve inbox clear-resolved [--yes]` | Forget resolved items (audit history is untouched) |
 | `calve inbox snooze <source_key> --until <until>` | Hide an item until a time |
 | `calve inbox unsnooze <source_key>` | Unsnooze an item |
 
@@ -121,7 +121,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve pack reopen <id> --generation <generation>` | Reopen a sealed pack as a new generation |
 | `calve pack quarantine <id> --reason <reason>` | Quarantine a pack with a reason |
 | `calve pack release-quarantine <id>` | Release a quarantined pack |
-| `calve pack abandon <id> --generation <generation>` | Abandon a pack |
+| `calve pack abandon <id> --generation <generation> [--yes]` | Abandon a pack |
 | `calve pack capture <id> <path> --generation <generation>` | Capture one file into the candidate |
 | `calve pack diff <id> [<path>]` | Diff captured files against the working copy |
 | `calve pack verify <id> --generation <generation> [--path <path>] [--digest <digest>]` | Run snapshot verification on the sealed candidate |
@@ -188,13 +188,13 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve extension catalog list` | Trusted catalogs with their state (fresh, stale, expired, recovery required) |
 | `calve extension catalog refresh [<name>]` | Refresh one catalog or all of them |
 | `calve extension catalog reset <name> --root <root> --root-digest <root_digest> [--yes] [--i-understand-rollback-risk]` | Audited privileged reset to a new pinned root (never automatic) |
-| `calve extension catalog remove <name>` | Stop trusting a catalog (installed packages stay) |
+| `calve extension catalog remove <name> [--yes]` | Stop trusting a catalog (installed packages stay) |
 | `calve extension search [<query>]` | Search trusted catalogs |
 | `calve extension info <id>` | Show an enabled extension and its manifest |
 | `calve extension install <id> [--version <version>] [--catalog <catalog>] [--acknowledge-native]` | Install a package from a trusted catalog (verified, immutable, content-addressed) |
 | `calve extension switch-publisher <id> --catalog <catalog> [--yes] [--acknowledge-native]` | Move an id's pinned publisher to another catalog (audited) |
 | `calve extension update <id> [--grant <grants>] [--acknowledge-native]` | Install and switch to the newest version (widening needs --grant) |
-| `calve extension uninstall <id> [--version <version>]` | Remove installed versions that no Project uses |
+| `calve extension uninstall <id> [--version <version>] [--yes]` | Remove installed versions that no Project uses |
 | `calve extension enable <id> [--grant <grants>] [--acknowledge-native]` | Enable an installed (or installable) extension in this Project |
 | `calve extension disable <id>` | Unregister an extension from this Project |
 | `calve extension permissions <id>` | Requested versus granted host capabilities |
@@ -263,10 +263,10 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve authority show <id>` | Show one grant |
 | `calve authority explain <action> [--principal <principal>] [--resource-kind <resource_kind>] [--resource-locator <resource_locator>] [--extension <extension>]` | Explain an authorization decision |
 | `calve authority grant <subject> --action <actions> --expires-at <expires_at> [--not-before <not_before>] [--resource-kind <resource_kind>] [--locator-prefix <locator_prefix>] [--delegation-depth <delegation_depth>] [--parent <parent>] [--preview] [--apply]` | Preview or issue a capability grant (--apply issues) |
-| `calve authority revoke <grant> [--reason <reason>]` | Revoke a capability grant |
+| `calve authority revoke <grant> [--reason <reason>] [--yes]` | Revoke a capability grant |
 | `calve authority identity-add <name> [--action <actions>] [--days <days>]` | Create a local identity: an OpenAEVC key principal with a scoped grant (default: read and record review/verification results) |
 | `calve authority identities` | List local identities |
-| `calve authority identity-remove <name>` | Revoke an identity's grants and forget its key |
+| `calve authority identity-remove <name> [--yes]` | Revoke an identity's grants and forget its key |
 
 ## `calve doctor`
 
@@ -279,7 +279,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | Command | Description |
 |---|---|
 | `calve maintenance check` | Check product database, store integrity and leftovers |
-| `calve maintenance gc [--dry-run] [--grace-secs <grace_secs>]` | Collect unreferenced OpenAEVC objects (never accepted history) |
+| `calve maintenance gc [--dry-run] [--yes] [--grace-secs <grace_secs>]` | Collect unreferenced OpenAEVC objects (never accepted history) |
 | `calve maintenance compact` | Checkpoint and vacuum the product database |
 | `calve maintenance rebuild-projections` | Rebuild derived projections such as the inbox |
 | `calve maintenance verify-store` | Verify the OpenAEVC store journal and objects |
@@ -314,7 +314,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve provider test <id>` | Check executable, secrets and references without running |
 | `calve provider enable <id>` | Enable a provider |
 | `calve provider disable <id>` | Disable a provider |
-| `calve provider remove <id>` | Remove a provider profile |
+| `calve provider remove <id> [--yes]` | Remove a provider profile |
 
 ## `calve harness`
 

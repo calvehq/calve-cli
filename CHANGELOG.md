@@ -32,6 +32,18 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
   `<id>/<version>/<triple>/<file>`; Calve installs only its own triple and requires the catalog,
   index and handshake digests to agree. After registration, the manifest OpenAEVC recorded must
   equal the installed one (`EXTENSION_IDENTITY_MISMATCH` otherwise).
+- **Stable error codes and exit statuses** (§41, ADR 0020): every error has a code from a fixed
+  table that sets the exit status (2 usage, 3 conflict, 4 not found, 5 permission or confirmation,
+  6 incompatible, 7 recovery, 8 unavailable, 9 rejected, 130 cancelled); OpenAEVC errors map onto
+  Calve codes and stay available in `detail.openaevc`. `PROJECT_BUSY` is now `PROJECT_LOCKED`.
+- **`--json` is a versioned envelope, only for commands that declare it**:
+  `{"api_version":"1","command","data"}` on stdout, errors as an envelope on stderr; per-command
+  schemas in `docs/reference/json/v1/`. Human output is tables and aligned records.
+- **Destructive commands need `--yes`** (asked interactively on a terminal); `workspace delete`
+  of a Workspace that still lists Projects also needs `--force`.
+- **Worker secrets are redacted** from every output, log, error and bundle (raw and encoded
+  forms, per stream); the worker context is recorded in OpenAEVC (names only), and OpenAEVC
+  idempotency keys derive from the Calve request id.
 - **Check-plan approvals cover the executable.** The approval digest now also covers the package
   and the executable `PATH` resolves the program to (path and sha256), checked again before each
   run; replacing the executable or changing `PATH` asks for approval again (`CHECK_PLAN_CHANGED`

@@ -1,17 +1,19 @@
 # Exit codes
 
-Status: **current** — `0` success, `1` any error (`calve: <CODE>: <message>` on stderr). **Target** (M3, ADR 0020; an approved contract correction recorded in the CHANGELOG):
+Status: **implemented (M3, ADR 0020).** The table is `calve_api::errors::CODES`; a test keeps this page in sync. Unknown codes exit 1.
 
-| Code | Meaning | Error codes |
+| Exit | Meaning | Error codes |
 |---|---|---|
 | 0 | success | — |
-| 1 | general failure | `PRODUCT_ERROR`, `IO_ERROR`, `INTERNAL` |
-| 2 | usage / invalid input | clap errors, `INVALID_CONFIGURATION` |
-| 3 | conflict or stale state; retry after refreshing | `STALE_VIEW`, `REVIEW_STALE`, `RESOURCE_DIVERGED`, `SUPERSEDE_CONFLICT`, `MATERIALIZE_CONFLICT`, `EXTENSION_IN_USE`, `PROJECT_LOCKED` |
-| 4 | not found | `PROJECT_NOT_FOUND`, `WORKSPACE_NOT_FOUND`, `EXTENSION_NOT_INSTALLED` |
-| 5 | permission / authority denied | `CAPABILITY_DENIED`, `EXTENSION_PERMISSION_REQUIRED`, `PUBLISHER_NOT_AUTHORIZED` |
-| 6 | incompatible | `OPENAEVC_INCOMPATIBLE`, `EXTENSION_INCOMPATIBLE`, `INCOMPATIBLE_CIC`, `DAEMON_INCOMPATIBLE`, `UNSUPPORTED_PLATFORM_FEATURE` |
-| 7 | recovery or migration required | `RECOVERY_REQUIRED`, `MIGRATION_REQUIRED`, `CORRUPT_PRODUCT_STATE` |
-| 8 | unavailable | `DAEMON_UNAVAILABLE`, `PROVIDER_UNAVAILABLE`, `HARNESS_UNAVAILABLE`, `SECRET_UNAVAILABLE`, `CATALOG_STALE` |
-| 9 | rejected by OpenAEVC or by policy | `OPENAEVC_OPERATION_REJECTED`, `EXTENSION_REVOKED` |
+| 1 | general failure | `PRODUCT_ERROR`, `IO_ERROR`, `INTERNAL`, `INVALID_OPERATION_KIND` |
+| 2 | usage or invalid input (clap errors also exit 2) | `INVALID_CONFIGURATION`, `INVALID_ARGUMENT` |
+| 3 | conflict or stale state; refresh and retry | `PROJECT_IDENTITY_CONFLICT`, `PROJECT_LOCKED`, `STALE_VIEW`, `REVIEW_STALE`, `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION`, `ALREADY_EXISTS`, `EXTENSION_IN_USE`, `CHECK_PLAN_CHANGED`, `CAPTURE_DIVERGED`, `UNSTABLE_FILE`, `SUPERSEDE_CONFLICT`, `MATERIALIZE_CONFLICT` |
+| 4 | not found | `PROJECT_NOT_FOUND`, `WORKSPACE_NOT_FOUND`, `EXTENSION_NOT_INSTALLED`, `NOT_FOUND` |
+| 5 | permission, authority or confirmation required | `CAPABILITY_DENIED`, `EXTENSION_PERMISSION_REQUIRED`, `CONFIRMATION_REQUIRED`, `PUBLISHER_NOT_AUTHORIZED`, `T2_ACKNOWLEDGMENT_REQUIRED`, `CHECK_PLAN_UNAPPROVED` |
+| 6 | incompatible | `OPENAEVC_INCOMPATIBLE`, `EXTENSION_INCOMPATIBLE`, `DAEMON_INCOMPATIBLE`, `UNSUPPORTED_PLATFORM_FEATURE`, `UNSUPPORTED_API_VERSION`, `UNSUPPORTED_PAYLOAD_VERSION`, `INCOMPATIBLE_CIC` |
+| 7 | recovery or migration required | `MIGRATION_REQUIRED`, `RECOVERY_REQUIRED`, `CORRUPT_PRODUCT_STATE`, `CONTENT_CORRUPT` |
+| 8 | unavailable | `PROVIDER_UNAVAILABLE`, `HARNESS_UNAVAILABLE`, `SECRET_UNAVAILABLE`, `DAEMON_UNAVAILABLE`, `CATALOG_STALE`, `CONTAINMENT_UNAVAILABLE` |
+| 9 | rejected by OpenAEVC, policy or a trust/integrity check | `OPENAEVC_OPERATION_REJECTED`, `CATALOG_UNTRUSTED`, `CATALOG_POLICY`, `EXTENSION_REVOKED`, `EXTENSION_IDENTITY_MISMATCH`, `PACKAGE_INVALID`, `PACKAGE_TAMPERED`, `ABI_VIOLATION`, `TRAPPED`, `OUT_OF_FUEL`, `DEADLINE_EXCEEDED`, `OUT_OF_MEMORY`, `RELATION_FAILED`, `RELATION_REFUSED`, `RELATION_SCHEMA_INVALID`, `CAPTURE_REFUSED`, `CAPTURE_INCOMPLETE`, `FILE_TOO_LARGE`, `LIMIT_EXCEEDED` |
 | 130 | cancelled by the user | `USER_CANCELLED` |
+
+Errors go to stderr: `calve: CODE: message`, followed by `  OpenAEVC CODE: message` when OpenAEVC refused the operation. With `--json` the error is the envelope `{"api_version":"1","command":…,"error":{"code","message","retryable","detail","exit_code"}}` on stderr.

@@ -1,0 +1,50 @@
+# Secrets
+
+Status: M3 (2026-10-15). Decision record: ADR 0015. Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
+
+## Prevention
+
+- Secrets are references in provider profiles (`env:NAME`, `keyring:NAME`), resolved at launch and passed to the worker **only in its environment**; never in argv, config files, the `WorkerContext` record (names only), errors or metric labels.
+- Resolved values live in `Zeroizing` buffers, dropped when the launch ends.
+- Secrets are never given to CIC modules, checks or extensions. T2 extensions read secrets only through OpenAEVC grants (`SecretRead`).
+- A secret under 4 bytes over-matches: `provider test` warns; redaction still applies.
+
+## Redactor
+
+Per secret, the pattern set is: raw; base64 standard and URL-safe at byte offsets 0, 1 and 2 (only the characters fully determined by the secret); percent-encoding with upper- and lower-case hex; JSON escaping; hex lower and upper. Patterns are matched with Aho-Corasick (leftmost-longest) and replaced by `[REDACTED]`.
+
+Each stream has its own state: stdout and stderr are never merged. A stream holds back `longest pattern − 1` bytes until they can no longer start a match, and flushes at EOF; lines are split only after redaction, so 1-byte writes are caught.
+
+While a launch lives, its secrets are also registered process-wide (`redact::register`), so sinks that never see the stream (errors, faults, details) redact them too.
+
+## Sink inventory
+
+| # | Sink | Mechanism | Test |
+|---|---|---|---|
+| 1 | worker stdout | per-stream redactor in `providers::pump` | `secrets::secrets_never_reach_any_sink` (raw, 1-byte, JSON, percent) |
+| 2 | worker stderr | own per-stream redactor | same (base64 offsets 1/2, hex upper) |
+| 3 | execution log | built from the redacted lines | same (`execution logs`) |
+| 4 | `org.calve.harness.log` observations | appended from the redacted lines | same (store scan) |
+| 5 | `execution logs` CLI | reads the observations | same (JSON and human output) |
+| 6 | console viewer and toasts | reads the same observations and faults | same source as 4 and 7 |
+| 7 | `Fault.message` / `detail` (CLI, IPC) | `app::fault` redacts against the registered secrets | `redact::tests::faults_are_redacted` |
+| 8 | tracing / request log (`observe::record`) | records ids, codes and durations only | `secrets` store scan |
+| 9 | diagnostics bundle | key-name redaction plus redacted sources | same (`doctor --bundle` scan) |
+| 10 | metrics | names and counts only | `secrets` store scan |
+| 11 | extension stderr as surfaced | extensions never receive Calve's secrets; errors pass through `fault` | 7 |
+| 12 | CIC errors | CIC never receives secrets; errors pass through `fault` | 7 |
+| 13 | check output → evidence | `run_command` redacts against the registered secrets; checks get no provider secrets | `checks` e2e |
+| 14 | capture, materialization and recovery journals | record paths, digests and codes; error text passes through `fault` | `secrets` store scan |
+| 15 | inbox and activity | derived from redacted records | same (`inbox list`, `activity`) |
+
+The end-to-end test scans every file under the data, config and Project directories and the bundle, plus every CLI output and error, for every encoded form of the secret.
+
+## Residual exposure (user-approved; tests assert it)
+
+- A secret split across stdout and stderr is not detected (`redact::tests::a_split_across_streams_is_not_redacted_residual`, and the `split` line of the end-to-end test).
+- Arbitrary transformations (reversal, compression, encryption, other encodings) are not detected.
+- Base64 edge characters that depend on neighbouring bytes may remain.
+- Channels outside Calve's sinks are not covered: files the worker writes (captured as content), the network, other processes.
+- A worker that emits the base64 of a secret inside an agent `propose` frame gets the frame redacted, so the proposal fails rather than leaking.
+
+The real boundary is not giving secrets to untrusted workers.
