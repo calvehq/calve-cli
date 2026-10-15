@@ -12,6 +12,7 @@ pub mod digest;
 pub mod driver;
 pub mod hello;
 pub mod jcs;
+pub mod locator;
 pub mod metadata;
 pub mod session;
 pub mod wire;

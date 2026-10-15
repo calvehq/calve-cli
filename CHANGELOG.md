@@ -27,3 +27,14 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
 - `ignore list` shows Calve's hard rule and the lines of the package's ignore file; the package's
   built-in defaults are reported by `ignore check`.
 - The built-in capture harness is listed as `capture`.
+
+### Security
+
+- **Check plans need approval.** A checks package's own plan (from its CIC module) runs with your
+  permissions, so `pack check` refuses with `CHECK_PLAN_UNAPPROVED` and prints each plan with its
+  digest until you approve it with `--approve-plan <digest>`; the approval covers that exact plan
+  of that extension artifact. Configured `[integrations."<id>".checks]` commands need none. A plan
+  may only name a program on an absolute `PATH` entry, and candidate files are copied for checks
+  without following symlinks.
+- **One locator validator.** The contract crate now owns the ADR 0014 locator rules
+  (`calve_integration_contract::locator::validate`), shared by the host and extensions.

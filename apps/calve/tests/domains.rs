@@ -143,7 +143,18 @@ fn language_checks_gate_promotion_through_openaevc() {
             refused.contains("CHECK_PLAN_UNAPPROVED") && refused.contains("toy-check"),
             "{refused}"
         );
-        env.ok(&[&check[..], &["--approve-plan"]].concat())
+        // Approving another digest approves nothing; the printed one approves that plan.
+        let other = "0".repeat(64);
+        assert!(
+            env.fails(&[&check[..], &["--approve-plan", &other]].concat())
+                .contains("CHECK_PLAN_UNAPPROVED")
+        );
+        let digest = refused
+            .split_whitespace()
+            .find(|w| w.len() == 64 && w.bytes().all(|b| b.is_ascii_hexdigit()))
+            .expect("digest in the refusal")
+            .to_owned();
+        env.ok(&[&check[..], &["--approve-plan", &digest]].concat())
     };
     let failed = run_checks(
         &env,

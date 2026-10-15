@@ -246,7 +246,8 @@ pub fn validate_classify(sent: &[ClassifyEntry], got: &[Decision]) -> Result<(),
     }
 }
 
-/// `diff` (§6.4): content inline (base64), at most 1 MiB per side; larger never sent.
+/// `diff` (§6.4): content inline as OpenAEVC base64 (URL-safe alphabet, no padding), at most
+/// 1 MiB per side; larger never sent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DiffIn {

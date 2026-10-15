@@ -195,7 +195,7 @@ impl Project {
         generation: u64,
         languages: &[String],
         only: &[String],
-        approve_plan: bool,
+        approve: &[String],
     ) -> Result<Value> {
         let pack = self.pack(pack_id).await?;
         if pack.generation != generation
@@ -281,18 +281,33 @@ impl Project {
             if self.check_plan_approved(r, &digest)? {
                 continue;
             }
-            if approve_plan {
+            // Only a plan the user saw can be approved: the digest names its exact content.
+            if approve.contains(&digest) {
                 self.approve_check_plan(r, &digest)?;
-            } else {
-                unapproved.push(format!(
-                    "{} {}: {:?} with environment {:?}",
-                    r.id, c.name, c.argv, c.env
-                ));
+                continue;
             }
+            let files = if c.takes_files {
+                format!(
+                    ", followed by every candidate file with extension {:?}",
+                    c.sources
+                )
+            } else {
+                String::new()
+            };
+            unapproved.push(format!(
+                "{digest}  {}: runs {:?}{files}, passing environment variables {:?}; plan {}",
+                r.id,
+                c.argv,
+                c.env,
+                String::from_utf8_lossy(
+                    &calve_integration_contract::jcs::to_vec(&serde_json::to_value(c)?)
+                        .map_err(|_| invalid("check plan is not canonical JSON"))?
+                )
+            ));
         }
         if !unapproved.is_empty() {
             return Err(invalid(format!(
-                "CHECK_PLAN_UNAPPROVED: these commands from the packages' check plans run with your permissions; review them, then rerun with --approve-plan (or configure [integrations.\"<id>\".checks]):\n  {}",
+                "CHECK_PLAN_UNAPPROVED: these check plans run with your permissions. Review each, then approve it with --approve-plan <digest> (or configure [integrations.\"<id>\".checks]):\n  {}",
                 unapproved.join("\n  ")
             )));
         }
