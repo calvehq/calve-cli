@@ -300,7 +300,27 @@ fn cic_product_paths_on_the_fixture_package() {
     // Checks: detection and the plan come from the extension; a missing tool is never a pass.
     let g2 = cap["generation"].as_u64().unwrap().to_string();
     run(&env, &["pack", "seal", &second, "--generation", &g2]);
-    let checks = run(&env, &["pack", "check", &second, "--generation", &g2]);
+    // The package's own plan runs only once approved by the digest the refusal printed.
+    let check = pr(&["pack", "check", &second, "--generation", &g2]);
+    let check: Vec<&str> = check.iter().map(String::as_str).collect();
+    let refused = env.fails(&check);
+    let digest = refused
+        .split_whitespace()
+        .find(|w| w.len() == 64 && w.bytes().all(|b| b.is_ascii_hexdigit()))
+        .expect("plan digest in the refusal")
+        .to_owned();
+    let checks = run(
+        &env,
+        &[
+            "pack",
+            "check",
+            &second,
+            "--generation",
+            &g2,
+            "--approve-plan",
+            &digest,
+        ],
+    );
     assert_eq!(checks["languages"][0]["language"], "toy", "{checks}");
     assert_eq!(checks["languages"][0]["checks"][0]["tool_available"], false);
     assert_eq!(
