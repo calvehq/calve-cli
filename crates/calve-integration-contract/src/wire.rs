@@ -48,7 +48,7 @@ pub struct Entry {
     pub target: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EntryKind {
     File,
@@ -207,7 +207,13 @@ pub struct ClassifyIn {
     pub entries: Vec<ClassifyEntry>,
     /// Ignore-source path (e.g. `src/.calveignore`) → its text.
     pub ignore_sources: std::collections::BTreeMap<String, String>,
+    /// Names of the files at the Workspace root (at most [`MAX_MARKERS`]), so an extension can
+    /// apply defaults that depend on root markers, e.g. a language's build directory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<String>,
 }
+
+pub const MAX_MARKERS: usize = 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

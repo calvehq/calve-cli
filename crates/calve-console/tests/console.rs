@@ -415,7 +415,7 @@ fn every_screen_renders() {
         (Route::Projects, "openaevc"),
         (Route::Inbox, "Execution FAILED"),
         (Route::Doctor, "Product database"),
-        (Route::Extensions, "org.calve.software"),
+        (Route::Extensions, "org.examples.files"),
     ];
     for (route, needle) in expectations {
         h.app.navigate(route.clone());

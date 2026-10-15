@@ -13,7 +13,6 @@ workspace = true
 
 [dependencies]
 calve-api.workspace = true
-calve-domain.workspace = true
 calve-integration-contract.workspace = true
 base64.workspace = true
 clap.workspace = true

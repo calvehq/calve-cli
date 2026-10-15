@@ -256,7 +256,6 @@ dependencies = [
  "calve-app",
  "calve-client",
  "calve-console",
- "calve-domain",
  "calve-integration-contract",
  "calve-ipc",
  "calve-testkit",
@@ -289,7 +288,6 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "calve-api",
- "calve-domain",
  "calve-integration-contract",
  "calve-testkit",
  "calve-win-sec",
@@ -346,14 +344,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "unicode-width 0.1.14",
-]
-
-[[package]]
-name = "calve-domain"
-version = "0.1.0"
-dependencies = [
- "openaevc",
- "serde_json",
 ]
 
 [[package]]

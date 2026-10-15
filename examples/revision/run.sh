@@ -3,7 +3,7 @@
 # choose whether to include the revision.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable >/dev/null
+enable "$FILES_EXT"
 echo "v1" > "$PROJECT/config.txt"
 p1=$(calve pack create "P1" | get '["id"]')
 calve pack capture "$p1" config.txt --generation 1 >/dev/null

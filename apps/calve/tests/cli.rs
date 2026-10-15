@@ -852,22 +852,23 @@ fn cli_config_scopes_and_validation() {
 }
 
 #[test]
-fn cli_captures_a_file_with_the_software_extension() {
+fn cli_captures_a_file_with_the_file_extension() {
     let temp = tempfile::tempdir().unwrap();
     let data_home = temp.path().join("data");
     let root = temp.path().join("project");
     let root_str = root.to_str().unwrap();
     let calve = |args: &[&str]| run_cli(&data_home, args);
     calve(&["init", root_str]);
-    let extension = env!("CARGO_BIN_EXE_calve_ext_software");
-    let enabled = calve(&[
-        "--project",
-        root_str,
-        "extension",
-        "enable-local",
-        extension,
-    ]);
-    assert_eq!(enabled["id"], "org.calve.software");
+    let catalog = calve_testkit::ToyCatalog::new();
+    calve(
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    let enabled = calve(&[&["--project", root_str][..], &calve_testkit::ENABLE_TOY[..]].concat());
+    assert_eq!(enabled["id"], "org.example.toy");
     fs::write(root.join("note.txt"), "captured through CLI\n").unwrap();
     let pack = calve(&[
         "--project",
@@ -977,7 +978,7 @@ fn cli_captures_a_file_with_the_software_extension() {
         "0",
     ]);
     assert_eq!(evaluation["verdict"], "WARN");
-    assert_eq!(evaluation["metrics"]["org.calve.software.changed_files"], 2);
+    assert_eq!(evaluation["metrics"]["org.example.toy.changed_files"], 2);
     let verified = calve(&[
         "--project",
         root_str,
@@ -1043,15 +1044,23 @@ fn cli_operations_surface() {
     let root_str = root.to_str().unwrap();
     let calve = |args: &[&str]| run_cli(&data_home, &[&["--project", root_str], args].concat());
     run_cli(&data_home, &["init", root_str]);
-    let extension = env!("CARGO_BIN_EXE_calve_ext_software");
-    calve(&["extension", "enable", extension]);
-    let info = calve(&["extension", "info", "org.calve.software"]);
+    let catalog = calve_testkit::ToyCatalog::new();
+    run_cli(
+        &data_home,
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    calve(&calve_testkit::ENABLE_TOY);
+    let info = calve(&["extension", "info", "org.example.toy"]);
     assert_eq!(info["extension"]["active"], true);
     assert_eq!(
         calve(&["extension", "health"])[0]["healthy"],
         serde_json::json!(true)
     );
-    calve(&["extension", "permissions", "org.calve.software"]);
+    calve(&["extension", "permissions", "org.example.toy"]);
 
     fs::write(root.join("a.txt"), "one\n").unwrap();
     fs::write(root.join("skip.log"), "noise\n").unwrap();

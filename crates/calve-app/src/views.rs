@@ -113,15 +113,15 @@ impl Project {
     /// One file's change against accepted state before this pack: the old side is the
     /// accepted content (of the rename source, for renames), the new side the candidate.
     fn file_diff(
+        d: &crate::domains::FileDomain,
         before: &crate::resources::FileState,
         effect: &openaevc::protocol::AppliedEffect,
     ) -> Value {
+        use crate::domains::FileOp;
         let path = effect.target.locator.as_str();
-        let (status, old_path) = match effect.kind.as_str() {
-            crate::resources::DELETE => ("deleted", path),
-            crate::resources::RENAME => {
-                ("renamed", effect.payload["from"].as_str().unwrap_or(path))
-            }
+        let (status, old_path) = match d.op(&effect.kind) {
+            Some(FileOp::Delete) => ("deleted", path),
+            Some(FileOp::Move) => ("renamed", effect.payload["from"].as_str().unwrap_or(path)),
             _ if before.files.contains_key(path) => ("modified", path),
             _ => ("added", path),
         };
@@ -141,14 +141,15 @@ impl Project {
     /// One file's change in a pack against previously accepted content.
     pub async fn view_pack_diff(&self, pack_id: &str, path: &str) -> Result<Value> {
         let pack = self.pack(pack_id).await?;
+        let d = self.file_domain().await?;
         let effect = pack
             .candidate_effects
             .iter()
             .rev()
-            .find(|e| crate::resources::is_file_effect(&e.kind) && e.target.locator == path)
+            .find(|e| d.is_file_effect(e) && e.target.locator == path)
             .ok_or_else(|| invalid(format!("{path} is not part of this pack")))?;
         let before = self.accepted_state(Some(&pack.id.to_string())).await?;
-        Ok(Self::file_diff(&before, effect))
+        Ok(Self::file_diff(&d, &before, effect))
     }
 
     /// Everything the ChangePack workstation needs in one read.
@@ -167,14 +168,15 @@ impl Project {
             latest.insert(effect.target.locator.clone(), effect);
         }
         let before = self.accepted_state(Some(&id)).await?;
+        let domain = self.file_domain().await.ok();
         let mut files = Vec::new();
         let (mut added, mut removed) = (0u64, 0u64);
         for (path, effect) in &latest {
-            if !crate::resources::is_file_effect(&effect.kind) {
+            let Some(d) = domain.as_ref().filter(|d| d.is_file_effect(effect)) else {
                 files.push(json!({"path":path,"kind":effect.target.kind,"status":"changed","effect":effect.kind}));
                 continue;
-            }
-            let diff = Self::file_diff(&before, effect);
+            };
+            let diff = Self::file_diff(d, &before, effect);
             added += diff["added"].as_u64().unwrap_or(0);
             removed += diff["removed"].as_u64().unwrap_or(0);
             let mut row = json!({"path":path,"kind":effect.target.kind,"status":diff["status"],

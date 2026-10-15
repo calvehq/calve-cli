@@ -448,3 +448,20 @@ fn slash_in_a_role_name_cannot_impersonate_a_chain() {
     assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
     assert!(e.message.contains("acme%2Fexamples"), "{e}");
 }
+
+#[test]
+fn an_interrupted_retirement_restores_the_package() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    let mut i = installer(&m);
+    i.fault = Some(InstallStep::Retiring);
+    assert_eq!(
+        i.retire(&rec, |_| false).unwrap_err().code,
+        "CRASH_INJECTED"
+    );
+    let out = installer(&m).recover().unwrap();
+    assert_eq!(out[0]["outcome"], "restored");
+    verify_installed(&m.paths, &rec).unwrap();
+}

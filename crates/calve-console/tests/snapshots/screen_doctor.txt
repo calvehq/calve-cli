@@ -4,8 +4,8 @@
 │  Overview        5 ││Product database     ✓ PASS     ok                                                         ││prj_01a0ef13-e366-71a6-816c-8197620898db   │
 │  Work              ││OpenAEVC runtime     ✓ PASS     protocol 0.1.0                                             ││Overall     ✓ HEALTHY                      │
 │  Change Graph      ││Extension contract   ✓ PASS     0.1.0                                                      ││                                           │
-│  ChangePacks       ││Extension            ✓ PASS     org.calve.rust                                             ││Actions                                    │
-│  Baselines         ││Extension            ✓ PASS     org.calve.software                                         ││  Maintenance check                        │
+│  ChangePacks       ││Extension            ✓ PASS     org.langs.rust                                             ││Actions                                    │
+│  Baselines         ││Extension            ✓ PASS     org.examples.files                                         ││  Maintenance check                        │
 │  Evidence          ││                                                                                           ││  Recovery plan                            │
 │  Events            ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │

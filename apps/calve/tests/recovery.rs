@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -132,43 +131,30 @@ fn crash_during_execution_is_reported_lost() {
 /// recovery removes the leftovers.
 #[test]
 fn interrupted_extension_install_is_recoverable() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
-    let fixture = Path::new(env!("CARGO_BIN_EXE_calve"))
-        .parent()
-        .unwrap()
-        .join("examples/fixture_ext");
-    let enabled = env.ok(&[
-        "--project",
-        p,
-        "extension",
-        "enable",
-        fixture.to_str().unwrap(),
-    ]);
-    let staging = env.path().join("d/calve/extensions/.staging-interrupted");
-    fs::create_dir_all(&staging).unwrap();
-    fs::write(staging.join("artifact"), b"partial download").unwrap();
-    assert!(
-        Command::new("touch")
-            .args(["-d", "2 hours ago"])
-            .arg(&staging)
-            .status()
-            .unwrap()
-            .success()
-    );
-    let installed = env.ok(&["extension", "list", "--installed"]);
-    let fixture_pkg = installed
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|pkg| pkg["id"] == "org.example.fixture")
-        .unwrap();
-    assert_eq!(fixture_pkg["digest"], enabled["artifact_digest"]);
+    env.trust_fixture();
+    // The install crashes right after its first durable journal record (I0).
+    let crashed = calve_env(
+        &env,
+        &[
+            "extension",
+            "install",
+            "org.example.toy",
+            "--acknowledge-native",
+        ],
+    )
+    .env("CALVE_FAULT", "append.after_fsync")
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .unwrap();
+    assert!(!crashed.success());
     assert_eq!(
-        env.ok(&["--project", p, "extension", "health"])[0]["healthy"],
-        true
+        env.ok(&["extension", "list", "--installed"]),
+        serde_json::json!([])
     );
     let plan = env.ok(&["--project", p, "recover", "plan"]);
     assert!(
@@ -176,11 +162,14 @@ fn interrupted_extension_install_is_recoverable() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|a| a["reason"] == "left by an interrupted extension install"),
+            .any(|a| a["action"] == "reconcile_install_journals"),
         "{plan}"
     );
     env.ok(&["--project", p, "recover", "apply", "--yes"]);
-    assert!(!staging.exists());
+    let plan = env.ok(&["--project", p, "recover", "plan"]);
+    assert_eq!(plan["actions"], serde_json::json!([]), "{plan}");
+    // The interrupted install left nothing behind; a fresh one succeeds and runs.
+    env.enable_toy(&root);
     assert_eq!(
         env.ok(&["--project", p, "extension", "health"])[0]["healthy"],
         true

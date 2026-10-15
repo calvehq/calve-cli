@@ -181,7 +181,7 @@ pub fn scalar(value: &Value) -> String {
     }
 }
 
-/// `org.calve.software.snapshot` → `Snapshot`; `IN_PROGRESS` → `In progress`.
+/// `org.example.files.snapshot` → `Snapshot`; `IN_PROGRESS` → `In progress`.
 pub fn label(key: &str) -> String {
     let last = key.rsplit('.').next().unwrap_or(key);
     let spaced = last.replace(['_', '-'], " ").to_lowercase();

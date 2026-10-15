@@ -3,8 +3,8 @@
 # requires, promote, then safely materialize accepted state back into the working tree.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable >/dev/null
-calve extension enable org.calve.rust >/dev/null
+enable org.calve.software
+enable org.calve.rust
 cfg=$(calve config edit-path --scope project | get '["path"]')
 # The check command is configurable; this one keeps the example fast and toolchain-free.
 cat > "$cfg" <<'TOML'

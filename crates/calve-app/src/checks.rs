@@ -10,13 +10,20 @@ use openaevc::protocol::{Command, Digest, PackState, Query};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 
+use calve_integration_contract::wire::{CheckPlanOut, DetectOut, PlannedCheck};
+
+use crate::catalog::install::PackageRecord;
 use crate::config::EffectiveConfig;
-use crate::domain::{self, CHECK_EVIDENCE, Language};
 use crate::providers::{resolve_executable, run_command};
 use crate::{Error, Project, Result, event};
 
+/// Calve's check-result evidence kind (product namespace), judged by each package's verifier.
+pub const CHECK_EVIDENCE: &str = "org.calve.check-result/v1";
+
 const DEFAULT_TIMEOUT_MS: u64 = 30 * 60 * 1000;
 const TAIL_BYTES: usize = 8 * 1024;
+/// Environment every check keeps; packages add their own names through `check_plan`.
+const BASE_ENV: &[&str] = &["PATH", "HOME", "LANG", "TMPDIR"];
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
@@ -31,60 +38,22 @@ impl Drop for Scratch {
     }
 }
 
-/// Configured command overrides: `[integrations."org.calve.<lang>".checks] name = [argv...]`.
-fn checks_for(
-    language: &Language,
-    config: &EffectiveConfig,
-    root: &Path,
-) -> Vec<(String, Vec<String>)> {
-    let overrides = config
-        .integrations
-        .get(&language.extension_id())
-        .and_then(|value| value.get("checks"))
-        .and_then(|value| value.as_table());
-    if let Some(table) = overrides {
-        return table
+/// Configured command overrides: `[integrations."<extension id>".checks] name = [argv...]`.
+fn overrides(r: &PackageRecord, config: &EffectiveConfig) -> Option<Vec<(String, Vec<String>)>> {
+    let table = config.integrations.get(&r.id)?.get("checks")?.as_table()?;
+    Some(
+        table
             .iter()
             .filter_map(|(name, argv)| {
                 let argv: Vec<String> = argv
                     .as_array()?
                     .iter()
-                    .filter_map(|arg| arg.as_str().map(str::to_owned))
+                    .filter_map(|a| a.as_str().map(str::to_owned))
                     .collect();
                 (!argv.is_empty()).then(|| (name.clone(), argv))
             })
-            .collect();
-    }
-    // Gradle projects without a Maven pom use Gradle; CMake-only trees configure then build.
-    if language.key == "java" && !root.join("pom.xml").exists() {
-        return vec![(
-            "test".into(),
-            vec!["gradle".into(), "test".into(), "-q".into()],
-        )];
-    }
-    if language.key == "c-cpp"
-        && !root.join("Makefile").exists()
-        && root.join("CMakeLists.txt").exists()
-    {
-        return vec![(
-            "build".into(),
-            vec![
-                "sh".into(),
-                "-c".into(),
-                "cmake -S . -B build && cmake --build build".into(),
-            ],
-        )];
-    }
-    language
-        .checks
-        .iter()
-        .map(|check| {
-            (
-                check.name.to_owned(),
-                check.argv.iter().map(|arg| (*arg).to_owned()).collect(),
-            )
-        })
-        .collect()
+            .collect(),
+    )
 }
 
 impl Project {
@@ -92,13 +61,19 @@ impl Project {
     /// snapshots so tools see the candidate content for every captured path.
     fn materialize_candidate(
         &self,
+        d: &crate::domains::FileDomain,
         effects: &[openaevc::protocol::AppliedEffect],
     ) -> Result<(Scratch, Vec<String>, Vec<String>)> {
         let scratch =
             Scratch(std::env::temp_dir().join(format!("calve-check-{}", uuid::Uuid::now_v7())));
         fs::create_dir(&scratch.0)?;
         let mut files = Vec::new();
-        for item in self.list_resources()?.as_array().into_iter().flatten() {
+        for item in self
+            .list_resources_sync(d)?
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
             if item["kind"] != "file" {
                 continue;
             }
@@ -111,12 +86,9 @@ impl Project {
             files.push(path.to_owned());
         }
         let mut candidate = crate::resources::FileState::default();
-        for effect in effects
-            .iter()
-            .filter(|e| crate::resources::is_file_effect(&e.kind))
-        {
+        for effect in effects.iter().filter(|e| d.is_file_effect(e)) {
             crate::validate_locator(&effect.target.locator)?;
-            candidate.apply(effect)?;
+            candidate.apply(d, effect)?;
         }
         let mut drift = Vec::new();
         // Deletions and rename sources are removed so tools see the candidate tree.
@@ -166,55 +138,114 @@ impl Project {
             .as_ref()
             .ok_or_else(|| invalid("pack has no sealed candidate"))?
             .candidate;
-        let (scratch, files, drift) = self.materialize_candidate(&pack.candidate_effects)?;
-        let selected: Vec<&Language> = if languages.is_empty() {
-            domain::detect(&scratch.0, &files)
-        } else {
-            languages
-                .iter()
-                .map(|key| {
-                    domain::language(key).ok_or_else(|| invalid(format!("unknown language {key}")))
-                })
-                .collect::<Result<_>>()?
-        };
-        if selected.is_empty() {
+        let d = self.file_domain().await?;
+        let (scratch, files, drift) = self.materialize_candidate(&d, &pack.candidate_effects)?;
+        // Detection and plans come from each checks package's CIC `detect` / `check_plan`.
+        let markers: Vec<String> = fs::read_dir(&scratch.0)?
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .collect();
+        let extensions: Vec<String> = files
+            .iter()
+            .filter_map(|f| Path::new(f).extension()?.to_str().map(str::to_owned))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let mut plans: Vec<(PackageRecord, String, PlannedCheck)> = Vec::new();
+        for (r, decl) in self.check_domains().await? {
+            let mut s = crate::domains::open_session(&r)?;
+            let wanted: Vec<String> = if languages.is_empty() {
+                let out: DetectOut = serde_json::from_value(
+                    s.request(
+                        "detect",
+                        json!({"markers": markers, "extensions": extensions}),
+                    )
+                    .map_err(crate::domains::cic_error)?,
+                )
+                .map_err(|e| invalid(format!("ABI_VIOLATION: detect: {e}")))?;
+                out.languages
+            } else {
+                languages.to_vec()
+            };
+            if wanted.is_empty() {
+                continue;
+            }
+            let plan: CheckPlanOut = serde_json::from_value(
+                s.request(
+                    "check_plan",
+                    json!({"languages": wanted, "markers": markers}),
+                )
+                .map_err(crate::domains::cic_error)?,
+            )
+            .map_err(|e| invalid(format!("ABI_VIOLATION: check_plan: {e}")))?;
+            for c in plan.checks {
+                if !wanted.contains(&c.language) {
+                    return Err(invalid(format!(
+                        "ABI_VIOLATION: check_plan returned {} for {wanted:?}",
+                        c.language
+                    )));
+                }
+                plans.push((r.clone(), decl.verifier.clone(), c));
+            }
+        }
+        if let Some(missing) = languages
+            .iter()
+            .find(|l| !plans.iter().any(|(_, _, c)| &c.language == *l))
+        {
+            return Err(invalid(format!(
+                "unknown language {missing}: no enabled checks package plans it"
+            )));
+        }
+        if plans.is_empty() {
             return Err(invalid("no supported language detected; pass --language"));
         }
-        let active = self.list_extensions().await?;
         let mut report = Vec::new();
-        for language in selected {
+        let mut by_language: BTreeMap<
+            (String, String),
+            (PackageRecord, String, Vec<PlannedCheck>),
+        > = BTreeMap::new();
+        for (r, verifier, c) in plans {
+            by_language
+                .entry((r.id.clone(), c.language.clone()))
+                .or_insert_with(|| (r, verifier, vec![]))
+                .2
+                .push(c);
+        }
+        for ((_, language), (r, verifier, planned)) in by_language {
             let mut evidence = Vec::new();
             let mut results = Vec::new();
-            let env: BTreeMap<String, String> = domain::allowed_env(language)
-                .into_iter()
-                .filter_map(|name| {
-                    std::env::var(name)
-                        .ok()
-                        .map(|value| (name.to_owned(), value))
-                })
-                .collect();
-            for (name, mut argv) in checks_for(language, config, &scratch.0) {
-                if !only.is_empty() && !only.contains(&name) {
-                    continue;
-                }
-                if language
-                    .checks
+            let configured = overrides(&r, config);
+            let mut checks: Vec<(String, Vec<String>, PlannedCheck)> = match &configured {
+                Some(list) => list
                     .iter()
-                    .any(|check| check.name == name && check.takes_files())
-                {
+                    .map(|(n, a)| (n.clone(), a.clone(), planned[0].clone()))
+                    .collect(),
+                None => planned
+                    .iter()
+                    .map(|c| (c.name.clone(), c.argv.clone(), c.clone()))
+                    .collect(),
+            };
+            checks.retain(|(name, _, _)| only.is_empty() || only.contains(name));
+            for (name, mut argv, plan) in checks {
+                let env: BTreeMap<String, String> = BASE_ENV
+                    .iter()
+                    .map(|s| s.to_string())
+                    .chain(plan.env.iter().cloned())
+                    .filter_map(|n| std::env::var(&n).ok().map(|v| (n, v)))
+                    .collect();
+                if configured.is_none() && plan.takes_files {
                     argv.extend(
                         files
                             .iter()
-                            .filter(|file| {
-                                Path::new(file)
+                            .filter(|f| {
+                                Path::new(f)
                                     .extension()
-                                    .and_then(|ext| ext.to_str())
-                                    .is_some_and(|ext| language.sources.contains(&ext))
+                                    .and_then(|e| e.to_str())
+                                    .is_some_and(|e| plan.sources.iter().any(|s| s == e))
                             })
                             .cloned(),
                     );
                 }
-                let mut result = json!({"language":language.key,"check":name,"argv":argv,
+                let mut result = json!({"language":language,"check":name,"argv":argv,
                     "candidate":candidate,"base":"working-copy","drift":drift});
                 match resolve_executable(&argv[0]) {
                     Err(_) => {
@@ -225,7 +256,6 @@ impl Project {
                         let mut resolved = argv.clone();
                         resolved[0] = program.display().to_string();
                         let root = scratch.0.clone();
-                        let env = env.clone();
                         let run = tokio::task::spawn_blocking(move || {
                             run_command(
                                 &resolved,
@@ -259,18 +289,13 @@ impl Project {
                     "exit_code":result["exit_code"],"evidence":digest}),
                 );
             }
-            let enabled = active
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|entry| entry["id"] == language.extension_id() && entry["active"] == true);
-            let verification = if enabled && !evidence.is_empty() {
+            let verification = if !evidence.is_empty() {
                 let receipt = self
                     .client
                     .command(Command::RunVerification {
                         pack: pack.id,
                         generation,
-                        verifier: language.verifier(),
+                        verifier: verifier.clone(),
                         config: None,
                         evidence,
                     })
@@ -280,15 +305,13 @@ impl Project {
                     .digest
                     .ok_or_else(|| invalid("verification returned no digest"))?;
                 let object: Value = self.client.query(Query::GetVerification { digest }).await?;
-                json!({"digest":digest,"status":object["envelope"]["body"]["status"],
+                json!({"digest":digest,"verifier":verifier,"status":object["envelope"]["body"]["status"],
                     "findings":object["envelope"]["body"]["findings"]})
             } else {
-                json!({"status":null,"note":format!("enable {} to verify these results", language.extension_id())})
+                json!({"status":null,"note":"no check selected"})
             };
-            event(&self.db, "checks.ran", pack_id, language.key)?;
-            report.push(
-                json!({"language":language.key,"checks":results,"verification":verification}),
-            );
+            event(&self.db, "checks.ran", pack_id, &language)?;
+            report.push(json!({"language":language,"extension":r.id,"checks":results,"verification":verification}));
         }
         Ok(
             json!({"pack":pack.id,"generation":generation,"candidate":candidate,"drift":drift,"languages":report}),

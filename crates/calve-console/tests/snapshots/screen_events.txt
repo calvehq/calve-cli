@@ -27,7 +27,7 @@
 │                    ││1m     openaevc  execution.starting                                       exe_…z2zkohuja   ││exe_agqo6fcpwj26lfwyckmvsvhf3a",           │
 │                    ││1m     openaevc  execution.admitted                                       exe_…z2zkohuja   ││  "timestamp":                             │
 │                    ││1m     openaevc  workunit.added                                           cpk_…z75ayzoee   ││"2026-09-29T21:31:21.350695650Z"           │
-│                    ││1m     openaevc  provider.registered                                      org.cal….local   ││}                                          │
+│                    ││1m     openaevc  provider.registered                                      org.exa….local   ││}                                          │
 │                    ││1m     calve     pack.created                                             cpk_…z75ayzoee   ││                                           │
 │                    ││1m     openaevc  changepack.created                                       cpk_…z75ayzoee   ││                                           │
 │                    ││1m     calve     task.pack.linked                                         tsk_…c72093222   ││                                           │

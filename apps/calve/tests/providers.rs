@@ -34,15 +34,18 @@ fn harness_executions_supervise_workers() {
     let root = data.join("project");
     let p = root.to_str().unwrap();
     ok(data, &["init", p]);
+    let catalog = calve_testkit::ToyCatalog::new();
     ok(
         data,
-        &[
-            "--project",
-            p,
-            "extension",
-            "enable",
-            env!("CARGO_BIN_EXE_calve_ext_software"),
-        ],
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    ok(
+        data,
+        &[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat(),
     );
     ok(
         data,
@@ -306,7 +309,16 @@ fn keyring_secrets_resolve_at_launch() {
     let root = data.join("p");
     let p = root.to_str().unwrap();
     assert!(run(&["init", p]).0);
-    assert!(run(&["extension", "enable", "--project", p]).0);
+    let catalog = calve_testkit::ToyCatalog::new();
+    assert!(
+        run(&catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>())
+        .0
+    );
+    assert!(run(&[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat()).0);
     assert!(
         run(&[
             "provider",

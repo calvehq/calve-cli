@@ -2,14 +2,16 @@ use std::fs;
 
 use calve_testkit::Env;
 
-/// Deletes and renames are captured as effects, shown in diffs, and applied by materialize.
+/// Deletes and renames flow through the lifecycle. A rename is captured as a delete plus an add
+/// (canonical per-path ops, §6.5) with a derived relation recorded as an observation; the host
+/// never interprets the relation.
 #[test]
 fn deletes_and_renames_flow_through_the_lifecycle() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
-    env.ok(&["--project", p, "extension", "enable"]);
+    env.enable_toy(std::path::Path::new(p));
     let promote = |title: &str| -> (String, String) {
         let id = env.ok(&["--project", p, "pack", "create", title])["id"]
             .as_str()
@@ -46,23 +48,35 @@ fn deletes_and_renames_flow_through_the_lifecycle() {
     let files = pack["files"].as_array().unwrap();
     assert_eq!(
         files.len(),
-        2,
+        3,
         "unchanged keep.txt is not recaptured: {files:?}"
     );
-    assert!(
+    let status = |path: &str| {
         files
             .iter()
-            .any(|f| f["path"] == "old.txt" && f["status"] == "deleted")
-    );
-    assert!(
-        files.iter().any(|f| f["path"] == "moved.txt"
-            && f["status"] == "renamed"
-            && f["from"] == "move.txt")
-    );
+            .find(|f| f["path"] == path)
+            .map(|f| f["status"].clone())
+    };
+    assert_eq!(status("old.txt"), Some("deleted".into()));
+    assert_eq!(status("move.txt"), Some("deleted".into()));
+    assert_eq!(status("moved.txt"), Some("added".into()));
     let history = env.ok(&["--project", p, "resource", "history", "move.txt"]);
     assert_eq!(
         history["history"].as_array().unwrap().last().unwrap()["change"],
-        "renamed_away"
+        "deleted"
+    );
+    // The relation is recorded verbatim in the capture execution's observations.
+    let execs = env.ok(&["--project", p, "execution", "list", "--pack", &second]);
+    let exec = execs.as_array().unwrap()[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let logs = env
+        .ok(&["--project", p, "execution", "logs", &exec])
+        .to_string();
+    assert!(
+        logs.contains("org.example.toy.rename") && logs.contains("moved.txt"),
+        "{logs}"
     );
 
     // v1 restores the deleted and renamed-away files and removes moved.txt.

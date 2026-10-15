@@ -417,6 +417,53 @@ impl Workspace {
         Ok(res?)
     }
 
+    /// The entries of directory `loc` (`""` = the root): `(name, kind, size)`, sorted by
+    /// name, without following any symlink and without reading file contents. `.calve` at the
+    /// root and names that are not valid locators are left out.
+    pub fn list_dir(&self, loc: &str) -> Result<Vec<(String, EntryKind, u64)>> {
+        let dir = if loc.is_empty() {
+            self.root.try_clone()?
+        } else {
+            validate_locator(loc)?;
+            let mut d = self.root.try_clone()?;
+            for part in loc.split('/') {
+                d = d.open_dir_nofollow(part).map_err(|e| match e.kind() {
+                    io::ErrorKind::NotFound => IoError::Io(e),
+                    _ => IoError::NotFollowed(loc.to_owned()),
+                })?;
+            }
+            d
+        };
+        let mut out = vec![];
+        for e in dir.entries()? {
+            let e = e?;
+            let Ok(name) = e.file_name().into_string() else {
+                continue;
+            };
+            let full = if loc.is_empty() {
+                name.clone()
+            } else {
+                format!("{loc}/{name}")
+            };
+            if (loc.is_empty() && name == ".calve") || validate_locator(&full).is_err() {
+                continue;
+            }
+            let m = dir.symlink_metadata(&name)?;
+            let kind = if m.file_type().is_symlink() {
+                EntryKind::Symlink
+            } else if m.is_dir() {
+                EntryKind::Dir
+            } else if m.is_file() {
+                EntryKind::File
+            } else {
+                continue;
+            };
+            out.push((name, kind, m.len()));
+        }
+        out.sort();
+        Ok(out)
+    }
+
     pub fn exists(&self, loc: &str) -> bool {
         self.parent(loc)
             .is_ok_and(|(dir, name)| dir.symlink_metadata(name).is_ok())

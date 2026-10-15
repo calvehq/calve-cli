@@ -33,13 +33,12 @@ use crate::config::{
 };
 use crate::{Error, Project, Result, event};
 
-const SOFTWARE_EXTENSION: &str = "org.calve.software";
-const SOFTWARE_RESOURCE: &str = "org.calve.software.file";
-const SOFTWARE_EFFECT: &str = "org.calve.software.snapshot";
 const DEFAULT_TIMEOUT_MS: u64 = 30 * 60 * 1000;
 const DEFAULT_MAX_OUTPUT: u64 = 1024 * 1024;
 const LOG_CHUNK: usize = 16 * 1024;
-const CAPTURE_HARNESS: &str = "org.calve.software.capture";
+/// The built-in capture harness (`pack capture`); its protocol ids derive from the enabled
+/// file extension (`<extension>.capture`, `<extension>.local`).
+const CAPTURE_HARNESS: &str = "capture";
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
@@ -47,8 +46,8 @@ fn invalid(message: impl Into<String>) -> Error {
 
 /// Built-in harness that records file snapshots chosen by the user (`pack capture`).
 fn builtin_harnesses() -> Value {
-    json!([{"id":CAPTURE_HARNESS,"builtin":true,"provider":"org.calve.software.local",
-        "mode":"change","description":"Snapshot the files named on the command line"}])
+    json!([{"id":CAPTURE_HARNESS,"builtin":true,"provider":"<file extension>.local",
+        "mode":"change","description":"Capture the files named on the command line through the file extension"}])
 }
 
 /// Resolves an executable name against PATH, or checks an explicit path.
@@ -519,9 +518,15 @@ impl Project {
         Ok(())
     }
 
-    fn file_digests(&self, paths: &[String]) -> Result<BTreeMap<String, String>> {
+    async fn file_digests(&self, paths: &[String]) -> Result<BTreeMap<String, String>> {
         let mut map = BTreeMap::new();
-        for item in self.list_resources()?.as_array().into_iter().flatten() {
+        for item in self
+            .list_resources()
+            .await?
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
             let path = item["path"].as_str().unwrap_or_default();
             if item["kind"] == "file" && in_scope(paths, path) {
                 map.insert(path.to_owned(), item["digest"].to_string());
@@ -564,6 +569,12 @@ impl Project {
         if let Some(task) = task {
             self.task(task)?;
         }
+        // Change harnesses write the file domain's resources with its declared kinds.
+        let domain = if harness.mode == HarnessMode::Change {
+            Some(self.file_domain().await?)
+        } else {
+            None
+        };
         let provider = format!("org.calve.provider.{}", harness.provider);
         // OpenAEVC names are namespaced; configured IDs stay short for users.
         let protocol_harness = format!("org.calve.harness.{harness_id}");
@@ -574,11 +585,7 @@ impl Project {
                     version: env!("CARGO_PKG_VERSION").into(),
                     worker_kinds: vec![protocol_harness.clone()],
                     harnesses: vec![protocol_harness.clone()],
-                    required_actions: if harness.mode == HarnessMode::Change {
-                        vec!["org.calve.software.write".into()]
-                    } else {
-                        vec![]
-                    },
+                    required_actions: domain.iter().map(|d| d.decl.write_action.clone()).collect(),
                     cancellation: true,
                     resumable: false,
                     heartbeat: true,
@@ -597,10 +604,10 @@ impl Project {
             }
         };
         let generation = self.pack(pack_id).await?.generation;
-        let (allowed_resources, allowed_effects) = if harness.mode == HarnessMode::Change {
+        let (allowed_resources, allowed_effects) = if let Some(d) = &domain {
             let selectors = if harness.paths.is_empty() {
                 vec![ResourceSelector {
-                    kind: SOFTWARE_RESOURCE.into(),
+                    kind: d.decl.resource_kind.clone(),
                     locator_prefix: None,
                 }]
             } else {
@@ -608,12 +615,12 @@ impl Project {
                     .paths
                     .iter()
                     .map(|prefix| ResourceSelector {
-                        kind: SOFTWARE_RESOURCE.into(),
+                        kind: d.decl.resource_kind.clone(),
                         locator_prefix: Some(prefix.clone()),
                     })
                     .collect()
             };
-            (selectors, vec![SOFTWARE_EFFECT.into()])
+            (selectors, vec![d.decl.put.clone()])
         } else {
             (vec![], vec![])
         };
@@ -687,7 +694,7 @@ impl Project {
         }
         self.client.heartbeat(&lease).await?;
         // Whole-Project snapshot so writes outside the harness scope are detected, not ignored.
-        let before = self.file_digests(&[])?;
+        let before = self.file_digests(&[]).await?;
         // The worker runs on a blocking thread; cancellation is checked from its own runtime.
         let client = self.client.clone();
         let handle = tokio::runtime::Handle::current();
@@ -745,7 +752,7 @@ impl Project {
             return Ok(json!({"execution":execution,"state":"CANCELLED","reason":outcome.reason}));
         }
         let mut proposals = outcome.proposals;
-        let after = self.file_digests(&[])?;
+        let after = self.file_digests(&[]).await?;
         let mut changed: Vec<&String> = after
             .iter()
             .filter(|(path, digest)| before.get(*path) != Some(*digest))
@@ -762,7 +769,9 @@ impl Project {
         {
             for path in &changed {
                 if in_scope(&harness.paths, path) && after.contains_key(*path) {
-                    let (_, content) = self.read_capture_file(Path::new(path))?;
+                    let content = crate::workspace_io::Workspace::open(&self.root)
+                        .and_then(|w| w.read(path, crate::resources::MAX_CAPTURE_BYTES))
+                        .map_err(|e| invalid(e.to_string()))?;
                     proposals.push(((*path).clone(), content));
                 }
             }
@@ -798,13 +807,14 @@ impl Project {
                     break;
                 }
                 let digest = sha256(content);
+                let Some(d) = &domain else { break };
                 let effect = EffectProposal {
-                    kind: SOFTWARE_EFFECT.into(),
+                    kind: d.decl.put.clone(),
                     target: ResourceRef {
-                        kind: SOFTWARE_RESOURCE.into(),
+                        kind: d.decl.resource_kind.clone(),
                         locator: path.clone(),
                         version: None,
-                        extension: SOFTWARE_EXTENSION.into(),
+                        extension: d.extension.clone(),
                     },
                     payload: json!({"digest":digest,"size":content.len(),"content":b64::encode(content)}),
                     preconditions: vec![],
@@ -814,7 +824,7 @@ impl Project {
                 match self.client.submit_effect(&lease, effect).await {
                     Ok(true) => effects.push(json!({"path":path,"digest":digest})),
                     Ok(false) => {
-                        failure = Some(format!("software extension rejected {path}"));
+                        failure = Some(format!("the file extension rejected {path}"));
                         break;
                     }
                     Err(error) => {

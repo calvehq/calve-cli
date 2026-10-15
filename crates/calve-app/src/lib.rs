@@ -2,7 +2,6 @@
 #![forbid(unsafe_code)]
 
 pub use calve_api::{ActivityFilter, GrantOptions};
-pub use calve_domain::{general, language as domain};
 
 pub mod adopt;
 pub mod app;
@@ -10,11 +9,11 @@ pub mod catalog;
 pub mod checks;
 pub mod compatibility;
 pub mod config;
+pub(crate) mod domains;
 pub mod extensions;
 pub mod extsort;
 pub mod general_ops;
 pub mod identities;
-pub mod ignore;
 pub mod integration;
 pub mod journal;
 pub mod manifests;
@@ -83,17 +82,9 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
 
-const SOFTWARE_EXTENSION: &str = "org.calve.software";
-const SOFTWARE_RESOURCE: &str = "org.calve.software.file";
-const SOFTWARE_EFFECT: &str = "org.calve.software.snapshot";
-const SOFTWARE_VERIFIER: &str = "org.calve.software.snapshot.verify";
-const SOFTWARE_EVALUATOR: &str = "org.calve.software.change-size";
-const SOFTWARE_PROVIDER: &str = "org.calve.software.local";
-const SOFTWARE_HARNESS: &str = "org.calve.software.capture";
 const REVIEW_POLICY_NAME: &str = "org.calve.review.required/v1";
 const REVIEW_APPROVAL_KIND: &str = "org.calve.review.approval/v1";
 const REVIEW_REJECTION_KIND: &str = "org.calve.review.rejection/v1";
-const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 const CHECKPOINT_INTERVAL: u64 = 1000;
 const CAPTURE_MAX_ATTEMPTS: u32 = 3;
 
@@ -360,11 +351,8 @@ fn make_runtime(state: &Path, keys: &Keys, create: bool) -> Result<Arc<Runtime>>
             id: keys.admin_id,
             public_key: admin.public_key(),
         }],
-        // Project-pinned artifacts (older Projects) first, then the shared package cache.
-        extension_dirs: [Some(state.join("extensions")), extensions::cache_dir()]
-            .into_iter()
-            .flatten()
-            .collect(),
+        // Installed packages (`<id>/<sha256>/<binary>`, immutable, TUF-verified).
+        extension_dirs: extensions::extension_dir().into_iter().collect(),
         extension_deadline_ms: 60_000,
         checkpoint_interval: CHECKPOINT_INTERVAL,
         lease_ms: lease_ms(),
@@ -843,65 +831,45 @@ fn event(db: &Connection, kind: &str, subject: &str, detail: &str) -> Result<()>
     Ok(())
 }
 
-/// One file change recorded by a capture execution.
+/// One file change recorded by a capture execution (host-generic `calve.file/1` payloads; the
+/// effect kinds come from the file domain's signed declaration).
 #[derive(Debug, Clone)]
 pub(crate) enum FileChange {
-    Snapshot(String, Vec<u8>),
-    Delete {
-        path: String,
-        previous: Digest,
-    },
-    Rename {
-        from: String,
-        to: String,
-        content: Vec<u8>,
-    },
+    Put(String, Vec<u8>),
+    Delete { path: String, previous: Digest },
 }
 
 impl FileChange {
     fn path(&self) -> &str {
         match self {
-            Self::Snapshot(path, _) | Self::Delete { path, .. } => path,
-            Self::Rename { to, .. } => to,
-        }
-    }
-
-    fn touched(&self) -> Vec<&str> {
-        match self {
-            Self::Rename { from, to, .. } => vec![from, to],
-            other => vec![other.path()],
+            Self::Put(path, _) | Self::Delete { path, .. } => path,
         }
     }
 
     fn digest(&self) -> Option<Digest> {
         match self {
-            Self::Snapshot(_, content) | Self::Rename { content, .. } => Some(sha256(content)),
+            Self::Put(_, content) => Some(sha256(content)),
             Self::Delete { .. } => None,
         }
     }
 
-    fn effect(&self) -> EffectProposal {
+    fn effect(&self, d: &domains::FileDomain) -> EffectProposal {
         let (kind, payload) = match self {
-            Self::Snapshot(_, content) => (
-                SOFTWARE_EFFECT,
+            Self::Put(_, content) => (
+                d.decl.put.clone(),
                 json!({"digest":sha256(content),"size":content.len(),"content":openaevc::protocol::b64::encode(content)}),
             ),
-            Self::Delete { previous, .. } => (
-                "org.calve.software.delete",
-                json!({"previous_digest":previous}),
-            ),
-            Self::Rename { from, content, .. } => (
-                "org.calve.software.rename",
-                json!({"from":from,"digest":sha256(content),"size":content.len(),"content":openaevc::protocol::b64::encode(content)}),
-            ),
+            Self::Delete { previous, .. } => {
+                (d.decl.delete.clone(), json!({"previous_digest":previous}))
+            }
         };
         EffectProposal {
-            kind: kind.into(),
+            kind,
             target: ResourceRef {
-                kind: SOFTWARE_RESOURCE.into(),
+                kind: d.decl.resource_kind.clone(),
                 locator: self.path().to_owned(),
                 version: None,
-                extension: SOFTWARE_EXTENSION.into(),
+                extension: d.extension.clone(),
             },
             payload,
             preconditions: vec![],
@@ -911,14 +879,11 @@ impl FileChange {
 
     fn summary(&self) -> Value {
         match self {
-            Self::Snapshot(path, content) => {
+            Self::Put(path, content) => {
                 json!({"path":path,"change":"snapshot","digest":sha256(content)})
             }
             Self::Delete { path, previous } => {
                 json!({"path":path,"change":"delete","previous_digest":previous})
-            }
-            Self::Rename { from, to, content } => {
-                json!({"path":to,"from":from,"change":"rename","digest":sha256(content)})
             }
         }
     }
@@ -2015,33 +1980,34 @@ impl Project {
     ) -> Result<Vec<Digest>> {
         let mut policies = Vec::new();
         for key in required_checks {
-            let language =
-                domain::language(key).ok_or_else(|| invalid(format!("unknown language {key}")))?;
+            let (owner, decl) = self.language_owner(key).await?;
             policies.push(PolicyDocument {
-                name: format!("{}.checks-required", language.extension_id()),
-                description: Some(format!(
-                    "Require passing {} checks on the candidate",
-                    language.display
-                )),
+                name: format!("{}.checks-required", owner.id),
+                description: Some(format!("Require passing {key} checks on the candidate")),
                 rules: vec![PolicyRule {
                     id: "checks-pass".into(),
                     expr: Expr::Verifier(VerifierCondition {
-                        kind: language.verifier(),
+                        kind: decl.verifier,
                         status: VerificationStatus::Pass,
                     }),
                 }],
             });
         }
         if require_snapshot_verification {
+            let d = self.file_domain().await?;
+            let verifier =
+                d.decl.verifier.clone().ok_or_else(|| {
+                    invalid(format!("{} declares no snapshot verifier", d.extension))
+                })?;
             policies.push(PolicyDocument {
-                name: "org.calve.software.snapshot-required".into(),
+                name: format!("{}.snapshot-required", d.extension),
                 description: Some(
                     "Require a passing verification of the sealed file snapshots".into(),
                 ),
                 rules: vec![PolicyRule {
                     id: "snapshot-pass".into(),
                     expr: Expr::Verifier(VerifierCondition {
-                        kind: SOFTWARE_VERIFIER.into(),
+                        kind: verifier,
                         status: VerificationStatus::Pass,
                     }),
                 }],
@@ -2181,7 +2147,8 @@ impl Project {
                 event
                     .subjects
                     .iter()
-                    .filter(|s| s.starts_with("cpk_"))
+                    // ChangePacks and RevisionPacks.
+                    .filter(|s| s.starts_with("cpk_") || s.starts_with("rpk_"))
                     .cloned(),
             );
             Ok(())
@@ -2201,6 +2168,8 @@ impl Project {
             stmt.query_map([], |r| r.get::<_, String>(0))?
                 .collect::<std::result::Result<_, _>>()?
         };
+        // The file domain classifies file effects; without one no files are indexed.
+        let domain = self.file_domain().await.ok();
         let tx = self.db.unchecked_transaction()?;
         for id in dirty.into_iter().filter(|id| known.contains(id)) {
             let pack = self.pack(&id).await?;
@@ -2228,13 +2197,16 @@ impl Project {
                 ],
             )?;
             tx.execute("DELETE FROM pack_files WHERE pack=?1", [&id])?;
-            for (position, effect) in pack
+            for (position, (effect, change)) in pack
                 .candidate_effects
                 .iter()
-                .filter(|e| resources::is_file_effect(&e.kind))
+                .filter_map(|e| {
+                    let d = domain.as_ref()?;
+                    d.is_file_effect(e).then_some(())?;
+                    Some((e, resources::change_label(d, &e.kind)?))
+                })
                 .enumerate()
             {
-                let change = effect.kind.rsplit('.').next().unwrap_or("snapshot");
                 tx.execute(
                     "INSERT INTO pack_files VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
@@ -2660,77 +2632,22 @@ impl Project {
         Ok(self.client.query(Query::ListExtensions {}).await?)
     }
 
-    fn read_capture_file(&self, path: &Path) -> Result<(String, Vec<u8>)> {
-        use std::path::Component;
-        let path_text = path
-            .to_str()
-            .ok_or_else(|| invalid("capture path must be UTF-8"))?;
-        let mut parts = path.components();
-        if (cfg!(unix) && path_text.contains('\\'))
-            || parts.clone().next().is_none()
-            || parts
-                .clone()
-                .any(|part| !matches!(part, Component::Normal(_)))
-            || parts
-                .next()
-                .is_some_and(|part| part.as_os_str() == ".calve")
-        {
-            return Err(invalid(
-                "capture path must be a relative file outside .calve",
-            ));
-        }
-        let mut current = self.root.clone();
-        for part in path.components() {
-            current.push(part);
-            if fs::symlink_metadata(&current)?.file_type().is_symlink() {
-                return Err(invalid("capture path may not contain a symlink"));
-            }
-        }
-        let metadata = fs::metadata(&current)?;
-        if !metadata.is_file() || metadata.len() > MAX_CAPTURE_BYTES {
-            return Err(invalid("capture needs a regular file of at most 1 MiB"));
-        }
-        if !fs::canonicalize(&current)?.starts_with(&self.root) {
-            return Err(invalid("capture path escapes the Project"));
-        }
-        let content = fs::read(&current)?;
-        if content.len() as u64 > MAX_CAPTURE_BYTES {
-            return Err(invalid("file changed beyond the 1 MiB capture limit"));
-        }
-        Ok((path_text.replace('\\', "/"), content))
-    }
-
-    /// Captures one exact file snapshot through a signed OpenAEVC execution and extension effect.
+    /// Captures one file (or its deletion) through the file extension's capture session, a
+    /// signed OpenAEVC execution and extension effect. Ignored files may be captured by name.
     pub async fn capture_file(
         &self,
         pack_id: &str,
         expected_generation: u64,
         path: &Path,
     ) -> Result<Value> {
-        // A file that is gone but accepted is captured as a deletion.
-        let change = match self.read_capture_file(path) {
-            Ok((locator, content)) => FileChange::Snapshot(locator, content),
-            Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                let locator = path.to_string_lossy().replace('\\', "/");
-                validate_locator(&locator)?;
-                let previous = self
-                    .indexed_digests(true)
-                    .await?
-                    .get(&locator)
-                    .copied()
-                    .ok_or_else(|| {
-                        invalid(format!("{locator} does not exist and was never accepted"))
-                    })?;
-                FileChange::Delete {
-                    path: locator,
-                    previous,
-                }
-            }
-            Err(error) => return Err(error),
-        };
-        let locator = change.path().to_owned();
+        let locator = resources::relative_locator(path)?;
+        let d = self.file_domain().await?;
+        let plan = self.plan_paths(&d, std::slice::from_ref(&locator)).await?;
+        if let Some((_, reason)) = plan.refused.first() {
+            return Err(invalid(format!("CAPTURE_REFUSED: {locator}: {reason}")));
+        }
         let batch = self
-            .capture_snapshots_attempt(pack_id, expected_generation, vec![change], None)
+            .submit_capture(pack_id, expected_generation, &d, plan, None)
             .await?;
         let item = batch["captured"]
             .as_array()
@@ -2740,7 +2657,8 @@ impl Project {
                     .as_array()
                     .and_then(|items| items.first())
             })
-            .ok_or_else(|| invalid("capture returned no file result"))?;
+            .cloned()
+            .unwrap_or_else(|| json!({"path":locator,"digest":null}));
         Ok(
             json!({"path":locator,"digest":item["digest"],"generation":batch["generation"],
             "execution":batch["execution"],"work_unit":batch["work_unit"],
@@ -2748,12 +2666,15 @@ impl Project {
         )
     }
 
-    /// `retry` reuses the failed attempt's work unit so OpenAEVC links the successor attempt.
-    pub(crate) async fn capture_snapshots_attempt(
+    /// Submits a capture plan in one execution. `retry` reuses the failed attempt's work unit so
+    /// OpenAEVC links the successor attempt. Relations are recorded verbatim as observations of
+    /// their declared kind with the related effects (§6.5b); omissions are recorded too.
+    pub(crate) async fn submit_capture(
         &self,
         pack_id: &str,
         expected_generation: u64,
-        files: Vec<FileChange>,
+        d: &domains::FileDomain,
+        plan: resources::CapturePlan,
         retry: Option<(WorkUnitId, ExecutionId)>,
     ) -> Result<Value> {
         let pack = self.pack(pack_id).await?;
@@ -2762,72 +2683,60 @@ impl Project {
                 "pack must be OPEN at generation {expected_generation}"
             )));
         }
+        let refused: Vec<Value> = plan
+            .refused
+            .iter()
+            .map(|(p, r)| json!({"path":p,"reason":r}))
+            .collect();
+        let files = plan.changes;
         if files.is_empty() {
-            return Ok(json!({"generation":pack.generation,"captured":[],"unchanged":[]}));
+            return Ok(
+                json!({"generation":pack.generation,"captured":[],"unchanged":[],"refused":refused,"relations":[]}),
+            );
         }
-        let mut seen = BTreeSet::new();
-        for change in &files {
-            let oversized = matches!(change, FileChange::Snapshot(_, c) | FileChange::Rename { content: c, .. } if c.len() as u64 > MAX_CAPTURE_BYTES);
-            if !change
-                .touched()
-                .into_iter()
-                .all(|path| seen.insert(path.to_owned()))
-                || oversized
-            {
-                return Err(invalid(
-                    "capture batch has duplicate paths or oversized files",
-                ));
-            }
+        if files.iter().any(
+            |c| matches!(c, FileChange::Put(_, b) if b.len() as u64 > resources::MAX_CAPTURE_BYTES),
+        ) {
+            return Err(invalid(
+                "FILE_TOO_LARGE: capture needs files of at most 1 MiB",
+            ));
         }
         if !pack.candidate_effects.is_empty() {
             let unchanged: Vec<Value> = files
                 .iter()
                 .filter_map(|change| {
-                    let FileChange::Snapshot(locator, content) = change else {
+                    let FileChange::Put(locator, content) = change else {
                         return None;
                     };
                     let digest = sha256(content);
                     pack.candidate_effects
                         .iter()
                         .rev()
-                        .find(|effect| {
-                            effect.target.extension == SOFTWARE_EXTENSION
-                                && effect.target.locator == *locator
-                        })
-                        .filter(|effect| {
-                            effect.kind == SOFTWARE_EFFECT
-                                && effect.payload["digest"] == digest.to_string()
+                        .find(|e| d.is_file_effect(e) && e.target.locator == *locator)
+                        .filter(|e| {
+                            e.kind == d.decl.put && e.payload["digest"] == digest.to_string()
                         })
                         .map(|_| json!({"path":locator,"digest":digest}))
                 })
                 .collect();
             if unchanged.len() == files.len() {
                 return Ok(
-                    json!({"generation":pack.generation,"captured":[],"unchanged":unchanged}),
+                    json!({"generation":pack.generation,"captured":[],"unchanged":unchanged,"refused":refused,"relations":[]}),
                 );
             }
             return Err(invalid(
                 "pack already has capture effects; add new or changed files in a new pack so provenance stays valid",
             ));
         }
-        let extensions = self.list_extensions().await?;
-        if !extensions.as_array().is_some_and(|items| {
-            items
-                .iter()
-                .any(|entry| entry["id"] == SOFTWARE_EXTENSION && entry["active"] == true)
-        }) {
-            return Err(invalid(
-                "enable the Calve software extension before capturing files",
-            ));
-        }
+        let (harness, provider) = (d.capture_harness(), d.provider());
         self.client
             .command(Command::RegisterProvider {
                 provider: ProviderDescriptor {
-                    id: SOFTWARE_PROVIDER.into(),
+                    id: provider.clone(),
                     version: "0.1.0".into(),
-                    worker_kinds: vec![SOFTWARE_HARNESS.into()],
-                    harnesses: vec![SOFTWARE_HARNESS.into()],
-                    required_actions: vec!["org.calve.software.write".into()],
+                    worker_kinds: vec![harness.clone()],
+                    harnesses: vec![harness.clone()],
+                    required_actions: vec![d.decl.write_action.clone()],
                     cancellation: true,
                     resumable: false,
                     heartbeat: false,
@@ -2841,7 +2750,7 @@ impl Project {
             Some((work_unit, _)) => work_unit,
             None => {
                 self.client
-                    .add_work_unit(pack.id, pack.generation, SOFTWARE_HARNESS)
+                    .add_work_unit(pack.id, pack.generation, &harness)
                     .await?
             }
         };
@@ -2850,26 +2759,21 @@ impl Project {
             pack: pack.id,
             expected_generation: generation,
             work_unit,
-            provider: SOFTWARE_PROVIDER.into(),
-            harness: SOFTWARE_HARNESS.into(),
+            provider: provider.clone(),
+            harness: harness.clone(),
             worker: Some(WorkerInfo {
                 id: "local".into(),
-                kind: SOFTWARE_HARNESS.into(),
+                kind: harness.clone(),
                 attributes: BTreeMap::new(),
             }),
             allowed_resources: files
                 .iter()
-                .flat_map(FileChange::touched)
-                .map(|locator| ResourceSelector {
-                    kind: SOFTWARE_RESOURCE.into(),
-                    locator_prefix: Some(locator.to_owned()),
+                .map(|c| ResourceSelector {
+                    kind: d.decl.resource_kind.clone(),
+                    locator_prefix: Some(c.path().to_owned()),
                 })
                 .collect(),
-            allowed_effects: vec![
-                SOFTWARE_EFFECT.into(),
-                "org.calve.software.delete".into(),
-                "org.calve.software.rename".into(),
-            ],
+            allowed_effects: vec![d.decl.put.clone(), d.decl.delete.clone()],
             context: vec![],
             timeout_ms: 1_800_000,
             budget: BTreeMap::new(),
@@ -2879,36 +2783,31 @@ impl Project {
         };
         let (execution, lease) = self.client.start_execution(request).await?;
         self.client.heartbeat(&lease).await?;
+        let fail = |reason: &'static str| Command::FailExecution {
+            execution,
+            lease: lease.id,
+            reason: reason.into(),
+        };
         let mut captured = Vec::new();
         for change in &files {
-            let locator = change.path().to_owned();
-            let effect = change.effect();
+            let effect = change.effect(d);
             let resource = effect.target.clone();
             let applied = match self.client.submit_effect(&lease, effect).await {
                 Ok(applied) => applied,
                 Err(error) => {
-                    let _ = self
-                        .client
-                        .command(Command::FailExecution {
-                            execution,
-                            lease: lease.id,
-                            reason: "file capture failed".into(),
-                        })
-                        .await;
+                    let _ = self.client.command(fail("file capture failed")).await;
                     return Err(error.into());
                 }
             };
             if !applied {
                 let _ = self
                     .client
-                    .command(Command::FailExecution {
-                        execution,
-                        lease: lease.id,
-                        reason: "extension rejected file snapshot".into(),
-                    })
+                    .command(fail("extension rejected file change"))
                     .await;
                 return Err(invalid(format!(
-                    "software extension rejected the change to {locator}"
+                    "{} rejected the change to {}",
+                    d.extension,
+                    change.path()
                 )));
             }
             self.client.heartbeat(&lease).await?;
@@ -2916,7 +2815,7 @@ impl Project {
                 .command(Command::AppendObservation {
                     execution,
                     lease: lease.id,
-                    kind: "org.calve.software.captured".into(),
+                    kind: d.captured_observation(),
                     payload: Some(change.summary()),
                     blob: None,
                     related_resources: vec![resource],
@@ -2925,6 +2824,53 @@ impl Project {
                 .await?;
             captured.push(change.summary());
         }
+        // Relations reference the effects of their member paths.
+        let effects: BTreeMap<String, openaevc::protocol::EffectId> = self
+            .pack(pack_id)
+            .await?
+            .candidate_effects
+            .iter()
+            .filter(|e| e.work_unit == work_unit)
+            .map(|e| (e.target.locator.clone(), e.id))
+            .collect();
+        let mut relations = Vec::new();
+        for r in &plan.relations {
+            let paths: Vec<&str> = r
+                .members
+                .iter()
+                .filter_map(|i| plan.op_paths.get(*i as usize).map(String::as_str))
+                .collect();
+            let related_effects: Vec<_> = paths
+                .iter()
+                .filter_map(|p| effects.get(*p).copied())
+                .collect();
+            self.client
+                .command(Command::AppendObservation {
+                    execution,
+                    lease: lease.id,
+                    kind: r.kind.clone(),
+                    payload: Some(r.payload.clone()),
+                    blob: None,
+                    related_resources: vec![],
+                    related_effects,
+                })
+                .await?;
+            relations.push(json!({"kind":r.kind,"paths":paths,"payload":r.payload}));
+        }
+        self.client
+            .command(Command::AppendObservation {
+                execution,
+                lease: lease.id,
+                kind: format!("{}.capture-session", d.extension),
+                payload: Some(
+                    json!({"input_digest":plan.input_digest,"output_digest":plan.output_digest,
+                    "relations_omitted":plan.omitted,"refused":refused}),
+                ),
+                blob: None,
+                related_resources: vec![],
+                related_effects: vec![],
+            })
+            .await?;
         self.client.heartbeat(&lease).await?;
         self.client.complete_execution(&lease).await?;
         for change in &files {
@@ -2935,7 +2881,8 @@ impl Project {
         }
         let generation = self.pack(pack_id).await?.generation;
         Ok(
-            json!({"generation":generation,"execution":execution,"work_unit":work_unit,"captured":captured,"unchanged":[]}),
+            json!({"generation":generation,"execution":execution,"work_unit":work_unit,"captured":captured,
+            "unchanged":[],"refused":refused,"relations":relations}),
         )
     }
 
@@ -2946,6 +2893,12 @@ impl Project {
         expected_generation: u64,
         expected: Option<(&Path, Digest)>,
     ) -> Result<Value> {
+        let d = self.file_domain().await?;
+        let verifier = d
+            .decl
+            .verifier
+            .clone()
+            .ok_or_else(|| invalid(format!("{} declares no snapshot verifier", d.extension)))?;
         let pack = self.pack(pack_id).await?;
         if pack.generation != expected_generation || pack.sealed.is_none() {
             return Err(invalid("pack must be sealed at the requested generation"));
@@ -2975,7 +2928,7 @@ impl Project {
         };
         let receipt = self
             .client
-            .run_verification(pack.id, pack.generation, SOFTWARE_VERIFIER, config)
+            .run_verification(pack.id, pack.generation, &verifier, config)
             .await?;
         let digest = receipt
             .result
@@ -2998,6 +2951,11 @@ impl Project {
         warn_after_bytes: Option<u64>,
         warn_after_files: Option<u64>,
     ) -> Result<Value> {
+        let d = self.file_domain().await?;
+        let evaluator =
+            d.decl.evaluator.clone().ok_or_else(|| {
+                invalid(format!("{} declares no change-size evaluator", d.extension))
+            })?;
         let pack = self.pack(pack_id).await?;
         if pack.generation != expected_generation
             || !matches!(pack.state, PackState::Sealed | PackState::Qualified)
@@ -3013,12 +2971,7 @@ impl Project {
         }
         let receipt = self
             .client
-            .run_evaluation(
-                pack.id,
-                pack.generation,
-                SOFTWARE_EVALUATOR,
-                Value::Object(config),
-            )
+            .run_evaluation(pack.id, pack.generation, &evaluator, Value::Object(config))
             .await?;
         let digest = receipt
             .result

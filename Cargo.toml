@@ -16,7 +16,6 @@ calve-api = { path = "crates/calve-api" }
 calve-app = { path = "crates/calve-app" }
 calve-client = { path = "crates/calve-client" }
 calve-console = { path = "crates/calve-console" }
-calve-domain = { path = "crates/calve-domain" }
 calve-ipc = { path = "crates/calve-ipc" }
 calve-testkit = { path = "crates/calve-testkit" }
 calve-win-sec = { path = "crates/calve-win-sec" }

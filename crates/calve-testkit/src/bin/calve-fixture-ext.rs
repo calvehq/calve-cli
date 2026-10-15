@@ -6,7 +6,9 @@
 
 use openaevc::crypto::sha256;
 use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
-use openaevc::extension::wire::{ApplyOutput, Operation, ValidateOutput, VerifyOutput, WireError};
+use openaevc::extension::wire::{
+    ApplyOutput, EvaluateOutput, Operation, ValidateOutput, VerifyOutput, WireError,
+};
 use openaevc::protocol::*;
 use serde_json::{Value, json};
 
@@ -15,7 +17,31 @@ const RESOURCE: &str = "org.example.toy.file";
 const PUT: &str = "org.example.toy.put";
 const DELETE: &str = "org.example.toy.delete";
 const VERIFIER: &str = "org.example.toy.verify";
+const CHECKS: &str = "org.example.toy.checks";
+const SIZE: &str = "org.example.toy.size";
+const NOTE: &str = "org.example.toy.note";
+const NOTE_SET: &str = "org.example.toy.note.set";
+const NOTE_REMOVE: &str = "org.example.toy.note.remove";
 const WRITE: &str = "org.example.toy.write";
+
+/// A note is `{"text": string}`; removal has an empty payload.
+fn note(e: &EffectProposal) -> Result<Option<Value>, String> {
+    if e.target.kind != NOTE || e.target.extension != ID {
+        return Err("not a toy note".into());
+    }
+    let p = e.payload.as_object().ok_or("payload must be an object")?;
+    if e.kind == NOTE_REMOVE {
+        return if p.is_empty() {
+            Ok(None)
+        } else {
+            Err("remove takes no payload".into())
+        };
+    }
+    match (p.len(), p.get("text").and_then(Value::as_str)) {
+        (1, Some(t)) => Ok(Some(json!({"text": t}))),
+        _ => Err("a note is {\"text\": string}".into()),
+    }
+}
 
 /// `{digest, size, content}` (put) or `{previous_digest}` (delete): Calve's host-generic file
 /// content payload.
@@ -60,19 +86,30 @@ impl Extension for Toy {
             contract: SUPPORTED_CONTRACT,
             publisher: None,
             artifact_digest: self_artifact_digest(),
-            resource_kinds: vec![ResourceKindDecl {
-                kind: RESOURCE.into(),
-                description: Some("toy file".into()),
-            }],
-            effect_kinds: [PUT, DELETE]
-                .map(|k| EffectKindDecl {
-                    kind: k.into(),
-                    resource_kind: RESOURCE.into(),
-                    required_actions: vec![WRITE.into()],
-                })
-                .to_vec(),
-            verifier_kinds: vec![VERIFIER.into()],
-            evaluator_kinds: vec![],
+            resource_kinds: vec![
+                ResourceKindDecl {
+                    kind: RESOURCE.into(),
+                    description: Some("toy file".into()),
+                },
+                ResourceKindDecl {
+                    kind: NOTE.into(),
+                    description: Some("toy note".into()),
+                },
+            ],
+            effect_kinds: [
+                (PUT, RESOURCE),
+                (DELETE, RESOURCE),
+                (NOTE_SET, NOTE),
+                (NOTE_REMOVE, NOTE),
+            ]
+            .map(|(k, r)| EffectKindDecl {
+                kind: k.into(),
+                resource_kind: r.into(),
+                required_actions: vec![WRITE.into()],
+            })
+            .to_vec(),
+            verifier_kinds: vec![VERIFIER.into(), CHECKS.into()],
+            evaluator_kinds: vec![SIZE.into()],
             composition_validators: vec![],
             host_capabilities: vec![],
             schemas: Default::default(),
@@ -93,6 +130,79 @@ impl Extension for Toy {
             v.map_err(|e| WireError::new("encode", e.to_string()))
         };
         match operation {
+            Operation::ValidateEffect { effect, .. } if effect.target.kind == NOTE => {
+                let r = note(&effect);
+                enc(serde_json::to_value(ValidateOutput {
+                    valid: r.is_ok(),
+                    reason: r.err(),
+                }))
+            }
+            Operation::ApplyEffect { effect, .. } if effect.target.kind == NOTE => {
+                let v = note(&effect).map_err(|e| WireError::new("invalid_effect", e))?;
+                enc(serde_json::to_value(ApplyOutput {
+                    outcome: v.map_or(json!({"removed": true}), |v| json!({"value": v})),
+                }))
+            }
+            Operation::Verify { kind, evidence, .. } if kind == CHECKS => {
+                // Calve's check-result evidence: all exit 0 → pass; any failure → fail; a missing
+                // tool → inconclusive (never a pass).
+                let mut status = if evidence.is_empty() {
+                    VerificationStatus::Inconclusive
+                } else {
+                    VerificationStatus::Pass
+                };
+                for e in &evidence {
+                    let v: Value = serde_json::from_slice(&e.data)
+                        .map_err(|e| WireError::new("invalid_evidence", e.to_string()))?;
+                    if v["tool_available"] == false && status == VerificationStatus::Pass {
+                        status = VerificationStatus::Inconclusive;
+                    } else if v["tool_available"] == true && v["exit_code"] != 0 {
+                        status = VerificationStatus::Fail;
+                    }
+                }
+                enc(serde_json::to_value(VerifyOutput {
+                    status,
+                    findings: vec![],
+                    facts: Default::default(),
+                }))
+            }
+            Operation::Evaluate {
+                kind,
+                config,
+                effects,
+                ..
+            } if kind == SIZE => {
+                let limit =
+                    |k: &str, d: u64| config.as_ref().and_then(|c| c[k].as_u64()).unwrap_or(d);
+                let files: Vec<_> = effects
+                    .iter()
+                    .filter(|e| e.target.kind == RESOURCE)
+                    .collect();
+                let bytes: u64 = files
+                    .iter()
+                    .map(|e| e.payload["size"].as_u64().unwrap_or(0))
+                    .sum();
+                let n = files.len() as u64;
+                let verdict = if n == 0 {
+                    EvaluationVerdict::Unknown
+                } else if n > limit("warn_after_files", 16)
+                    || bytes > limit("warn_after_bytes", 256 * 1024)
+                {
+                    EvaluationVerdict::Warn
+                } else {
+                    EvaluationVerdict::Allow
+                };
+                let metrics = [
+                    ("org.example.toy.changed_files".to_owned(), n as i64),
+                    ("org.example.toy.changed_bytes".to_owned(), bytes as i64),
+                ]
+                .into();
+                enc(serde_json::to_value(EvaluateOutput {
+                    verdict,
+                    metrics,
+                    facts: Default::default(),
+                }))
+            }
             Operation::ValidateEffect { effect, .. } => {
                 let r = inspect(&effect);
                 enc(serde_json::to_value(ValidateOutput {
@@ -106,8 +216,16 @@ impl Extension for Toy {
                     outcome: d.map_or(json!({"deleted": true}), |d| json!({"digest": d})),
                 }))
             }
-            Operation::Verify { kind, effects, .. } if kind == VERIFIER => {
-                let bad = effects.iter().filter(|e| {
+            Operation::Verify {
+                kind,
+                effects,
+                config,
+                ..
+            } if kind == VERIFIER => {
+                // Every file effect valid; with `{path, digest}` config, the newest effect at that
+                // path must establish that digest.
+                let mut findings = vec![];
+                for e in effects.iter().filter(|e| e.target.kind == RESOURCE) {
                     let p = EffectProposal {
                         kind: e.kind.clone(),
                         target: e.target.clone(),
@@ -115,9 +233,28 @@ impl Extension for Toy {
                         preconditions: vec![],
                         outputs: vec![],
                     };
-                    inspect(&p).is_err()
-                });
-                let status = if bad.count() > 0 {
+                    if let Err(m) = inspect(&p) {
+                        findings.push(Finding {
+                            code: "org.example.toy.invalid".into(),
+                            message: m,
+                            resource: Some(e.target.clone()),
+                        });
+                    }
+                }
+                if let Some(c) = config.as_ref().filter(|c| c.get("path").is_some()) {
+                    let newest = effects
+                        .iter()
+                        .rev()
+                        .find(|e| e.target.locator == c["path"].as_str().unwrap_or_default());
+                    if newest.map(|e| &e.payload["digest"]) != Some(&c["digest"]) {
+                        findings.push(Finding {
+                            code: "org.example.toy.digest_mismatch".into(),
+                            message: "digest differs".into(),
+                            resource: None,
+                        });
+                    }
+                }
+                let status = if !findings.is_empty() {
                     VerificationStatus::Fail
                 } else if effects.is_empty() {
                     VerificationStatus::Inconclusive
@@ -126,7 +263,7 @@ impl Extension for Toy {
                 };
                 enc(serde_json::to_value(VerifyOutput {
                     status,
-                    findings: vec![],
+                    findings,
                     facts: Default::default(),
                 }))
             }

@@ -3,7 +3,7 @@
 # branches, and they reuse immutable objects instead of copying them.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable >/dev/null
+enable "$FILES_EXT"
 declare -a P
 for i in 0 1 2 3 4 5; do
   echo "content $i" > "$PROJECT/file$i.txt"

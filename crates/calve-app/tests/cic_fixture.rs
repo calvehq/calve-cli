@@ -36,7 +36,7 @@ fn describe_equals_the_signed_metadata_and_declarations_validate() {
 #[test]
 fn declarations_must_use_the_extension_namespace_and_capabilities() {
     let mut m = fixture_metadata();
-    m.files.as_mut().unwrap().put = "org.calve.software.snapshot".into();
+    m.files.as_mut().unwrap().put = "org.other.files.put".into();
     assert!(m.validate().is_err(), "foreign kind");
     let mut m = fixture_metadata();
     m.capabilities.required.retain(|c| c != "classify.v1");

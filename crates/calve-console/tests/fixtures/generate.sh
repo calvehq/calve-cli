@@ -17,7 +17,7 @@ gen() { calve pack show "$1" | field '["generation"]'; }
 
 "$bin/calve" --no-daemon-start --json init "$p" --name openaevc >/dev/null
 calve extension enable >/dev/null
-calve extension enable org.calve.rust >/dev/null
+calve extension enable org.langs.rust >/dev/null
 
 http=$(calve intent create "HTTP conformance" --description "Validate OpenAEVC conformance over a remote HTTP transport." | field '["id"]')
 sdk=$(calve intent create "SDK compatibility" | field '["id"]')

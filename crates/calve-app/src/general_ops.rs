@@ -1,8 +1,11 @@
-//! Project operations for the general-project domain. General resources are not files: their
-//! current value is whatever the newest promoted effect in accepted history says.
+//! Non-file resources (`resource set kind:name=JSON`). Their kinds, effects and write action come
+//! from the signed `resources` declarations of the enabled packages; the owning extension
+//! validates each effect when OpenAEVC applies it. The current value of a resource is the
+//! extension's apply outcome of the newest promoted effect.
 
 use std::collections::BTreeMap;
 
+use calve_integration_contract::metadata::ResourceDecl;
 use openaevc::protocol::{
     Command, EffectProposal, ExecutionRequest, PackState, ProviderDescriptor, ResourceRef,
     ResourceSelector, WorkerInfo,
@@ -10,25 +13,39 @@ use openaevc::protocol::{
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde_json::{Value, json};
 
-use crate::general::{self, HARNESS, ID, PROVIDER, WRITE_ACTION};
 use crate::{Error, Project, Result, event};
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
 
-/// `kind:name` as typed by users, e.g. `note:plan`.
-pub fn parse_ref(reference: &str) -> Result<(&'static str, String)> {
-    let (short, name) = reference
-        .split_once(':')
-        .ok_or_else(|| invalid(format!("{reference:?} must be kind:name, e.g. note:plan")))?;
-    let kind = general::resource_kind(short)
-        .ok_or_else(|| invalid(format!("unknown general resource kind {short}")))?;
-    Ok((kind, name.to_owned()))
-}
-
 impl Project {
-    /// Records general-resource effects in one execution, as OpenAEVC promotion requires.
+    /// `kind:name` as typed by users (e.g. `note:plan`) → (extension, declaration, name).
+    async fn parse_ref(&self, reference: &str) -> Result<(String, ResourceDecl, String)> {
+        let (short, name) = reference
+            .split_once(':')
+            .ok_or_else(|| invalid(format!("{reference:?} must be kind:name, e.g. note:plan")))?;
+        let mut found: Vec<(String, ResourceDecl)> = self
+            .resource_domains()
+            .await?
+            .into_iter()
+            .filter(|(_, d)| d.short == short)
+            .collect();
+        match found.len() {
+            1 => {
+                let (ext, d) = found.remove(0);
+                Ok((ext, d, name.to_owned()))
+            }
+            0 => Err(invalid(format!(
+                "unknown resource kind {short}: no enabled extension declares it"
+            ))),
+            _ => Err(invalid(format!(
+                "resource kind {short} is declared by several enabled extensions"
+            ))),
+        }
+    }
+
+    /// Records resource effects in one execution, as OpenAEVC promotion requires.
     pub async fn edit_general(
         &self,
         pack_id: &str,
@@ -37,50 +54,41 @@ impl Project {
         removes: &[String],
     ) -> Result<Value> {
         let mut effects = Vec::new();
-        for (reference, value) in sets {
-            let (kind, name) = parse_ref(reference)?;
-            let short = general::short_kind(kind).expect("known kind");
+        let mut owner: Option<(String, String)> = None;
+        let mut labels = BTreeMap::new();
+        let refs = sets
+            .iter()
+            .map(|(r, v)| (r, Some(v)))
+            .chain(removes.iter().map(|r| (r, None)));
+        for (reference, value) in refs {
+            let (ext, d, name) = self.parse_ref(reference).await?;
+            if owner.as_ref().is_some_and(|(e, _)| *e != ext) {
+                return Err(invalid(
+                    "one edit changes resources of one extension; split it into separate packs",
+                ));
+            }
+            owner.get_or_insert((ext.clone(), d.write_action.clone()));
+            labels.insert((d.kind.clone(), name.clone()), d.short.clone());
             effects.push(EffectProposal {
-                kind: general::set_effect(short).expect("known kind"),
+                kind: if value.is_some() {
+                    d.set.clone()
+                } else {
+                    d.remove.clone()
+                },
                 target: ResourceRef {
-                    kind: kind.into(),
+                    kind: d.kind.clone(),
                     locator: name,
                     version: None,
-                    extension: ID.into(),
+                    extension: ext,
                 },
-                payload: value.clone(),
+                payload: value.cloned().unwrap_or_else(|| json!({})),
                 preconditions: vec![],
                 outputs: vec![],
             });
         }
-        for reference in removes {
-            let (kind, name) = parse_ref(reference)?;
-            let short = general::short_kind(kind).expect("known kind");
-            effects.push(EffectProposal {
-                kind: general::remove_effect(short).expect("known kind"),
-                target: ResourceRef {
-                    kind: kind.into(),
-                    locator: name,
-                    version: None,
-                    extension: ID.into(),
-                },
-                payload: json!({}),
-                preconditions: vec![],
-                outputs: vec![],
-            });
-        }
-        if effects.is_empty() {
+        let Some((extension, write_action)) = owner else {
             return Err(invalid("nothing to change; pass --set or --remove"));
-        }
-        for effect in &effects {
-            general::validate(effect).map_err(|reason| {
-                invalid(format!(
-                    "{}:{}: {reason}",
-                    general::short_kind(&effect.target.kind).unwrap_or("?"),
-                    effect.target.locator
-                ))
-            })?;
-        }
+        };
         let pack = self.pack(pack_id).await?;
         if pack.state != PackState::Open || pack.generation != generation {
             return Err(invalid(format!(
@@ -92,25 +100,15 @@ impl Project {
                 "pack already has effects; OpenAEVC promotes one generation's effects, so edit in a new pack",
             ));
         }
-        let active = self.list_extensions().await?;
-        if !active
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|e| e["id"] == ID && e["active"] == true)
-        {
-            return Err(invalid(format!(
-                "enable {ID} before editing general resources"
-            )));
-        }
+        let (harness, provider) = (format!("{extension}.edit"), format!("{extension}.local"));
         self.client
             .command(Command::RegisterProvider {
                 provider: ProviderDescriptor {
-                    id: PROVIDER.into(),
+                    id: provider.clone(),
                     version: env!("CARGO_PKG_VERSION").into(),
-                    worker_kinds: vec![HARNESS.into()],
-                    harnesses: vec![HARNESS.into()],
-                    required_actions: vec![WRITE_ACTION.into()],
+                    worker_kinds: vec![harness.clone()],
+                    harnesses: vec![harness.clone()],
+                    required_actions: vec![write_action],
                     cancellation: true,
                     resumable: false,
                     heartbeat: false,
@@ -122,19 +120,18 @@ impl Project {
             .await?;
         let work_unit = self
             .client
-            .add_work_unit(pack.id, pack.generation, HARNESS)
+            .add_work_unit(pack.id, pack.generation, &harness)
             .await?;
         let generation = self.pack(pack_id).await?.generation;
         let mut selectors: Vec<ResourceSelector> = effects
             .iter()
-            .map(|effect| ResourceSelector {
-                kind: effect.target.kind.clone(),
-                locator_prefix: Some(effect.target.locator.clone()),
+            .map(|e| ResourceSelector {
+                kind: e.target.kind.clone(),
+                locator_prefix: Some(e.target.locator.clone()),
             })
             .collect();
         selectors.dedup_by(|a, b| a.kind == b.kind && a.locator_prefix == b.locator_prefix);
-        let mut allowed_effects: Vec<String> =
-            effects.iter().map(|effect| effect.kind.clone()).collect();
+        let mut allowed_effects: Vec<String> = effects.iter().map(|e| e.kind.clone()).collect();
         allowed_effects.sort();
         allowed_effects.dedup();
         let (execution, lease) = self
@@ -143,11 +140,11 @@ impl Project {
                 pack: pack.id,
                 expected_generation: generation,
                 work_unit,
-                provider: PROVIDER.into(),
-                harness: HARNESS.into(),
+                provider,
+                harness: harness.clone(),
                 worker: Some(WorkerInfo {
                     id: "local".into(),
-                    kind: HARNESS.into(),
+                    kind: harness,
                     attributes: BTreeMap::new(),
                 }),
                 allowed_resources: selectors,
@@ -164,7 +161,7 @@ impl Project {
         for effect in effects {
             let label = format!(
                 "{}:{}",
-                general::short_kind(&effect.target.kind).unwrap_or("?"),
+                labels[&(effect.target.kind.clone(), effect.target.locator.clone())],
                 effect.target.locator
             );
             match self.client.submit_effect(&lease, effect).await {
@@ -172,7 +169,7 @@ impl Project {
                 outcome => {
                     let reason = match outcome {
                         Err(error) => error.message,
-                        _ => format!("general extension rejected {label}"),
+                        _ => format!("{extension} rejected {label}"),
                     };
                     self.client
                         .command(Command::FailExecution {
@@ -193,9 +190,16 @@ impl Project {
         )
     }
 
-    /// Current general resources: newest promoted effect per resource, in pack order, limited
-    /// to the active Baseline's members when one is active.
+    /// Current resources: newest promoted effect per resource, in pack order, limited to the
+    /// active Baseline's members when one is active. The value is the extension's apply
+    /// outcome (`{"value": …}`); a remove effect clears it.
     pub async fn general_resources(&self) -> Result<Vec<Value>> {
+        let decls: BTreeMap<(String, String), ResourceDecl> = self
+            .resource_domains()
+            .await?
+            .into_iter()
+            .map(|(ext, d)| ((ext, d.kind.clone()), d))
+            .collect();
         let members: Option<Vec<String>> = match self.active_baseline()? {
             Some(id) => Some(
                 self.baseline_typed(&id)
@@ -218,34 +222,26 @@ impl Project {
             if let Some(members) = &members
                 && !members
                     .iter()
-                    .any(|member| Some(member.as_str()) == summary["promoted_digest"].as_str())
+                    .any(|m| Some(m.as_str()) == summary["promoted_digest"].as_str())
             {
                 continue;
             }
             for effect in self.pack(id).await?.candidate_effects {
-                if effect.target.extension != ID {
+                let Some(d) =
+                    decls.get(&(effect.target.extension.clone(), effect.target.kind.clone()))
+                else {
                     continue;
-                }
-                let key = (effect.target.kind.clone(), effect.target.locator.clone());
-                let proposal = EffectProposal {
-                    kind: effect.kind.clone(),
-                    target: effect.target.clone(),
-                    payload: effect.payload.clone(),
-                    preconditions: vec![],
-                    outputs: vec![],
                 };
-                match general::validate(&proposal) {
-                    Ok(Some(value)) => {
-                        state.insert(
-                            key,
-                            json!({"kind":general::short_kind(&effect.target.kind),
-                            "name":effect.target.locator,"value":value,"pack":id}),
-                        );
-                    }
-                    Ok(None) => {
-                        state.remove(&key);
-                    }
-                    Err(_) => {}
+                let key = (effect.target.kind.clone(), effect.target.locator.clone());
+                if effect.kind == d.remove {
+                    state.remove(&key);
+                } else if effect.kind == d.set {
+                    let value = effect
+                        .outcome
+                        .get("value")
+                        .cloned()
+                        .unwrap_or_else(|| effect.payload.clone());
+                    state.insert(key, json!({"kind":d.short,"name":effect.target.locator,"value":value,"pack":id}));
                 }
             }
         }
@@ -253,12 +249,11 @@ impl Project {
     }
 
     pub async fn general_resource(&self, reference: &str) -> Result<Value> {
-        let (kind, name) = parse_ref(reference)?;
-        let short = general::short_kind(kind);
+        let (_, d, name) = self.parse_ref(reference).await?;
         self.general_resources()
             .await?
             .into_iter()
-            .find(|item| item["kind"] == json!(short) && item["name"] == name)
+            .find(|item| item["kind"] == json!(d.short) && item["name"] == name)
             .ok_or_else(|| invalid(format!("{reference} has no accepted value")))
     }
 }

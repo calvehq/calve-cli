@@ -19,12 +19,6 @@ use serde_json::{Value, json};
 
 use crate::{Error, Project, Result, event};
 
-const SOFTWARE_EXTENSION: &str = "org.calve.software";
-const SOFTWARE_RESOURCE: &str = "org.calve.software.file";
-const HARNESS: &str = "org.calve.software.materialize";
-const PROVIDER: &str = "org.calve.software.local";
-const WRITE_ACTION: &str = "org.calve.software.write";
-
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
@@ -36,12 +30,13 @@ impl Project {
     /// Every snapshot digest this Project has recorded for each path, from any pack.
     async fn known_snapshots(&self) -> Result<BTreeMap<String, BTreeSet<String>>> {
         let mut known: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        let d = self.file_domain().await?;
         for summary in self.list_packs().await? {
             let Some(id) = summary["id"].as_str() else {
                 continue;
             };
             for effect in self.pack(id).await?.candidate_effects {
-                if crate::resources::is_file_effect(&effect.kind)
+                if d.is_file_effect(&effect)
                     && let Some(digest) = effect.payload["digest"].as_str()
                 {
                     known
@@ -78,6 +73,7 @@ impl Project {
         let baseline = self.baseline_typed(id_or_alias).await?;
         let members: BTreeSet<String> = baseline.members.iter().map(ToString::to_string).collect();
         let mut state = crate::resources::FileState::default();
+        let d = self.file_domain().await?;
         // list_packs is in creation order; promoted_digest ties packs to Baseline members.
         for summary in self.list_packs().await? {
             let Some(digest) = summary["promoted_digest"].as_str() else {
@@ -97,9 +93,9 @@ impl Project {
                 .await?;
             let id = summary["id"].as_str().unwrap_or_default();
             for effect in self.pack(id).await?.candidate_effects {
-                if crate::resources::is_file_effect(&effect.kind) {
+                if d.is_file_effect(&effect) {
                     crate::validate_locator(&effect.target.locator)?;
-                    state.apply(&effect)?;
+                    state.apply(&d, &effect)?;
                 }
             }
         }
@@ -177,18 +173,19 @@ impl Project {
         desired: &Desired,
         plan: &[Value],
     ) -> Result<Value> {
+        let d = self.file_domain().await?;
         let principal = self.client.session().principal();
         for step in plan.iter().filter(|step| step["action"] != "unchanged") {
             let decision = self
                 .client
                 .query(Query::Authorize {
                     principal,
-                    action: WRITE_ACTION.into(),
+                    action: d.decl.write_action.clone(),
                     resource: Some(ResourceRef {
-                        kind: SOFTWARE_RESOURCE.into(),
+                        kind: d.decl.resource_kind.clone(),
                         locator: step["path"].as_str().unwrap_or_default().into(),
                         version: None,
-                        extension: SOFTWARE_EXTENSION.into(),
+                        extension: d.extension.clone(),
                     }),
                 })
                 .await?;
@@ -216,11 +213,11 @@ impl Project {
         self.client
             .command(Command::RegisterProvider {
                 provider: ProviderDescriptor {
-                    id: PROVIDER.into(),
+                    id: d.provider(),
                     version: env!("CARGO_PKG_VERSION").into(),
-                    worker_kinds: vec![HARNESS.into()],
-                    harnesses: vec![HARNESS.into()],
-                    required_actions: vec![WRITE_ACTION.into()],
+                    worker_kinds: vec![d.materialize_harness()],
+                    harnesses: vec![d.materialize_harness()],
+                    required_actions: vec![d.decl.write_action.clone()],
                     cancellation: true,
                     resumable: false,
                     heartbeat: false,
@@ -230,7 +227,10 @@ impl Project {
                 },
             })
             .await?;
-        let work_unit = self.client.add_work_unit(pack, 1, HARNESS).await?;
+        let work_unit = self
+            .client
+            .add_work_unit(pack, 1, &d.materialize_harness())
+            .await?;
         let generation = self.client.get_change_pack(pack).await?.generation;
         let (execution, lease) = self
             .client
@@ -238,11 +238,11 @@ impl Project {
                 pack,
                 expected_generation: generation,
                 work_unit,
-                provider: PROVIDER.into(),
-                harness: HARNESS.into(),
+                provider: d.provider(),
+                harness: d.materialize_harness(),
                 worker: Some(WorkerInfo {
                     id: "local".into(),
-                    kind: HARNESS.into(),
+                    kind: d.materialize_harness(),
                     attributes: BTreeMap::new(),
                 }),
                 allowed_resources: vec![],
@@ -285,14 +285,14 @@ impl Project {
                     .command(Command::AppendObservation {
                         execution,
                         lease: lease.id,
-                        kind: "org.calve.software.materialized".into(),
+                        kind: format!("{}.materialized", d.extension),
                         payload: Some(observation),
                         blob: None,
                         related_resources: vec![ResourceRef {
-                            kind: SOFTWARE_RESOURCE.into(),
+                            kind: d.decl.resource_kind.clone(),
                             locator: path.into(),
                             version: None,
-                            extension: SOFTWARE_EXTENSION.into(),
+                            extension: d.extension.clone(),
                         }],
                         related_effects: vec![],
                     })
@@ -390,16 +390,15 @@ impl Project {
     ) -> Result<Value> {
         crate::validate_locator(path)?;
         let pack = self.pack(pack_id).await?;
+        let d = self.file_domain().await?;
         let effect = pack
             .candidate_effects
             .iter()
             .rev()
-            .find(|effect| {
-                crate::resources::is_file_effect(&effect.kind) && effect.target.locator == path
-            })
+            .find(|effect| d.is_file_effect(effect) && effect.target.locator == path)
             .ok_or_else(|| invalid(format!("pack {pack_id} does not change {path}")))?;
-        let content = match effect.kind.as_str() {
-            crate::resources::DELETE => None,
+        let content = match d.op(&effect.kind) {
+            Some(crate::domains::FileOp::Delete) => None,
             _ => Some(Self::snapshot_content(effect)?),
         };
         let desired = Desired::from([(path.to_owned(), content)]);

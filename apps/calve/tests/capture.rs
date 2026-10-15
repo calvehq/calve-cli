@@ -23,6 +23,7 @@ fn file_capture_is_an_openaevc_effect() {
         ])
         .env("CALVE_ISOLATED_TEST", "1")
         .env("XDG_DATA_HOME", data.path())
+        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .status()
         .unwrap();
     assert!(status.success());
@@ -33,12 +34,26 @@ async fn file_capture_body() {
     let project = Project::init(temp.path(), Some("Capture fixture"))
         .await
         .unwrap();
-    let extension = Path::new(env!("CARGO_BIN_EXE_calve_ext_software"));
+    // The fixture package from a signed catalog (the real install path).
+    let mut repo = calve_testkit::tuf::Repo::new();
+    repo.add_package("targets", calve_testkit::fixture_package());
+    repo.publish();
+    let root = repo.root_bytes(1);
+    let root_file = temp.path().join("root.json.pin");
+    fs::write(&root_file, &root).unwrap();
+    calve_app::extensions::catalog_add(
+        "test",
+        repo.path().to_str().unwrap(),
+        &root_file,
+        &calve_testkit::tuf::sha(&root),
+    )
+    .unwrap();
+    fs::remove_file(&root_file).unwrap();
     let enabled = project
-        .enable_extension(extension.to_str().unwrap(), &[])
+        .enable_extension("org.example.toy", &[], true)
         .await
         .unwrap();
-    assert_eq!(enabled["id"], "org.calve.software");
+    assert_eq!(enabled["id"], "org.example.toy");
     assert_eq!(project.list_extensions().await.unwrap()[0]["active"], true);
 
     fs::create_dir(temp.path().join("src")).unwrap();
@@ -73,10 +88,7 @@ async fn file_capture_body() {
     assert_eq!(pack.required_policies.len(), 1);
     assert_eq!(pack.candidate_effects.len(), 1);
     assert_eq!(pack.candidate_effects[0].target.locator, "src/example.txt");
-    assert_eq!(
-        pack.candidate_effects[0].kind,
-        "org.calve.software.snapshot"
-    );
+    assert_eq!(pack.candidate_effects[0].kind, "org.example.toy.put");
     assert_eq!(
         pack.candidate_effects[0].payload["digest"],
         captured["digest"]
@@ -95,30 +107,32 @@ async fn file_capture_body() {
             .len(),
         1
     );
-    fs::write(
-        temp.path().join(".calveignore"),
-        "*.tmp\n!keep.tmp\nsrc/cache/\n",
-    )
-    .unwrap();
+    // The fixture's toy rules: `*.ext` and `dir/` lines in `.toyignore` (negation and the full
+    // ignore grammar are the software extension's, tested in calve-extensions).
+    fs::write(temp.path().join(".toyignore"), "*.tmp\ncache/\n").unwrap();
     fs::write(temp.path().join("scratch.tmp"), b"ignore me").unwrap();
-    fs::write(temp.path().join("keep.tmp"), b"keep me").unwrap();
+    fs::write(temp.path().join("keep.txt"), b"keep me").unwrap();
     fs::create_dir(temp.path().join("src/cache")).unwrap();
     fs::write(temp.path().join("src/cache/generated.txt"), b"ignore me").unwrap();
     assert_eq!(
-        project.check_ignore(Path::new("scratch.tmp")).unwrap()["line"],
-        1
+        project
+            .check_ignore(Path::new("scratch.tmp"))
+            .await
+            .unwrap()["rule"],
+        ".toyignore:1"
     );
     assert_eq!(
-        project.check_ignore(Path::new("keep.tmp")).unwrap()["ignored"],
+        project.check_ignore(Path::new("keep.txt")).await.unwrap()["ignored"],
         false
     );
     assert_eq!(
         project
             .check_ignore(Path::new(".calve/project.toml"))
+            .await
             .unwrap()["source"],
         "hard safety"
     );
-    let resources = project.list_resources().unwrap();
+    let resources = project.list_resources().await.unwrap();
     assert!(
         !resources
             .as_array()
@@ -131,7 +145,7 @@ async fn file_capture_body() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| item["path"] == "keep.tmp")
+            .any(|item| item["path"] == "keep.txt")
     );
     assert!(
         resources
@@ -148,7 +162,10 @@ async fn file_capture_body() {
             .any(|item| item["path"].as_str().unwrap().starts_with(".calve/"))
     );
     assert_eq!(
-        project.show_resource(Path::new("src/example.txt")).unwrap()["text"],
+        project
+            .show_resource(Path::new("src/example.txt"))
+            .await
+            .unwrap()["text"],
         "hello, Calve\n"
     );
     assert_eq!(
@@ -204,8 +221,10 @@ async fn file_capture_body() {
         .await
         .unwrap();
     assert_eq!(diff["state"], "modified");
-    assert_eq!(diff["changes"][0]["kind"], "remove");
-    assert_eq!(diff["changes"][1]["kind"], "add");
+    assert_eq!(
+        diff["changes"][0]["lines"],
+        serde_json::json!(["-hello, Calve", "+hello, changed"])
+    );
     assert!(
         project
             .capture_file(&pack_id, pack.generation, Path::new("src/example.txt"))
@@ -249,8 +268,8 @@ async fn file_capture_body() {
         .await
         .unwrap();
     assert_eq!(evaluated["verdict"], "ALLOW");
-    assert_eq!(evaluated["metrics"]["org.calve.software.changed_files"], 2);
-    assert_eq!(evaluated["metrics"]["org.calve.software.changed_bytes"], 25);
+    assert_eq!(evaluated["metrics"]["org.example.toy.changed_files"], 2);
+    assert_eq!(evaluated["metrics"]["org.example.toy.changed_bytes"], 25);
     let warned = project
         .evaluate_change_size(&pack_id, pack.generation, Some(0), Some(0))
         .await
@@ -267,7 +286,7 @@ async fn file_capture_body() {
     assert_eq!(failed["status"], "FAIL");
     assert_eq!(
         failed["findings"][0]["code"],
-        "org.calve.software.digest_mismatch"
+        "org.example.toy.digest_mismatch"
     );
     project.qualify(&pack_id, pack.generation).await.unwrap();
     assert_eq!(

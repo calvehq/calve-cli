@@ -465,6 +465,8 @@ pub enum InstallStep {
     Validated,
     Installed,
     Recorded,
+    /// Retirement: after R0 (marked retiring, before the in-use re-check).
+    Retiring,
 }
 
 pub struct Installer {
@@ -1019,6 +1021,10 @@ impl Installer {
         };
         for e in rd {
             let p = e.map_err(io)?.path();
+            if p.extension().and_then(|s| s.to_str()) == Some("retire") {
+                done.push(self.recover_retire(&p)?);
+                continue;
+            }
             if p.extension().and_then(|s| s.to_str()) != Some("journal") {
                 continue;
             }
@@ -1075,6 +1081,49 @@ impl Installer {
         Ok(done)
     }
 
+    /// Retirement crash reconciliation: before the in-use re-check (R0) the package is restored;
+    /// after it (R1) the deletion completes.
+    fn recover_retire(&self, p: &Path) -> Result<Value> {
+        let opened = Journal::open(p).map_err(io)?;
+        let jid = opened.journal.header["journal_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let b = &opened.journal.header["binding"];
+        let dir = self
+            .paths
+            .extension_dir
+            .join(b["id"].as_str().unwrap_or("_"))
+            .join(b["native"].as_str().unwrap_or("_"));
+        let retiring = self.paths.extension_dir.join(format!(".retiring-{jid}"));
+        let last = opened
+            .records
+            .last()
+            .map(|r| r.kind.clone())
+            .unwrap_or_default();
+        let outcome = match last.as_str() {
+            "R1.rechecked" | "R2.deleted" => {
+                remove_tree(&retiring)?;
+                "retired"
+            }
+            _ => {
+                if retiring.exists() && !dir.exists() {
+                    fs::rename(&retiring, &dir).map_err(io)?;
+                    set_read_only(&dir, true)?;
+                }
+                "restored"
+            }
+        };
+        crate::journal::compact(
+            p,
+            &self.paths.journals().join("history"),
+            outcome,
+            json!({"last": last}),
+        )
+        .map_err(io)?;
+        Ok(json!({"journal": jid, "last_step": last, "outcome": outcome}))
+    }
+
     /// Retirement (R0–R2): an installed version is deleted only when `in_use` says no
     /// namespace has it registered and no non-terminal work references it — checked before
     /// and again after marking it retiring.
@@ -1103,6 +1152,7 @@ impl Installer {
         set_read_only(&dir, false)?;
         fs::rename(&dir, &retiring).map_err(io)?;
         j.append("R0.retiring", json!({})).map_err(io)?;
+        self.crash(InstallStep::Retiring)?;
         if in_use(r) {
             fs::rename(&retiring, &dir).map_err(io)?;
             set_read_only(&dir, true)?;

@@ -10,12 +10,8 @@ use calve_app::compatibility::{OPENAEVC_REVISION, OPENAEVC_TAG};
 
 const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
        cargo run --bin xtask -- check-isolation
-       cargo run --bin xtask -- catalog-keygen <seed-file>
-       cargo run --bin xtask -- catalog-publish <catalog-dir> <seed-file>... [--threshold N] [--days D]
-         (signs <catalog-dir>/targets.body.json into targets/snapshot/timestamp, creating root.json)
-       cargo run --bin xtask -- catalog-rotate <catalog-dir> --old <seed-file>... --new <seed-file>... [--threshold N]
        cargo run --bin xtask -- cli-reference [--check]
-       cargo run --bin xtask -- dist [--target <triple>] [--catalog-seed <seed-file>]
+       cargo run --bin xtask -- dist [--target <triple>]
        cargo run --bin xtask -- sbom <output.json>";
 
 fn main() {
@@ -25,9 +21,6 @@ fn main() {
             check().map(|()| println!("architecture check passed"))
         }
         Some("check-isolation") if args.len() == 1 => check_isolation(),
-        Some("catalog-keygen") if args.len() == 2 => keygen(Path::new(&args[1])),
-        Some("catalog-publish") if args.len() >= 3 => publish(&args[1..]),
-        Some("catalog-rotate") if args.len() >= 5 => rotate(&args[1..]),
         Some("dist") => dist(&args[1..]),
         Some("sbom") if args.len() == 2 => sbom(Path::new(&args[1])),
         Some("cli-reference") if args.len() <= 2 => {
@@ -146,12 +139,10 @@ fn archive(
 /// snapshot when a seed is given, the SBOM and SHA256SUMS (PLAN §51).
 fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mut target: Option<String> = None;
-    let mut seed: Option<String> = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--target" => target = iter.next().cloned(),
-            "--catalog-seed" => seed = iter.next().cloned(),
             other => return Err(format!("unknown dist argument {other}").into()),
         }
     }
@@ -215,61 +206,8 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         &epoch,
     )?];
 
-    // First-party extensions ship separately with a signed catalog snapshot (§51.3).
-    let staging = dist.join(format!(".catalog-{triple}"));
-    let _ = fs::remove_dir_all(&staging);
-    fs::create_dir_all(&staging)?;
-    let mut packages = Vec::new();
-    for entry in fs::read_dir(&bin_dir)?.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let is_binary = if exe.is_empty() {
-            !name.contains('.')
-        } else {
-            name.ends_with(".exe")
-        };
-        if !name.starts_with("calve_ext_") || !is_binary {
-            continue;
-        }
-        let bytes = fs::read(entry.path())?;
-        fs::write(staging.join(&name), &bytes)?;
-        let key = name
-            .trim_end_matches(".exe")
-            .trim_start_matches("calve_ext_")
-            .replace('_', "-");
-        packages.push(serde_json::json!({
-            "id": format!("org.calve.{key}"),
-            "version": version,
-            "artifact": name,
-            "digest": openaevc::crypto::sha256(&bytes),
-            "summary": format!("First-party {key} extension"),
-        }));
-    }
-    packages.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
-    fs::write(
-        staging.join("targets.body.json"),
-        serde_json::to_vec_pretty(&serde_json::json!({
-            "name": "first-party", "version": 0, "expires": 0, "packages": packages,
-        }))?,
-    )?;
-    if let Some(seed) = seed {
-        let seed = read_seed(Path::new(&seed))?;
-        let result = calve_app::extensions::publish_catalog(&staging, &[seed], 1, 365)?;
-        println!(
-            "first-party catalog root digest: {}",
-            result["root_digest"].as_str().unwrap_or("")
-        );
-    }
-    let catalog_files: Vec<(PathBuf, String)> = fs::read_dir(&staging)?
-        .flatten()
-        .map(|e| (e.path(), e.file_name().to_string_lossy().into_owned()))
-        .collect();
-    outputs.push(archive(
-        &dist,
-        &format!("calve-extensions-{version}-{triple}"),
-        &catalog_files,
-        &epoch,
-    )?);
-    fs::remove_dir_all(&staging)?;
+    // Extensions ship from calve-extensions through the signed TUF catalog (plan §4); the core
+    // archive carries no extension binaries.
 
     let sbom_path = dist.join(format!("calve-{version}.cdx.json"));
     sbom(&sbom_path)?;
@@ -374,99 +312,8 @@ fn cli_reference(check: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Writes a new private seed (hex, mode 0600) and prints the public key to pin with
-/// `calve extension catalog-trust --key`.
-fn keygen(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::Write;
-    let key = openaevc::crypto::SigningKey::generate();
-    let seed: String = key
-        .seed()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    options.open(path)?.write_all(seed.as_bytes())?;
-    let public = calve_app::extensions::public_key(&read_seed(path)?);
-    println!("{public}");
-    Ok(())
-}
-
-fn read_seed(path: &Path) -> Result<[u8; 32], Box<dyn std::error::Error>> {
-    let text = fs::read_to_string(path)?;
-    let text = text.trim();
-    if text.len() != 64 {
-        return Err(format!("{} must hold a 32-byte hex seed", path.display()).into());
-    }
-    let mut seed = [0u8; 32];
-    for (index, byte) in seed.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&text[index * 2..index * 2 + 2], 16)?;
-    }
-    Ok(seed)
-}
-
-/// Splits `[dir, seeds..., --threshold N, --days D]`.
-fn options(args: &[String]) -> (Vec<String>, usize, u64) {
-    let mut positional = Vec::new();
-    let (mut threshold, mut days) = (0usize, 365u64);
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        match arg.as_str() {
-            "--threshold" => threshold = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0),
-            "--days" => days = iter.next().and_then(|v| v.parse().ok()).unwrap_or(365),
-            other => positional.push(other.to_owned()),
-        }
-    }
-    (positional, threshold, days)
-}
-
-fn publish(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let (positional, threshold, days) = options(args);
-    let seeds = positional[1..]
-        .iter()
-        .map(|p| read_seed(Path::new(p)))
-        .collect::<Result<Vec<_>, _>>()?;
-    let threshold = if threshold == 0 {
-        seeds.len()
-    } else {
-        threshold
-    };
-    let result =
-        calve_app::extensions::publish_catalog(Path::new(&positional[0]), &seeds, threshold, days)?;
-    println!("{}", serde_json::to_string_pretty(&result)?);
-    Ok(())
-}
-
-fn rotate(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let (positional, threshold, days) = options(args);
-    let dir = Path::new(&positional[0]);
-    let split = positional
-        .iter()
-        .position(|a| a == "--new")
-        .ok_or("missing --new")?;
-    let old = positional[1..split]
-        .iter()
-        .filter(|a| *a != "--old")
-        .map(|p| read_seed(Path::new(p)))
-        .collect::<Result<Vec<_>, _>>()?;
-    let new = positional[split + 1..]
-        .iter()
-        .map(|p| read_seed(Path::new(p)))
-        .collect::<Result<Vec<_>, _>>()?;
-    let threshold = if threshold == 0 { new.len() } else { threshold };
-    let result = calve_app::extensions::rotate_root(dir, &old, &new, threshold, days)?;
-    println!("{}", serde_json::to_string_pretty(&result)?);
-    Ok(())
-}
-
 /// Allowed internal dependency edges (PLAN §10). Anything else fails CI.
 const ALLOWED: &[(&str, &[&str])] = &[
-    ("calve-domain", &[]),
     ("calve-integration-contract", &[]),
     ("calve-api", &[]),
     ("calve-ipc", &["calve-api"]),
@@ -474,7 +321,6 @@ const ALLOWED: &[(&str, &[&str])] = &[
         "calve-app",
         &[
             "calve-api",
-            "calve-domain",
             "calve-integration-contract",
             "calve-testkit",
             "calve-win-sec",
@@ -493,7 +339,6 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "calve-app",
             "calve-client",
             "calve-console",
-            "calve-domain",
             "calve-integration-contract",
             "calve-ipc",
             "calve-testkit",
@@ -592,47 +437,54 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
             scan_openaevc_modules(name, &root.join(&member).join("src"))?;
         }
     }
-    check_extensions(&root.join("extensions"))?;
-    scan_openaevc_modules("extensions", &root.join("extensions"))?;
+    for dir in ["crates", "apps"] {
+        scan_domain_literals(&root.join(dir))?;
+    }
     scan_sources(&root.join("apps/calved"))?;
     Ok(())
 }
 
-/// Extension sources may use only calve-domain and OpenAEVC contract crates.
-fn check_extensions(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    for entry in fs::read_dir(path)? {
+/// First-party domain identifiers: their semantics live in calve-extensions (INV-022), so
+/// calve-cli sources name none of them (testkit fixtures use `org.example.*`).
+const DOMAIN_LITERALS: &[&str] = &[
+    "calve_domain",
+    "org.calve.software",
+    "org.calve.general",
+    "org.calve.rust",
+    "org.calve.go",
+    "org.calve.python",
+    "org.calve.javascript-typescript",
+    "org.calve.java",
+    "org.calve.c-cpp",
+    "org.calve.shell",
+    "org.calve.hcl",
+];
+
+/// Plan §4.1: no `calve_domain` and no first-party domain literal in any calve-cli source
+/// (`src/` and `tests/` alike; guests and evidence excluded).
+fn scan_domain_literals(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(dir)? {
         let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
         if path.is_dir() {
-            check_extensions(&path)?;
+            if name != "target" && name != "guests" && name != "fixtures" {
+                scan_domain_literals(&path)?;
+            }
             continue;
         }
         if path.extension().and_then(|s| s.to_str()) != Some("rs") {
             continue;
         }
-        let source = fs::read_to_string(&path)?;
-        for token in source.split(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == ':')) {
-            let Some(krate) = token.split("::").next().filter(|_| token.contains("::")) else {
-                continue;
-            };
-            let allowed = matches!(
-                krate,
-                "calve_domain"
-                    | "openaevc"
-                    | "serde_json"
-                    | "std"
-                    | "crate"
-                    | "self"
-                    | "super"
-                    | "core"
-            ) || krate.chars().next().is_some_and(char::is_uppercase)
-                || !krate.starts_with("calve") && !krate.starts_with("openaevc");
-            if !allowed {
-                return Err(format!(
-                    "{} uses {krate}; extensions may not link Calve internals",
-                    path.display()
-                )
-                .into());
-            }
+        let text = fs::read_to_string(&path)?;
+        if let Some(lit) = DOMAIN_LITERALS.iter().find(|l| text.contains(*l)) {
+            return Err(format!(
+                "{} names {lit}; domain semantics live in calve-extensions (INV-022)",
+                path.display()
+            )
+            .into());
         }
     }
     Ok(())
@@ -843,5 +695,24 @@ mod tests {
         assert!(scan_verifier_use(d.path()).is_ok());
         fs::write(ok.join("install.rs"), "use sigstore_tuf::TargetFile;").unwrap();
         assert!(scan_verifier_use(d.path()).is_err());
+    }
+
+    /// Negative fixture for INV-022: a domain literal anywhere in a calve-cli source fails.
+    #[test]
+    fn domain_literals_are_rejected() {
+        let d = tempfile::tempdir().unwrap();
+        fs::create_dir_all(d.path().join("src")).unwrap();
+        fs::write(
+            d.path().join("src/ok.rs"),
+            "const X: &str = \"org.example.toy\";",
+        )
+        .unwrap();
+        assert!(scan_domain_literals(d.path()).is_ok());
+        fs::write(
+            d.path().join("src/bad.rs"),
+            "const X: &str = \"org.calve.software.file\";",
+        )
+        .unwrap();
+        assert!(scan_domain_literals(d.path()).is_err());
     }
 }

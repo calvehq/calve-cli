@@ -514,6 +514,13 @@ impl Driver for SandboxDriver {
 
 /// The Calve executable that serves `__cic-sandbox` (the running binary: `calve` or `calved`).
 pub fn sandbox_program() -> Result<PathBuf, HostError> {
+    // Debug builds only: in-process library tests run inside a test binary that has no sandbox
+    // mode, so they point at a built `calve`. Release binaries never read the variable.
+    if cfg!(debug_assertions)
+        && let Some(p) = std::env::var_os("CALVE_SANDBOX_PROGRAM")
+    {
+        return Ok(PathBuf::from(p));
+    }
     std::env::current_exe().map_err(|e| HostError::Internal(format!("current_exe: {e}")))
 }
 

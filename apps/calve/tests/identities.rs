@@ -4,11 +4,11 @@ use calve_testkit::Env;
 /// reviewer's grant limits what it can do.
 #[test]
 fn reviewer_identity_and_self_review_rule() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
-    env.ok(&["--project", p, "extension", "enable"]);
+    env.enable_toy(std::path::Path::new(p));
     let reviewer = env.ok(&["--project", p, "authority", "identity-add", "reviewer"]);
     assert!(reviewer["principal"].as_str().unwrap().starts_with("pri_"));
     assert_eq!(

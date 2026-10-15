@@ -3,7 +3,7 @@
 # Baseline. Proves Calve is not a source-code-only product.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable org.calve.general >/dev/null
+enable org.calve.general
 intent=$(calve intent create "Launch plan" --description "Agree the launch checklist" | get '["id"]')
 task=$(calve task create "$intent" "Draft the checklist" --assignee alex | get '["id"]')
 

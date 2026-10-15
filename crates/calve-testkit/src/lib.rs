@@ -15,6 +15,8 @@ use serde_json::Value;
 pub struct Env {
     pub temp: tempfile::TempDir,
     pub calve: PathBuf,
+    /// The signed fixture catalog trusted by [`Env::trust_fixture`].
+    pub catalog: Option<tuf::Repo>,
 }
 
 pub struct Run {
@@ -29,7 +31,37 @@ impl Env {
         Self {
             temp: tempfile::tempdir().expect("temp dir"),
             calve: PathBuf::from(calve),
+            catalog: None,
         }
+    }
+
+    /// Publishes the fixture catalog (package `org.example.toy`: `calve-fixture-ext` + the
+    /// fixture CIC guest + its signed metadata, listed in `index.json`) and trusts it as `test`
+    /// through the real CLI (root pinned by SHA-256).
+    pub fn trust_fixture(&mut self) -> Value {
+        let cat = ToyCatalog::new();
+        let out = self.ok(&cat
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>());
+        self.catalog = Some(cat.repo);
+        out
+    }
+
+    /// Trusts the fixture catalog (once) and enables `org.example.toy` in `project`.
+    pub fn enable_toy(&mut self, project: &Path) -> Value {
+        if self.catalog.is_none() {
+            self.trust_fixture();
+        }
+        self.ok(&[
+            "--project",
+            project.to_str().expect("utf-8"),
+            "extension",
+            "enable",
+            "org.example.toy",
+            "--acknowledge-native",
+        ])
     }
 
     pub fn path(&self) -> &Path {
@@ -119,4 +151,80 @@ pub fn fixture_ext() -> PathBuf {
                 .join(format!("calve-fixture-ext{}", std::env::consts::EXE_SUFFIX))
         })
         .clone()
+}
+
+/// The fixture package: native fixture, fixture guest, fixture metadata.
+pub fn fixture_package() -> tuf::Package<'static> {
+    tuf::Package {
+        id: "org.example.toy",
+        version: "0.1.0",
+        kind: "cic-capable",
+        native: (
+            "calve-fixture-ext",
+            fs::read(fixture_ext()).expect("fixture ext"),
+        ),
+        cic: Some(cic::guest("fixture")),
+        metadata: Some(
+            fs::read(cic::fixtures().join("fixture-metadata.json")).expect("fixture metadata"),
+        ),
+    }
+}
+
+/// A published fixture catalog for tests with their own CLI runner: run [`ToyCatalog::add_args`]
+/// once, then enable with [`ENABLE_TOY`] (`--project <p>` first).
+pub struct ToyCatalog {
+    pub repo: tuf::Repo,
+    root_file: PathBuf,
+    digest: String,
+}
+
+/// `extension enable org.example.toy --acknowledge-native`.
+pub const ENABLE_TOY: [&str; 4] = [
+    "extension",
+    "enable",
+    "org.example.toy",
+    "--acknowledge-native",
+];
+
+impl Default for ToyCatalog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToyCatalog {
+    pub fn new() -> Self {
+        let mut r = tuf::Repo::new();
+        r.add_package("targets", fixture_package());
+        r.targets.insert(
+            "index.json".into(),
+            br#"{"schema":"calve.index/1","ids":["org.example.toy"]}"#.to_vec(),
+        );
+        r.publish();
+        let root = r.root_bytes(1);
+        let root_file = r.path().join("pinned-root.json");
+        fs::write(&root_file, &root).expect("root");
+        ToyCatalog {
+            digest: tuf::sha(&root),
+            root_file,
+            repo: r,
+        }
+    }
+
+    /// `extension catalog add test <dir> --root <file> --root-digest <sha256>`.
+    pub fn add_args(&self) -> Vec<String> {
+        [
+            "extension",
+            "catalog",
+            "add",
+            "test",
+            self.repo.path().to_str().expect("utf-8"),
+            "--root",
+            self.root_file.to_str().expect("utf-8"),
+            "--root-digest",
+            &self.digest,
+        ]
+        .map(String::from)
+        .to_vec()
+    }
 }

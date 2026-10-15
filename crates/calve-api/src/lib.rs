@@ -935,35 +935,76 @@ pub enum RevisionCommand {
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
+pub enum CatalogCommand {
+    /// Trust a signed TUF catalog; its root is pinned by SHA-256 (obtained out of band).
+    Add {
+        name: String,
+        /// `https://…` base URL, or a local directory with `metadata/` and `targets/`.
+        url: String,
+        /// The catalog's initial root.json, from the publisher.
+        #[arg(long)]
+        root: PathBuf,
+        /// SHA-256 of that root.json, from the publisher (the repository identity).
+        #[arg(long)]
+        root_digest: String,
+    },
+    /// Trusted catalogs with their state (fresh, stale, expired, recovery required).
+    List,
+    /// Refresh one catalog or all of them.
+    Refresh { name: Option<String> },
+    /// Audited privileged reset to a new pinned root (never automatic).
+    Reset {
+        name: String,
+        #[arg(long)]
+        root: PathBuf,
+        #[arg(long)]
+        root_digest: String,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        i_understand_rollback_risk: bool,
+    },
+    /// Stop trusting a catalog (installed packages stay).
+    Remove { name: String },
+}
+
+#[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
 pub enum ExtensionCommand {
-    /// Extensions registered in this Project; `--installed` lists the package cache instead.
+    /// Extensions registered in this Project; `--installed` lists installed packages instead.
     List {
         #[arg(long)]
         installed: bool,
     },
-    /// List bundled and trusted catalogs.
-    Catalogs,
-    /// Trust a signed catalog directory by pinning its keys.
-    CatalogTrust {
-        name: String,
-        location: PathBuf,
-        /// SHA-256 digest of the catalog's root.json, obtained out of band from the publisher.
-        /// Optional for `first-party` in release builds, which embed the digest.
-        #[arg(long)]
-        root_digest: Option<String>,
+    /// Signed extension catalogs.
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommand,
     },
-
-    /// Stop trusting a catalog.
-    CatalogUntrust { name: String },
     /// Search trusted catalogs.
     Search { query: Option<String> },
     /// Show an enabled extension and its manifest.
     Info { id: String },
-    /// Install a package into the shared cache.
+    /// Install a package from a trusted catalog (verified, immutable, content-addressed).
     Install {
         id: String,
         #[arg(long)]
         version: Option<String>,
+        /// Catalog to install from (required when several offer the id).
+        #[arg(long)]
+        catalog: Option<String>,
+        /// Acknowledge that the package runs native code with your user permissions.
+        #[arg(long)]
+        acknowledge_native: bool,
+    },
+    /// Move an id's pinned publisher to another catalog (audited).
+    SwitchPublisher {
+        id: String,
+        #[arg(long)]
+        catalog: String,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        acknowledge_native: bool,
     },
     /// Install and switch to the newest version (widening needs --grant).
     Update {
@@ -971,20 +1012,23 @@ pub enum ExtensionCommand {
         /// Accept a newly requested host capability (repeatable).
         #[arg(long = "grant")]
         grants: Vec<String>,
+        #[arg(long)]
+        acknowledge_native: bool,
     },
-    /// Remove a package that no Project uses.
+    /// Remove installed versions that no Project uses.
     Uninstall {
         id: String,
         #[arg(long)]
         version: Option<String>,
     },
-    /// Enable by extension id (cache or catalog) or local artifact path; defaults to the
-    /// bundled software extension.
-    #[command(name = "enable", alias = "enable-local")]
-    EnableLocal {
-        spec: Option<String>,
+    /// Enable an installed (or installable) extension in this Project.
+    Enable {
+        id: String,
         #[arg(long = "grant")]
         grants: Vec<String>,
+        /// Acknowledge that the package runs native code with your user permissions.
+        #[arg(long)]
+        acknowledge_native: bool,
     },
     /// Unregister an extension from this Project.
     Disable { id: String },
@@ -1233,7 +1277,9 @@ impl Action {
             },
             Self::Extension { command } => match command {
                 ExtensionCommand::List { .. }
-                | ExtensionCommand::Catalogs
+                | ExtensionCommand::Catalog {
+                    command: CatalogCommand::List,
+                }
                 | ExtensionCommand::Search { .. }
                 | ExtensionCommand::Info { .. }
                 | ExtensionCommand::Permissions { .. }

@@ -34,7 +34,19 @@ fn baseline_materialization_protects_uncaptured_work() {
     let root = data.join("project");
     let p = root.to_str().unwrap();
     ok(data, &["init", p]);
-    ok(data, &["--project", p, "extension", "enable"]);
+    let catalog = calve_testkit::ToyCatalog::new();
+    ok(
+        data,
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    ok(
+        data,
+        &[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat(),
+    );
     let promote = |files: &[(&str, &str)]| -> String {
         for (path, content) in files {
             if let Some(parent) = Path::new(path).parent() {

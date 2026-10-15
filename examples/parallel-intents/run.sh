@@ -3,7 +3,7 @@
 # with separate provenance.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable >/dev/null
+enable "$FILES_EXT"
 a=$(calve intent create "Intent A" | get '["id"]')
 d=$(calve intent create "Intent D" | get '["id"]')
 ta=$(calve task create "$a" "Task A" | get '["id"]')

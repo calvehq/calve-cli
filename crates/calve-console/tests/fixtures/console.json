@@ -344,13 +344,13 @@
     {
      "active": true,
      "healthy": true,
-     "id": "org.calve.rust",
+     "id": "org.langs.rust",
      "problem": null
     },
     {
      "active": true,
      "healthy": true,
-     "id": "org.calve.software",
+     "id": "org.examples.files",
      "problem": null
     }
    ],
@@ -765,7 +765,7 @@
     "body": {
      "digest": "sha256:ea616acc475fc8f82c9b70b11feb3ff9be1523f2acff5698409685d95c9f77df",
      "execution": "exe_agqo6fccnv6bvivuqz2zkohuja",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fcfszyyvnzzpt4uc3ewam"
     },
     "detail": null,
@@ -812,14 +812,14 @@
      "effect": "eff_agqo6fcd2fzjfbi4znmcdwt6em",
      "execution": "exe_agqo6fccnv6bvivuqz2zkohuja",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
       "size": 6
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "rules.txt"
      }
     },
@@ -937,7 +937,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "generation": 2,
-     "kind": "org.calve.software.capture",
+     "kind": "org.examples.files.capture",
      "pack": "cpk_agqo6fb73fzondjarz75ayzoee",
      "work_unit": "wku_agqo6fccfb2crbjp5tnd4es7ci"
     },
@@ -960,7 +960,7 @@
    {
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
-     "provider": "org.calve.software.local",
+     "provider": "org.examples.files.local",
      "version": "0.1.0"
     },
     "detail": null,
@@ -971,11 +971,11 @@
     "source": "openaevc",
     "source_event_id": "evt_agqo6fcbxj7vffk3vebw4gpi6i",
     "source_sequence": 61,
-    "subject": "org.calve.software.local",
+    "subject": "org.examples.files.local",
     "subjects": [
-     "org.calve.software.local"
+     "org.examples.files.local"
     ],
-    "summary": "provider.registered org.calve.software.local",
+    "summary": "provider.registered org.examples.files.local",
     "timestamp": "2026-09-29T21:31:17.304835009Z"
    },
    {
@@ -1169,7 +1169,7 @@
     "body": {
      "digest": "sha256:015f08bb3ae8353482f568231108e6cc09028fa44caa4042f375d92caea76e69",
      "execution": "exe_agqo6fbxcvzltj27p6kedzsxt4",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fbzzbyuthibxn4djjgrfa"
     },
     "detail": null,
@@ -1216,14 +1216,14 @@
      "effect": "eff_agqo6fbyo54yzpio2s7jmxjdly",
      "execution": "exe_agqo6fbxcvzltj27p6kedzsxt4",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:4ba3712cbca635d0f64417b0a65a75484b04f0506107f8ccc01e798d6e4b540a",
       "size": 13
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "crates/runner/daemon.rs"
      }
     },
@@ -1341,7 +1341,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "generation": 2,
-     "kind": "org.calve.software.capture",
+     "kind": "org.examples.files.capture",
      "pack": "cpk_agqo6fbvdb5u7a6hyljusoarca",
      "work_unit": "wku_agqo6fbw4r6x3jrnnioxkryvwm"
     },
@@ -1364,7 +1364,7 @@
    {
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
-     "provider": "org.calve.software.local",
+     "provider": "org.examples.files.local",
      "version": "0.1.0"
     },
     "detail": null,
@@ -1375,11 +1375,11 @@
     "source": "openaevc",
     "source_event_id": "evt_agqo6fbws53hrih75y7gx5wrai",
     "source_sequence": 47,
-    "subject": "org.calve.software.local",
+    "subject": "org.examples.files.local",
     "subjects": [
-     "org.calve.software.local"
+     "org.examples.files.local"
     ],
-    "summary": "provider.registered org.calve.software.local",
+    "summary": "provider.registered org.examples.files.local",
     "timestamp": "2026-09-29T21:31:14.455076488Z"
    },
    {
@@ -1465,7 +1465,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "evaluation": "sha256:64023dfcdfa6c9240f002427b7fa6f8842ead946004eede770457b5eb95d4c9b",
-     "evaluator": "org.calve.software.change-size",
+     "evaluator": "org.examples.files.change-size",
      "generation": 2,
      "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
      "verdict": "ALLOW"
@@ -1493,7 +1493,7 @@
      "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
      "status": "PASS",
      "verification": "sha256:485e136aac4b54ca5f0049f7eb7150ce3752b7f0ddce739a714b61ca600eff4b",
-     "verifier": "org.calve.software.snapshot.verify"
+     "verifier": "org.examples.files.snapshot.verify"
     },
     "detail": null,
     "id": "openaevc:evt_agqo6fbrmn5hrpsna3bapms3vu",
@@ -1620,7 +1620,7 @@
     "body": {
      "digest": "sha256:61a3c7c5edabd6d2fb1ccf42822618d1809d2f4c547250db722a67d24ce65cb8",
      "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fbmv57blojjq6pcrprm44"
     },
     "detail": null,
@@ -1667,14 +1667,14 @@
      "effect": "eff_agqo6fbllz5mxaipkjucm634sy",
      "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:509ac010d045fbcd4976d2d5142991fd300fb10f027a50fb40e153f6cd60fc3e",
       "size": 10
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "crates/runner/mod.rs"
      }
     },
@@ -1700,7 +1700,7 @@
     "body": {
      "digest": "sha256:38122ac5efce6e951ee3a58fa605c5176d029203e1cb54f06ab804b2a247dd72",
      "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fbkgrzjjhb4bayl5bxdb4"
     },
     "detail": null,
@@ -1747,14 +1747,14 @@
      "effect": "eff_agqo6fbi3f7ehc57xsrbwey5ze",
      "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:c717a071a04133d2f44bca3f27f9d3f25e57f3a938315d2fea2396edecb3954f",
       "size": 119
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "crates/runner/http.rs"
      }
     },
@@ -1872,7 +1872,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "generation": 2,
-     "kind": "org.calve.software.capture",
+     "kind": "org.examples.files.capture",
      "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
      "work_unit": "wku_agqo6fbhbvzqxpvu6mgst45ts4"
     },
@@ -1895,7 +1895,7 @@
    {
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
-     "provider": "org.calve.software.local",
+     "provider": "org.examples.files.local",
      "version": "0.1.0"
     },
     "detail": null,
@@ -1906,11 +1906,11 @@
     "source": "openaevc",
     "source_event_id": "evt_agqo6fbgnb47pli3jr6n7pvmya",
     "source_sequence": 28,
-    "subject": "org.calve.software.local",
+    "subject": "org.examples.files.local",
     "subjects": [
-     "org.calve.software.local"
+     "org.examples.files.local"
     ],
-    "summary": "provider.registered org.calve.software.local",
+    "summary": "provider.registered org.examples.files.local",
     "timestamp": "2026-09-29T21:31:10.311065051Z"
    },
    {
@@ -1978,7 +1978,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "mandatory": false,
-     "name": "org.calve.software.snapshot-required",
+     "name": "org.examples.files.snapshot-required",
      "policy": "sha256:4da2135a532abad341559be50cc0991b5fd083c847ce6ae85b2dad5236c56a13"
     },
     "detail": null,
@@ -2272,7 +2272,7 @@
     "body": {
      "digest": "sha256:17b6536808e70c9ae5f73bf9efcfd52fe5fabe0d7f1470dd51d3520de66a63d4",
      "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fazeb645mpl5d2e3uxcta"
     },
     "detail": null,
@@ -2319,14 +2319,14 @@
      "effect": "eff_agqo6faxsz5fhadqgjqckct4ua",
      "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:cedb60dfefb0ead1fa5a3ccb3c68e0ceaf4bb3415df80c79863092f362bd5ab9",
       "size": 15
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "schemas/protocol.json"
      }
     },
@@ -2352,7 +2352,7 @@
     "body": {
      "digest": "sha256:dd99796b82a5fb23c27ce4a304b12f1508e73ee2b25498e82e32bf625558f492",
      "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
-     "kind": "org.calve.software.captured",
+     "kind": "org.examples.files.captured",
      "observation": "obs_agqo6fawon5mvik2kr5igel3ca"
     },
     "detail": null,
@@ -2399,14 +2399,14 @@
      "effect": "eff_agqo6fau6b7qndpso7jafitbxy",
      "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
      "generation": 2,
-     "kind": "org.calve.software.snapshot",
+     "kind": "org.examples.files.snapshot",
      "outcome": {
       "digest": "sha256:121df2e76f5c7c8090cfbe3370435375351c94ae92e078eb2fe7704efd2f050b",
       "size": 54
      },
      "target": {
-      "extension": "org.calve.software",
-      "kind": "org.calve.software.file",
+      "extension": "org.examples.files",
+      "kind": "org.examples.files.file",
       "locator": "crates/runner/http.rs"
      }
     },
@@ -2524,7 +2524,7 @@
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
      "generation": 2,
-     "kind": "org.calve.software.capture",
+     "kind": "org.examples.files.capture",
      "pack": "cpk_agqo6faqffyifk64xyscuttedq",
      "work_unit": "wku_agqo6fatab6uhivubju434vpj4"
     },
@@ -2547,7 +2547,7 @@
    {
     "actor": "pri_agqo6e7aivznrhfxtdboetqnv4",
     "body": {
-     "provider": "org.calve.software.local",
+     "provider": "org.examples.files.local",
      "version": "0.1.0"
     },
     "detail": null,
@@ -2558,11 +2558,11 @@
     "source": "openaevc",
     "source_event_id": "evt_agqo6fasqfzy3axkgef5p43qw4",
     "source_sequence": 6,
-    "subject": "org.calve.software.local",
+    "subject": "org.examples.files.local",
     "subjects": [
-     "org.calve.software.local"
+     "org.examples.files.local"
     ],
-    "summary": "provider.registered org.calve.software.local",
+    "summary": "provider.registered org.examples.files.local",
     "timestamp": "2026-09-29T21:31:05.217223796Z"
    },
    {
@@ -2867,7 +2867,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:dc2e1e9785158253ee71c84ec367377bbd6b00be4244e0ea6a92ca916f4108bd",
-     "id": "org.calve.rust",
+     "id": "org.langs.rust",
      "installed": true,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2875,7 +2875,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:7cfca64f8aa01dc014cdb6490849b878b629dcfda29289b0adc824e04cc38b3a",
-     "id": "org.calve.general",
+     "id": "org.examples.misc",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2883,7 +2883,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:ad3de42b4a3a63602c1b07b8ba2134ae5fc081035da5fb87fe96950adbeece70",
-     "id": "org.calve.javascript-typescript",
+     "id": "org.langs.javascript-typescript",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2891,7 +2891,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:ce8b32b8cbed301af004947282a1831fcdbff4bfb050a550104c3034564592b5",
-     "id": "org.calve.python",
+     "id": "org.langs.python",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2899,7 +2899,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:c1e50ad322aa69c2e32efe6d51fb68a0312b465bfc2483abb29c764225c37210",
-     "id": "org.calve.software",
+     "id": "org.examples.files",
      "installed": true,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2907,7 +2907,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:b4815aabcdda9244c0413aa602b1e3317bbd3ab62be060928955e21a465ec91e",
-     "id": "org.calve.shell",
+     "id": "org.langs.shell",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2915,7 +2915,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:e7f395251603226f784929739262b0b4ec9815f3ae4c192a503a3a6c846a38fd",
-     "id": "org.calve.hcl",
+     "id": "org.langs.hcl",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2923,7 +2923,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:25b20ff9637fbcd8b76adc8a33d5ca78c543596479043b7c5c2a5b5343f6bbea",
-     "id": "org.calve.java",
+     "id": "org.langs.java",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2931,7 +2931,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:e776fde991972836aefacff70b0d15d00ef83ab3e796851de1b5692790be1993",
-     "id": "org.calve.c-cpp",
+     "id": "org.langs.c-cpp",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2939,7 +2939,7 @@
     {
      "catalog": "bundled",
      "digest": "sha256:967fb3c8a76e25d185121e3a4bd6db6533c175ef8dec0c2fc3441da50c4860a5",
-     "id": "org.calve.go",
+     "id": "org.langs.go",
      "installed": false,
      "summary": "Bundled with Calve",
      "version": "0.1.0"
@@ -2951,13 +2951,13 @@
    {
     "active": true,
     "healthy": true,
-    "id": "org.calve.rust",
+    "id": "org.langs.rust",
     "problem": null
    },
    {
     "active": true,
     "healthy": true,
-    "id": "org.calve.software",
+    "id": "org.examples.files",
     "problem": null
    }
   ],
@@ -2965,7 +2965,7 @@
    {
     "active": true,
     "granted_host_capabilities": [],
-    "id": "org.calve.rust",
+    "id": "org.langs.rust",
     "manifest": "sha256:565497be295de65dcb11fce98057cc239d927ed956ccd366f2a1c884b5ca29c7",
     "unsupported_host_capabilities": [],
     "version": "0.1.0"
@@ -2973,7 +2973,7 @@
    {
     "active": true,
     "granted_host_capabilities": [],
-    "id": "org.calve.software",
+    "id": "org.examples.files",
     "manifest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
     "unsupported_host_capabilities": [],
     "version": "0.1.0"
@@ -3387,14 +3387,14 @@
       "effect": "eff_agqo6fcd2fzjfbi4znmcdwt6em",
       "execution": "exe_agqo6fccnv6bvivuqz2zkohuja",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
        "size": 6
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "rules.txt"
       }
      },
@@ -3527,14 +3527,14 @@
       "effect": "eff_agqo6faxsz5fhadqgjqckct4ua",
       "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:cedb60dfefb0ead1fa5a3ccb3c68e0ceaf4bb3415df80c79863092f362bd5ab9",
        "size": 15
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "schemas/protocol.json"
       }
      },
@@ -3548,14 +3548,14 @@
       "effect": "eff_agqo6fau6b7qndpso7jafitbxy",
       "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:121df2e76f5c7c8090cfbe3370435375351c94ae92e078eb2fe7704efd2f050b",
        "size": 54
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/http.rs"
       }
      },
@@ -3599,7 +3599,7 @@
      "at": "2026-09-29T21:31:05.344470954Z",
      "body": {
       "generation": 2,
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "pack": "cpk_agqo6faqffyifk64xyscuttedq",
       "work_unit": "wku_agqo6fatab6uhivubju434vpj4"
      },
@@ -3643,7 +3643,7 @@
      "added": 3,
      "binary": false,
      "digest": "sha256:121df2e76f5c7c8090cfbe3370435375351c94ae92e078eb2fe7704efd2f050b",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "crates/runner/http.rs",
      "removed": 0,
      "size": 54,
@@ -3653,7 +3653,7 @@
      "added": 1,
      "binary": false,
      "digest": "sha256:cedb60dfefb0ead1fa5a3ccb3c68e0ceaf4bb3415df80c79863092f362bd5ab9",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "schemas/protocol.json",
      "removed": 0,
      "size": 15,
@@ -3680,7 +3680,7 @@
     "candidate_effects": [
      {
       "id": "eff_agqo6fau6b7qndpso7jafitbxy",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:121df2e76f5c7c8090cfbe3370435375351c94ae92e078eb2fe7704efd2f050b",
        "size": 54
@@ -3695,28 +3695,28 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6faqffyifk64xyscuttedq",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fat7vzppiif6qss47tftm",
        "runtime_instance": "rti_agqo6faspj7jffkrsuqklp5d4q",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/http.rs"
       },
       "work_unit": "wku_agqo6fatab6uhivubju434vpj4"
      },
      {
       "id": "eff_agqo6faxsz5fhadqgjqckct4ua",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:cedb60dfefb0ead1fa5a3ccb3c68e0ceaf4bb3415df80c79863092f362bd5ab9",
        "size": 15
@@ -3731,21 +3731,21 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6faton6qvdrv5p2gy3r5ri",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6faqffyifk64xyscuttedq",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fawwz3kbkozndq3yxsscu",
        "runtime_instance": "rti_agqo6faspj7jffkrsuqklp5d4q",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "schemas/protocol.json"
       },
       "work_unit": "wku_agqo6fatab6uhivubju434vpj4"
@@ -3778,7 +3778,7 @@
     "work_units": [
      {
       "id": "wku_agqo6fatab6uhivubju434vpj4",
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "state": "COMPLETED"
      }
     ]
@@ -3830,7 +3830,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6faton3h3g4igpijx7n6ra",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "STARTING"
      }
@@ -3895,7 +3895,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6faton3h3g4igpijx7n6ra",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "RUNNING"
      }
@@ -3997,14 +3997,14 @@
       "effect": "eff_agqo6fcd2fzjfbi4znmcdwt6em",
       "execution": "exe_agqo6fccnv6bvivuqz2zkohuja",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
        "size": 6
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "rules.txt"
       }
      },
@@ -4048,7 +4048,7 @@
      "at": "2026-09-29T21:31:17.416573641Z",
      "body": {
       "generation": 2,
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "pack": "cpk_agqo6fb73fzondjarz75ayzoee",
       "work_unit": "wku_agqo6fccfb2crbjp5tnd4es7ci"
      },
@@ -4088,7 +4088,7 @@
      "added": 1,
      "binary": false,
      "digest": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "rules.txt",
      "removed": 0,
      "size": 6,
@@ -4104,7 +4104,7 @@
     "candidate_effects": [
      {
       "id": "eff_agqo6fcd2fzjfbi4znmcdwt6em",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
        "size": 6
@@ -4119,21 +4119,21 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6fccnv6bvivuqz2zkohuja",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6fb73fzondjarz75ayzoee",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fcc5b3ntiq4h2vjhmb4rq",
        "runtime_instance": "rti_agqo6fcbunyubb2zgjzze54bv4",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "rules.txt"
       },
       "work_unit": "wku_agqo6fccfb2crbjp5tnd4es7ci"
@@ -4149,7 +4149,7 @@
     "work_units": [
      {
       "id": "wku_agqo6fccfb2crbjp5tnd4es7ci",
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "state": "COMPLETED"
      }
     ]
@@ -4178,7 +4178,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fccnvyshie5l5bl5hlh5u",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "RUNNING"
      }
@@ -4218,7 +4218,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fccnvyshie5l5bl5hlh5u",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "STARTING"
      }
@@ -4382,7 +4382,7 @@
     {
      "at": "2026-09-29T21:31:13.319783772Z",
      "digest": "sha256:64023dfcdfa6c9240f002427b7fa6f8842ead946004eede770457b5eb95d4c9b",
-     "evaluator": "org.calve.software.change-size",
+     "evaluator": "org.examples.files.change-size",
      "generation": 2,
      "verdict": "ALLOW"
     }
@@ -4393,7 +4393,7 @@
      "at": "2026-09-29T21:31:13.319783772Z",
      "body": {
       "evaluation": "sha256:64023dfcdfa6c9240f002427b7fa6f8842ead946004eede770457b5eb95d4c9b",
-      "evaluator": "org.calve.software.change-size",
+      "evaluator": "org.examples.files.change-size",
       "generation": 2,
       "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
       "verdict": "ALLOW"
@@ -4409,7 +4409,7 @@
       "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
       "status": "PASS",
       "verification": "sha256:485e136aac4b54ca5f0049f7eb7150ce3752b7f0ddce739a714b61ca600eff4b",
-      "verifier": "org.calve.software.snapshot.verify"
+      "verifier": "org.examples.files.snapshot.verify"
      },
      "kind": "verification.completed",
      "sequence": 43
@@ -4442,14 +4442,14 @@
       "effect": "eff_agqo6fbllz5mxaipkjucm634sy",
       "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:509ac010d045fbcd4976d2d5142991fd300fb10f027a50fb40e153f6cd60fc3e",
        "size": 10
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/mod.rs"
       }
      },
@@ -4463,14 +4463,14 @@
       "effect": "eff_agqo6fbi3f7ehc57xsrbwey5ze",
       "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:c717a071a04133d2f44bca3f27f9d3f25e57f3a938315d2fea2396edecb3954f",
        "size": 119
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/http.rs"
       }
      },
@@ -4514,7 +4514,7 @@
      "at": "2026-09-29T21:31:10.477389224Z",
      "body": {
       "generation": 2,
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
       "work_unit": "wku_agqo6fbhbvzqxpvu6mgst45ts4"
      },
@@ -4551,8 +4551,8 @@
       "detail": "sha256:1a2811eb830242dfa394a37d5dd661156af2accc5c85e666a0b0f9cfa9b6042a"
      },
      {
-      "condition": "org.calve.software.snapshot.verify is PASS",
-      "policy": "org.calve.software.snapshot-required"
+      "condition": "org.examples.files.snapshot.verify is PASS",
+      "policy": "org.examples.files.snapshot-required"
      }
     ],
     "source": "OpenAEVC policies, verification results and policy decisions",
@@ -4563,7 +4563,7 @@
      "added": 6,
      "binary": false,
      "digest": "sha256:c717a071a04133d2f44bca3f27f9d3f25e57f3a938315d2fea2396edecb3954f",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "crates/runner/http.rs",
      "removed": 2,
      "size": 119,
@@ -4573,7 +4573,7 @@
      "added": 1,
      "binary": false,
      "digest": "sha256:509ac010d045fbcd4976d2d5142991fd300fb10f027a50fb40e153f6cd60fc3e",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "crates/runner/mod.rs",
      "removed": 0,
      "size": 10,
@@ -4600,7 +4600,7 @@
     "candidate_effects": [
      {
       "id": "eff_agqo6fbi3f7ehc57xsrbwey5ze",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:c717a071a04133d2f44bca3f27f9d3f25e57f3a938315d2fea2396edecb3954f",
        "size": 119
@@ -4615,28 +4615,28 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fbh5z47xhf2pokqheuv6e",
        "runtime_instance": "rti_agqo6fbgkr62xgjkogaon2iz34",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/http.rs"
       },
       "work_unit": "wku_agqo6fbhbvzqxpvu6mgst45ts4"
      },
      {
       "id": "eff_agqo6fbllz5mxaipkjucm634sy",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:509ac010d045fbcd4976d2d5142991fd300fb10f027a50fb40e153f6cd60fc3e",
        "size": 10
@@ -4651,21 +4651,21 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6fbhjvyftlb6ur6i4gk7fi",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6fbfbv2tzhmigx2ltg27pa",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fbknv7fdjqoefbrj7qpey",
        "runtime_instance": "rti_agqo6fbgkr62xgjkogaon2iz34",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/mod.rs"
       },
       "work_unit": "wku_agqo6fbhbvzqxpvu6mgst45ts4"
@@ -4693,7 +4693,7 @@
     "work_units": [
      {
       "id": "wku_agqo6fbhbvzqxpvu6mgst45ts4",
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "state": "COMPLETED"
      }
     ]
@@ -4755,7 +4755,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fbhjv3jhf546ksrjukgku",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "STARTING"
      }
@@ -4807,7 +4807,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fbhjv3jhf546ksrjukgku",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "RUNNING"
      }
@@ -4851,7 +4851,7 @@
      "findings": null,
      "generation": 2,
      "status": "PASS",
-     "verifier": "org.calve.software.snapshot.verify"
+     "verifier": "org.examples.files.snapshot.verify"
     }
    ]
   },
@@ -5021,14 +5021,14 @@
       "effect": "eff_agqo6fbyo54yzpio2s7jmxjdly",
       "execution": "exe_agqo6fbxcvzltj27p6kedzsxt4",
       "generation": 2,
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:4ba3712cbca635d0f64417b0a65a75484b04f0506107f8ccc01e798d6e4b540a",
        "size": 13
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/daemon.rs"
       }
      },
@@ -5072,7 +5072,7 @@
      "at": "2026-09-29T21:31:14.532438650Z",
      "body": {
       "generation": 2,
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "pack": "cpk_agqo6fbvdb5u7a6hyljusoarca",
       "work_unit": "wku_agqo6fbw4r6x3jrnnioxkryvwm"
      },
@@ -5133,7 +5133,7 @@
      "added": 1,
      "binary": false,
      "digest": "sha256:4ba3712cbca635d0f64417b0a65a75484b04f0506107f8ccc01e798d6e4b540a",
-     "kind": "org.calve.software.file",
+     "kind": "org.examples.files.file",
      "path": "crates/runner/daemon.rs",
      "removed": 0,
      "size": 13,
@@ -5160,7 +5160,7 @@
     "candidate_effects": [
      {
       "id": "eff_agqo6fbyo54yzpio2s7jmxjdly",
-      "kind": "org.calve.software.snapshot",
+      "kind": "org.examples.files.snapshot",
       "outcome": {
        "digest": "sha256:4ba3712cbca635d0f64417b0a65a75484b04f0506107f8ccc01e798d6e4b540a",
        "size": 13
@@ -5175,21 +5175,21 @@
        "caller": "pri_agqo6e7aivznrhfxtdboetqnv4",
        "execution": "exe_agqo6fbxcvzltj27p6kedzsxt4",
        "extension": {
-        "id": "org.calve.software",
+        "id": "org.examples.files",
         "manifest_digest": "sha256:b3111444683e77879f76079eb60d1203df9657b86131b8732aa00ed8da0295a6",
         "version": "0.1.0"
        },
        "generation": 2,
-       "harness": "org.calve.software.capture",
+       "harness": "org.examples.files.capture",
        "pack": "cpk_agqo6fbvdb5u7a6hyljusoarca",
-       "provider": "org.calve.software.local",
+       "provider": "org.examples.files.local",
        "request_id": "req_agqo6fbxnr23pfvrormi6me6ki",
        "runtime_instance": "rti_agqo6fbwrv5inc33p745mpjrzq",
        "worker": "local"
       },
       "target": {
-       "extension": "org.calve.software",
-       "kind": "org.calve.software.file",
+       "extension": "org.examples.files",
+       "kind": "org.examples.files.file",
        "locator": "crates/runner/daemon.rs"
       },
       "work_unit": "wku_agqo6fbw4r6x3jrnnioxkryvwm"
@@ -5216,7 +5216,7 @@
     "work_units": [
      {
       "id": "wku_agqo6fbw4r6x3jrnnioxkryvwm",
-      "kind": "org.calve.software.capture",
+      "kind": "org.examples.files.capture",
       "state": "COMPLETED"
      }
     ]
@@ -5235,7 +5235,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fbxcv6hrfgkxtidtzmyue",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "RUNNING"
      }
@@ -5307,7 +5307,7 @@
        "generation": 2,
        "heartbeat_interval_ms": 30000,
        "id": "lse_agqo6fbxcv6hrfgkxtidtzmyue",
-       "provider": "org.calve.software.local"
+       "provider": "org.examples.files.local"
       },
       "state": "STARTING"
      }

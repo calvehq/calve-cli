@@ -9,14 +9,11 @@ use openaevc_sdk::OpenAevcClient;
 use rusqlite::params;
 use serde_json::{Value, json};
 
-use crate::ignore::IgnoreRules;
 use crate::{Error, Project, Result, event, now, value_contains_exact};
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
-
-const CAPTURE_HARNESS: &str = "org.calve.software.capture";
 
 fn ignore_pattern(pattern: &str) -> Result<&str> {
     let pattern = pattern.trim_end_matches(['\r', '\n']);
@@ -78,10 +75,11 @@ impl Project {
     /// Summarizes every captured resource of a pack against the current working copy.
     pub async fn diff_pack(&self, id: &str) -> Result<Value> {
         let pack = self.pack(id).await?;
+        let d = self.file_domain().await?;
         let mut locators: Vec<String> = pack
             .candidate_effects
             .iter()
-            .filter(|effect| crate::resources::is_file_effect(&effect.kind))
+            .filter(|effect| d.is_file_effect(effect))
             .map(|effect| effect.target.locator.clone())
             .collect();
         locators.sort();
@@ -133,7 +131,8 @@ impl Project {
             result["retry_of"] = json!(execution);
             return Ok(result);
         }
-        if previous["harness"] != CAPTURE_HARNESS {
+        let d = self.file_domain().await?;
+        if previous["harness"] != d.capture_harness().as_str() {
             return Err(invalid(format!(
                 "no local harness can retry {} executions",
                 previous["harness"].as_str().unwrap_or("unknown")
@@ -153,33 +152,24 @@ impl Project {
             .as_str()
             .ok_or_else(|| invalid("execution has no pack"))?
             .to_owned();
-        let mut files = Vec::new();
-        for selector in previous["allowed_resources"]
+        // The successor re-plans exactly the failed attempt's paths through the extension.
+        let paths: Vec<String> = previous["allowed_resources"]
             .as_array()
             .into_iter()
             .flatten()
-        {
-            let locator = selector["locator_prefix"]
-                .as_str()
-                .ok_or_else(|| invalid("capture scope has no file locator"))?;
-            files.push(match self.read_capture_file(Path::new(locator)) {
-                Ok((path, content)) => crate::FileChange::Snapshot(path, content),
-                Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                    match self.indexed_digests(true).await?.get(locator).copied() {
-                        Some(previous) => crate::FileChange::Delete {
-                            path: locator.to_owned(),
-                            previous,
-                        },
-                        // The other half of a rename; its partner carries the content.
-                        None => continue,
-                    }
-                }
-                Err(error) => return Err(error),
-            });
-        }
+            .filter_map(|selector| selector["locator_prefix"].as_str().map(str::to_owned))
+            .collect();
+        let accepted = self.indexed_digests(true).await?;
+        let ws =
+            crate::workspace_io::Workspace::open(&self.root).map_err(|e| invalid(e.to_string()))?;
+        let paths: Vec<String> = paths
+            .into_iter()
+            .filter(|p| ws.exists(p) || accepted.contains_key(p))
+            .collect();
+        let plan = self.plan_paths(&d, &paths).await?;
         let generation = self.pack(&pack).await?.generation;
         let mut result = self
-            .capture_snapshots_attempt(&pack, generation, files, Some((work_unit, execution)))
+            .submit_capture(&pack, generation, &d, plan, Some((work_unit, execution)))
             .await?;
         result["retry_of"] = json!(execution);
         Ok(result)
@@ -210,6 +200,7 @@ impl Project {
             return Err(invalid("resource path must be relative"));
         }
         let locator = path.to_string_lossy().replace('\\', "/");
+        let d = self.file_domain().await?;
         let mut history = Vec::new();
         for summary in self.list_packs().await? {
             let Some(id) = summary["id"].as_str() else {
@@ -217,15 +208,16 @@ impl Project {
             };
             let pack = self.pack(id).await?;
             let touches = |effect: &&openaevc::protocol::AppliedEffect| {
-                crate::resources::is_file_effect(&effect.kind)
+                d.is_file_effect(effect)
                     && (effect.target.locator == locator
                         || effect.payload["from"] == locator.as_str())
             };
             if let Some(effect) = pack.candidate_effects.iter().rev().find(touches) {
-                let change = match effect.kind.as_str() {
-                    crate::resources::DELETE => "deleted",
-                    crate::resources::RENAME if effect.target.locator == locator => "renamed_here",
-                    crate::resources::RENAME => "renamed_away",
+                use crate::domains::FileOp;
+                let change = match d.op(&effect.kind) {
+                    Some(FileOp::Delete) => "deleted",
+                    Some(FileOp::Move) if effect.target.locator == locator => "renamed_here",
+                    Some(FileOp::Move) => "renamed_away",
                     _ => "snapshot",
                 };
                 history.push(json!({"pack":pack.id,"title":summary["title"],"state":pack.state,
@@ -238,7 +230,7 @@ impl Project {
 
     /// Resource scan plus which files differ from the newest capture of each path.
     pub async fn scan_resources(&self) -> Result<Value> {
-        let resources = self.list_resources()?;
+        let resources = self.list_resources().await?;
         // Newest captured state across every pack, promoted or not, from the pack index.
         let latest = self.indexed_digests(false).await?;
         let mut uncaptured = Vec::new();
@@ -252,24 +244,53 @@ impl Project {
                     "state": if captured.is_some() {"modified"} else {"new"}}));
             }
         }
-        let rules = crate::ignore::IgnoreRules::load(&self.root)?;
-        for path in latest
+        let gone: Vec<String> = latest
             .keys()
-            .filter(|p| !present.contains(*p) && !rules.ignored(p, false))
-        {
-            uncaptured.push(json!({"path":path,"state":"deleted"}));
+            .filter(|p| !present.contains(*p))
+            .cloned()
+            .collect();
+        let d = self.file_domain().await?;
+        for (path, ignored, _) in self.classify_paths(&d, &gone)? {
+            if !ignored {
+                uncaptured.push(json!({"path":path,"state":"deleted"}));
+            }
         }
         Ok(json!({"resources":resources,"uncaptured":uncaptured}))
     }
 
-    pub fn list_ignore(&self) -> Result<Value> {
-        Ok(json!(IgnoreRules::load(&self.root)?.describe()))
+    /// The file extension's root ignore file (`ignore_files[0]` of its declaration).
+    async fn ignore_file(&self) -> Result<(crate::domains::FileDomain, String)> {
+        let d = self.file_domain().await?;
+        let name = d
+            .decl
+            .ignore_files
+            .first()
+            .cloned()
+            .ok_or_else(|| invalid(format!("{} declares no ignore file", d.extension)))?;
+        Ok((d, name))
     }
 
-    pub fn add_ignore(&self, pattern: &str) -> Result<Value> {
+    /// Effective rules: Calve's hard safety rule, then each line of the declared root ignore
+    /// file. Built-in defaults are applied by the file extension (`classify`).
+    pub async fn list_ignore(&self) -> Result<Value> {
+        let (d, name) = self.ignore_file().await?;
+        let mut out =
+            vec![json!({"pattern":".calve/","source":"hard safety","line":null,"ignored":true})];
+        let text = fs::read_to_string(self.root.join(&name)).unwrap_or_default();
+        for (n, line) in text.lines().enumerate() {
+            if !line.trim().is_empty() && !line.starts_with('#') {
+                out.push(json!({"pattern":line,"source":name,"line":n + 1,"ignored":!line.starts_with('!')}));
+            }
+        }
+        out.push(json!({"pattern":null,"source":format!("defaults of {}", d.extension),"line":null,"ignored":true,
+            "note":"built-in defaults are decided by the extension; check a path with `calve ignore check`"}));
+        Ok(json!(out))
+    }
+
+    pub async fn add_ignore(&self, pattern: &str) -> Result<Value> {
         let pattern = ignore_pattern(pattern)?;
-        let path = self.root.join(".calveignore");
-        let mut contents = match fs::read_to_string(&path) {
+        let (d, name) = self.ignore_file().await?;
+        let mut contents = match fs::read_to_string(self.root.join(&name)) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
             Err(error) => return Err(error.into()),
@@ -282,37 +303,44 @@ impl Project {
         }
         contents.push_str(pattern);
         contents.push('\n');
-        self.write_ignore(&contents)?;
+        self.write_ignore(&d, &name, &contents)?;
         Ok(json!({"pattern":pattern,"added":true}))
     }
 
-    pub fn remove_ignore(&self, pattern: &str) -> Result<Value> {
+    pub async fn remove_ignore(&self, pattern: &str) -> Result<Value> {
         let pattern = ignore_pattern(pattern)?;
-        let path = self.root.join(".calveignore");
-        let contents = fs::read_to_string(&path)?;
+        let (d, name) = self.ignore_file().await?;
+        let contents = fs::read_to_string(self.root.join(&name))?;
         let kept: Vec<&str> = contents.lines().filter(|line| *line != pattern).collect();
-        let removed = kept.len() != contents.lines().count();
-        if !removed {
-            return Err(invalid(format!(
-                "pattern {pattern:?} is not in .calveignore"
-            )));
+        if kept.len() == contents.lines().count() {
+            return Err(invalid(format!("pattern {pattern:?} is not in {name}")));
         }
         let mut text = kept.join("\n");
         if !text.is_empty() {
             text.push('\n');
         }
-        self.write_ignore(&text)?;
+        self.write_ignore(&d, &name, &text)?;
         Ok(json!({"pattern":pattern,"removed":true}))
     }
 
-    /// Validates rules before replacing the file so a bad edit never lands on disk.
-    fn write_ignore(&self, contents: &str) -> Result<()> {
-        let path = self.root.join(".calveignore");
-        let staged = self.root.join(".calve/tmp-calveignore");
+    /// The extension validates the new rules (a `classify` with them as the root source) before
+    /// the file is replaced, so a bad edit never lands on disk.
+    fn write_ignore(
+        &self,
+        d: &crate::domains::FileDomain,
+        name: &str,
+        contents: &str,
+    ) -> Result<()> {
+        if contents.len() > 64 * 1024 {
+            return Err(invalid(format!("{name} must stay at most 64 KiB")));
+        }
+        let mut s = crate::domains::open_session(&d.record)?;
+        s.request("classify", json!({"entries":[{"path":"probe","kind":"file","size":0}],"ignore_sources":{name:contents}}))
+            .map_err(|e| invalid(format!("{name} rejected by {}: {e}", d.extension)))?;
+        let staged = self.root.join(".calve/tmp-ignore");
         fs::write(&staged, contents)?;
-        IgnoreRules::parse(contents)?;
-        fs::rename(&staged, &path)?;
-        event(&self.db, "ignore.updated", ".calveignore", "")
+        crate::workspace_io::rename_durable(&staged, &self.root.join(name))?;
+        event(&self.db, "ignore.updated", name, "")
     }
 
     /// OpenAEVC digest-verifies objects on read; this also checks the receipt's references.
@@ -477,8 +505,24 @@ pub fn recovery_plan(root: &Path) -> Result<Vec<Value>> {
         }
     }
     actions.extend(crate::adopt::adoption_leftovers(root)?);
-    actions.extend(crate::extensions::staging_leftovers());
-    let staged = root.join(".calve/tmp-calveignore");
+    // Interrupted package installs/retirements (machine-level journals, §9.4).
+    if let Ok(paths) = crate::extensions::machine_paths()
+        && let Ok(rd) = fs::read_dir(paths.data.join("run/install"))
+    {
+        let n = rd
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|x| x == "journal" || x == "retire")
+            })
+            .count();
+        if n > 0 {
+            actions.push(json!({"action":"reconcile_install_journals","count":n,
+                "reason":"package install interrupted; staging is removed or the install completed"}));
+        }
+    }
+    let staged = root.join(".calve/tmp-ignore");
     if staged.is_file() {
         actions.push(json!({"action":"remove_file","path":staged,
             "reason":"left by an interrupted ignore edit"}));
@@ -493,6 +537,9 @@ pub fn recovery_apply(root: &Path) -> Result<Value> {
         match action["action"].as_str() {
             Some("remove_staging_dir") => fs::remove_dir_all(path)?,
             Some("remove_file") => fs::remove_file(path)?,
+            Some("reconcile_install_journals") => {
+                crate::extensions::recover_installs()?;
+            }
             Some("restore_adoption_source") => {
                 let state = root.join(".calve");
                 if state.exists() {

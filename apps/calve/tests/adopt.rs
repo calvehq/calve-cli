@@ -47,7 +47,19 @@ fn copied_project_is_adopted_with_new_identity() {
     let original = data.join("original");
     let p = original.to_str().unwrap();
     let created = ok(data, &["init", p]);
-    ok(data, &["--project", p, "extension", "enable"]);
+    let catalog = calve_testkit::ToyCatalog::new();
+    ok(
+        data,
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    ok(
+        data,
+        &[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat(),
+    );
     fs::write(original.join("a.txt"), "accepted\n").unwrap();
     let id = ok(data, &["--project", p, "pack", "create", "first"])["id"]
         .as_str()

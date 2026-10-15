@@ -14,8 +14,8 @@
 │  Inbox           2 ││Verification         │                                                                      │Intent                                     │
 │  Doctor            ││  ✓ Verify           │Satisfied                                                             │HTTP conformance                           │
 │  Extensions        ││                     │  ✓ sealed candidate                                                  │                                           │
-│                    ││Risk                 │  ✓ org.calve.software.snapshot.verify is PASS                        │! Promote: missing: approved review        │
-│                    ││✓ Change size  ALLOW │(org.calve.software.snapshot-required)                                │x explain                                  │
+│                    ││Risk                 │  ✓ org.examples.files.snapshot.verify is PASS                        │! Promote: missing: approved review        │
+│                    ││✓ Change size  ALLOW │(org.examples.files.snapshot-required)                                │x explain                                  │
 │                    ││                     │                                                                      │                                           │
 │                    ││                     │Missing                                                               │Actions                                    │
 │                    ││                     │  × approved review — no approval for the current candidate           │  Run snapshot verification                │

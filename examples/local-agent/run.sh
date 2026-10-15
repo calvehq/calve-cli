@@ -3,7 +3,7 @@
 # No credentials or third-party services are involved.
 source "$(dirname "$0")/../lib.sh"
 
-calve extension enable >/dev/null
+enable "$FILES_EXT"
 agent="$WORK/agent.sh"
 cat > "$agent" <<'AGENT'
 #!/bin/sh

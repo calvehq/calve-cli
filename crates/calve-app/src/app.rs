@@ -307,11 +307,10 @@ fn config_command(
 fn extension_is_global(command: &ExtensionCommand, has_project: bool) -> bool {
     match command {
         ExtensionCommand::List { installed } => *installed || !has_project,
-        ExtensionCommand::Catalogs
-        | ExtensionCommand::CatalogTrust { .. }
-        | ExtensionCommand::CatalogUntrust { .. }
+        ExtensionCommand::Catalog { .. }
         | ExtensionCommand::Search { .. }
         | ExtensionCommand::Install { .. }
+        | ExtensionCommand::SwitchPublisher { .. }
         | ExtensionCommand::Uninstall { .. } => true,
         _ => false,
     }
@@ -665,18 +664,60 @@ async fn dispatch(request: Request) -> Result<Value> {
         Action::Project { command } => return project_command(&mut registry, command, workspace),
         Action::Extension { command } if extension_is_global(&command, scope.project.is_some()) => {
             use crate::extensions;
+            use calve_api::CatalogCommand;
             return match command {
                 ExtensionCommand::List { .. } => extensions::list_installed(),
-                ExtensionCommand::Catalogs => extensions::list_catalogs(),
-                ExtensionCommand::CatalogTrust {
-                    name,
-                    location,
-                    root_digest,
-                } => extensions::trust_catalog(&name, &location, root_digest.as_deref()),
-                ExtensionCommand::CatalogUntrust { name } => extensions::untrust_catalog(&name),
+                ExtensionCommand::Catalog { command } => match command {
+                    CatalogCommand::Add {
+                        name,
+                        url,
+                        root,
+                        root_digest,
+                    } => extensions::catalog_add(&name, &url, &root, &root_digest),
+                    CatalogCommand::List => extensions::catalog_list(),
+                    CatalogCommand::Refresh { name } => {
+                        extensions::catalog_refresh(name.as_deref())
+                    }
+                    CatalogCommand::Reset {
+                        name,
+                        root,
+                        root_digest,
+                        yes,
+                        i_understand_rollback_risk,
+                    } => {
+                        if !(yes && i_understand_rollback_risk) {
+                            return Err(crate::Error::Message(
+                                "a catalog reset lowers rollback protection; confirm with --yes --i-understand-rollback-risk".into(),
+                            ));
+                        }
+                        extensions::catalog_reset(&name, &root, &root_digest)
+                    }
+                    CatalogCommand::Remove { name } => extensions::catalog_remove(&name),
+                },
                 ExtensionCommand::Search { query } => extensions::search(query.as_deref()),
-                ExtensionCommand::Install { id, version } => {
-                    extensions::install(&id, version.as_deref())
+                ExtensionCommand::Install {
+                    id,
+                    version,
+                    catalog,
+                    acknowledge_native,
+                } => extensions::install_package(
+                    &id,
+                    version.as_deref(),
+                    catalog.as_deref(),
+                    acknowledge_native,
+                ),
+                ExtensionCommand::SwitchPublisher {
+                    id,
+                    catalog,
+                    yes,
+                    acknowledge_native,
+                } => {
+                    if !yes {
+                        return Err(crate::Error::Message(format!(
+                            "switching the publisher of {id} trusts a different catalog for it; confirm with --yes"
+                        )));
+                    }
+                    extensions::switch_publisher(&id, &catalog, acknowledge_native)
                 }
                 ExtensionCommand::Uninstall { id, version } => {
                     extensions::uninstall(&id, version.as_deref())
@@ -1141,11 +1182,10 @@ async fn dispatch(request: Request) -> Result<Value> {
         },
         Action::Extension { command } => match command {
             ExtensionCommand::List { .. } => project.list_extensions().await,
-            ExtensionCommand::Catalogs
-            | ExtensionCommand::CatalogTrust { .. }
-            | ExtensionCommand::CatalogUntrust { .. }
+            ExtensionCommand::Catalog { .. }
             | ExtensionCommand::Search { .. }
             | ExtensionCommand::Install { .. }
+            | ExtensionCommand::SwitchPublisher { .. }
             | ExtensionCommand::Uninstall { .. } => unreachable!("handled without a Project"),
             ExtensionCommand::Info { id } => project.extension_info(&id).await,
             ExtensionCommand::Disable { id } => project.disable_extension(&id).await,
@@ -1157,35 +1197,36 @@ async fn dispatch(request: Request) -> Result<Value> {
             ExtensionCommand::Revoke { id, capabilities } => {
                 project.revoke_extension(&id, &capabilities).await
             }
-            ExtensionCommand::Update { id, grants } => project.update_extension(&id, &grants).await,
-            ExtensionCommand::EnableLocal { spec, grants } => {
-                let spec = match spec {
-                    Some(spec) => spec,
-                    None => std::env::current_exe()?
-                        .with_file_name(if cfg!(windows) {
-                            "calve_ext_software.exe"
-                        } else {
-                            "calve_ext_software"
-                        })
-                        .display()
-                        .to_string(),
-                };
-                project.enable_extension(&spec, &grants).await
+            ExtensionCommand::Update {
+                id,
+                grants,
+                acknowledge_native,
+            } => {
+                project
+                    .update_extension(&id, &grants, acknowledge_native)
+                    .await
+            }
+            ExtensionCommand::Enable {
+                id,
+                grants,
+                acknowledge_native,
+            } => {
+                project
+                    .enable_extension(&id, &grants, acknowledge_native)
+                    .await
             }
         },
         Action::Resource { command } => match command {
             ResourceCommand::List { domain } if domain == "general" => {
                 Ok(json!(project.general_resources().await?))
             }
-            ResourceCommand::List { .. } => project.list_resources(),
+            ResourceCommand::List { .. } => project.list_resources().await,
             ResourceCommand::Show { target } => {
-                let general = target
-                    .split_once(':')
-                    .is_some_and(|(kind, _)| crate::general::resource_kind(kind).is_some());
-                if general {
+                // `kind:name` is a declared resource (':' never appears in a file locator).
+                if target.contains(':') {
                     project.general_resource(&target).await
                 } else {
-                    project.show_resource(Path::new(&target))
+                    project.show_resource(Path::new(&target)).await
                 }
             }
             ResourceCommand::Materialize {
@@ -1222,10 +1263,10 @@ async fn dispatch(request: Request) -> Result<Value> {
             ResourceCommand::History { path } => project.resource_history(&path).await,
         },
         Action::Ignore { command } => match command {
-            IgnoreCommand::List => project.list_ignore(),
-            IgnoreCommand::Add { pattern } => project.add_ignore(&pattern),
-            IgnoreCommand::Remove { pattern } => project.remove_ignore(&pattern),
-            IgnoreCommand::Check { path } => project.check_ignore(&path),
+            IgnoreCommand::List => project.list_ignore().await,
+            IgnoreCommand::Add { pattern } => project.add_ignore(&pattern).await,
+            IgnoreCommand::Remove { pattern } => project.remove_ignore(&pattern).await,
+            IgnoreCommand::Check { path } => project.check_ignore(&path).await,
         },
         Action::Review { command } => match command {
             ReviewCommand::Approve {
@@ -1504,32 +1545,37 @@ async fn lifecycle(
     }
 }
 
-/// What `init` found and what to do next. Extensions are recommended, never enabled or granted.
+/// What `init` found and what to do next. Extensions are recommended, never enabled or granted:
+/// installed packages whose signed `detect.markers` appear at the root, plus a package that
+/// declares a file domain when the Project has files.
 fn init_report(project: &Project, registered: bool) -> Result<Value> {
-    let files: Vec<String> = project
-        .list_resources()?
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|item| item["path"].as_str().map(str::to_owned))
+    let root_names: Vec<String> = std::fs::read_dir(&project.root)?
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|n| n != ".calve")
         .collect();
-    let mut recommended = vec!["org.calve.software".to_owned()];
-    recommended.extend(
-        crate::domain::detect(&project.root, &files)
-            .into_iter()
-            .map(|language| language.extension_id()),
-    );
-    if files.is_empty() {
-        recommended = vec!["org.calve.general".into()];
+    let mut recommended = Vec::new();
+    for r in crate::catalog::install::installed(&crate::extensions::machine_paths()?)? {
+        let Some(m) = &r.metadata else { continue };
+        let detected = m.detect.markers.iter().any(|mk| root_names.contains(mk));
+        let files = m.files.is_some() && !root_names.is_empty();
+        if (detected || files || (root_names.is_empty() && !m.resources.is_empty()))
+            && !recommended.contains(&r.id)
+        {
+            recommended.push(r.id.clone());
+        }
     }
     let integrity = project.check_product_db()?;
-    let mut next = vec![format!("calve extension enable {}", recommended[0])];
-    next.extend(
+    let mut next: Vec<String> = if recommended.is_empty() {
+        vec![
+            "calve extension catalog list".into(),
+            "calve extension search".into(),
+        ]
+    } else {
         recommended
             .iter()
-            .skip(1)
-            .map(|id| format!("calve extension enable {id}")),
-    );
+            .map(|id| format!("calve extension enable {id} --acknowledge-native"))
+            .collect()
+    };
     next.push("calve intent create \"<goal>\"".into());
     next.push("calve pack create \"<change>\"".into());
     Ok(
