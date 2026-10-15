@@ -271,7 +271,7 @@ pub(crate) struct CapturePlan {
 }
 
 impl Project {
-    fn workspace(&self) -> Result<Workspace> {
+    pub(crate) fn workspace(&self) -> Result<Workspace> {
         Workspace::open(&self.root).map_err(io_err)
     }
 

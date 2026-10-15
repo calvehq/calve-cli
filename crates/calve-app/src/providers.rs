@@ -56,8 +56,11 @@ pub fn resolve_executable(name: &str) -> Result<PathBuf> {
     let found = if candidate.components().count() > 1 || candidate.is_absolute() {
         candidate.is_file().then(|| candidate.to_path_buf())
     } else {
+        // Only absolute PATH entries: an empty or relative entry would resolve against the
+        // working directory, which may hold candidate content.
         std::env::var_os("PATH").and_then(|paths| {
             std::env::split_paths(&paths)
+                .filter(|dir| dir.is_absolute())
                 .map(|dir| dir.join(name))
                 .find(|path| path.is_file())
         })

@@ -244,6 +244,13 @@ impl Workspace {
     }
 
     /// Reads a regular file of at most `max` bytes.
+    /// Streams a working-tree file to `dest` (outside the Workspace) without following
+    /// symlinks at any component.
+    pub fn copy_out(&self, loc: &str, dest: &std::path::Path) -> Result<u64> {
+        let (_, mut f) = self.open_read(loc)?;
+        Ok(std::io::copy(&mut f, &mut std::fs::File::create(dest)?)?)
+    }
+
     pub fn read(&self, loc: &str, max: u64) -> Result<Vec<u8>> {
         let (_, f) = self.open_read(loc)?;
         let mut out = Vec::new();

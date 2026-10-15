@@ -56,6 +56,62 @@ fn overrides(r: &PackageRecord, config: &EffectiveConfig) -> Option<Vec<(String,
     )
 }
 
+/// A package's check plan comes from its sandboxed CIC module, so it may only name a program
+/// on PATH (never a path, which could run candidate content or anything on disk), plain
+/// arguments (no absolute paths or `..`), and environment variables that carry no credentials or
+/// loader hooks (their values are the user's and end up in recorded output). Configured
+/// overrides are the user's own and are not restricted.
+fn validate_plan(c: &PlannedCheck) -> Result<()> {
+    let bad = |m: String| {
+        Err(invalid(format!(
+            "ABI_VIOLATION: check_plan {}: {m}",
+            c.name
+        )))
+    };
+    let Some(program) = c.argv.first() else {
+        return bad("empty argv".into());
+    };
+    if program.is_empty() || program.starts_with('.') || program.contains(['/', '\\', ':', '\0']) {
+        return bad(format!("program {program:?} must be a bare command name"));
+    }
+    for a in &c.argv[1..] {
+        let path_like = a.starts_with(['/', '\\', '~'])
+            || a.contains(['\0', ':', '\\'])
+            || a.contains("=/")
+            || a.split('/').any(|seg| seg == "..");
+        if path_like {
+            return bad(format!(
+                "argument {a:?} must not name paths outside the candidate"
+            ));
+        }
+    }
+    const SECRET: [&str; 9] = [
+        "TOKEN",
+        "SECRET",
+        "PASSWORD",
+        "PASSWD",
+        "CREDENTIAL",
+        "KEY",
+        "AUTH",
+        "COOKIE",
+        "SESSION",
+    ];
+    for name in &c.env {
+        let upper = name.to_ascii_uppercase();
+        let shaped = !name.is_empty()
+            && name.len() <= 64
+            && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            && !name.as_bytes()[0].is_ascii_digit();
+        let hook = upper.starts_with("LD_") || upper.starts_with("DYLD_") || upper == "BASH_ENV";
+        if !shaped || hook || SECRET.iter().any(|s| upper.contains(s)) {
+            return bad(format!(
+                "environment variable {name:?} is not passed to checks"
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl Project {
     /// Copies the working tree (respecting ignore rules), then overlays the candidate's
     /// snapshots so tools see the candidate content for every captured path.
@@ -67,6 +123,7 @@ impl Project {
         let scratch =
             Scratch(std::env::temp_dir().join(format!("calve-check-{}", uuid::Uuid::now_v7())));
         fs::create_dir(&scratch.0)?;
+        let ws = self.workspace()?;
         let mut files = Vec::new();
         for item in self
             .list_resources_sync(d)?
@@ -78,11 +135,13 @@ impl Project {
                 continue;
             }
             let path = item["path"].as_str().unwrap_or_default();
+            crate::validate_locator(path)?;
             let target = scratch.0.join(path);
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(self.root.join(path), &target)?;
+            ws.copy_out(path, &target)
+                .map_err(|e| invalid(format!("{path}: {e}")))?;
             files.push(path.to_owned());
         }
         let mut candidate = crate::resources::FileState::default();
@@ -178,6 +237,7 @@ impl Project {
             )
             .map_err(|e| invalid(format!("ABI_VIOLATION: check_plan: {e}")))?;
             for c in plan.checks {
+                validate_plan(&c)?;
                 if !wanted.contains(&c.language) {
                     return Err(invalid(format!(
                         "ABI_VIOLATION: check_plan returned {} for {wanted:?}",
@@ -242,7 +302,8 @@ impl Project {
                                     .and_then(|e| e.to_str())
                                     .is_some_and(|e| plan.sources.iter().any(|s| s == e))
                             })
-                            .cloned(),
+                            // `./` keeps a file named like an option from becoming one.
+                            .map(|f| format!("./{f}")),
                     );
                 }
                 let mut result = json!({"language":language,"check":name,"argv":argv,
@@ -316,5 +377,62 @@ impl Project {
         Ok(
             json!({"pack":pack.id,"generation":generation,"candidate":candidate,"drift":drift,"languages":report}),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn plan(argv: &[&str], env: &[&str]) -> PlannedCheck {
+        PlannedCheck {
+            language: "toy".into(),
+            name: "t".into(),
+            argv: argv.iter().map(|s| (*s).into()).collect(),
+            takes_files: false,
+            env: env.iter().map(|s| (*s).into()).collect(),
+            sources: vec![],
+        }
+    }
+
+    #[test]
+    fn plans_name_only_programs_on_path_plain_arguments_and_safe_environment() {
+        let ok = [
+            plan(
+                &["cargo", "clippy", "--", "-D", "warnings"],
+                &["CARGO_HOME"],
+            ),
+            plan(
+                &["cmake", "-S", ".", "-B", "build"],
+                &["CC", "NODE_OPTIONS"],
+            ),
+            plan(&["go", "test", "./..."], &["GOFLAGS"]),
+        ];
+        for p in &ok {
+            assert!(validate_plan(p).is_ok(), "{:?}", p.argv);
+        }
+        let refused = [
+            plan(&[], &[]),
+            plan(&["/bin/sh", "-c", "x"], &[]),
+            plan(&["./cargo"], &[]),
+            plan(&["bin/tool"], &[]),
+            plan(&["..\\tool.exe"], &[]),
+            plan(&["C:tool"], &[]),
+            plan(&["cat", "/etc/passwd"], &[]),
+            plan(&["cat", "../../.ssh/id_ed25519"], &[]),
+            plan(&["cat", "~/.netrc"], &[]),
+            plan(&["tool", "--config=/etc/x"], &[]),
+            plan(&["tool", "C:\\x"], &[]),
+            plan(&["env"], &["GITHUB_TOKEN"]),
+            plan(&["env"], &["AWS_SECRET_ACCESS_KEY"]),
+            plan(&["env"], &["LD_PRELOAD"]),
+            plan(&["env"], &["DYLD_INSERT_LIBRARIES"]),
+            plan(&["env"], &["BASH_ENV"]),
+            plan(&["env"], &["A-B"]),
+            plan(&["env"], &["1X"]),
+        ];
+        for p in &refused {
+            assert!(validate_plan(p).is_err(), "{:?} {:?}", p.argv, p.env);
+        }
     }
 }
