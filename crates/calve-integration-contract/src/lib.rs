@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod abi;
+pub mod catalog;
 pub mod digest;
 pub mod driver;
 pub mod hello;

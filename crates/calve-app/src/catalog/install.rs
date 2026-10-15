@@ -10,9 +10,10 @@
 //!   the full chain from the top with each role name percent-encoded (`acme`,
 //!   `acme/examples`, `acme%2Fexamples` for one role named `acme/examples`), never a bare
 //!   nested role name;
-//! - `<id>/package.json` (signed by the role authorized for `<id>/*`):
-//!   `{"schema":"calve.package/1","id","versions":[{"version","kind","native":{"<platform>":"<file>"},
-//!   "cic"?, "metadata"?, "ui"?}]}` with every file at `<id>/<version>/<file>`.
+//! - `<id>/package.json` (signed by the role authorized for `<id>/*`): the layout in
+//!   [`calve_integration_contract::catalog`]; native builds keyed by exact target triple with
+//!   their sha256, at `<id>/<version>/<triple>/<file>`, every other file at
+//!   `<id>/<version>/<file>`.
 //!
 //! Every install is journaled (I0–I4, hash-chained, §24); a crash at any step converges on
 //! recovery. Nothing is executed before the trust gate, and no native code runs without the
@@ -105,9 +106,9 @@ pub enum CicRunner {
     InProcess,
 }
 
-/// The platform key of native artifacts in `package.json` (`<arch>-<os>`).
-pub fn platform() -> String {
-    format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
+/// The key of native builds in `package.json`: this build's exact target triple.
+pub fn platform() -> &'static str {
+    calve_integration_contract::catalog::HOST_TARGET
 }
 
 fn valid_name(name: &str) -> bool {
@@ -292,34 +293,7 @@ pub fn reset_catalog(paths: &Paths, name: &str, root: &[u8], root_digest: &str) 
 
 // ------------------------------------------------------------------------------- package model
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Kind {
-    OpenaevcOnly,
-    CicCapable,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct VersionEntry {
-    pub version: String,
-    pub kind: Kind,
-    pub native: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cic: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ui: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PackageIndex {
-    pub schema: String,
-    pub id: String,
-    pub versions: Vec<VersionEntry>,
-}
+pub use calve_integration_contract::catalog::{Kind, NativeBuild, PackageIndex, VersionEntry};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Revocations {
@@ -358,6 +332,8 @@ pub struct PackageRecord {
     pub kind: Kind,
     pub catalog: String,
     pub role: String,
+    /// The exact target triple the native build was selected for.
+    pub target: String,
     /// sha256 of each file by role (`native`, `cic`, `metadata`, `ui`), each equal to its TUF
     /// target hash.
     pub digests: BTreeMap<String, String>,
@@ -413,6 +389,18 @@ pub fn version_key(v: &str) -> Vec<(u64, String)> {
 /// Re-hashes every file of an installed package against its record (OpenAEVC re-hashes the
 /// native artifact per spawn too, F4).
 pub fn verify_installed(paths: &Paths, r: &PackageRecord) -> Result<()> {
+    if r.target != platform() {
+        return Err(err(
+            "EXTENSION_INCOMPATIBLE",
+            format!(
+                "{}@{} is the {} build, not {}",
+                r.id,
+                r.version,
+                r.target,
+                platform()
+            ),
+        ));
+    }
     let dir = paths.extension_dir.join(&r.id).join(r.native_digest());
     for (role, digest) in &r.digests {
         let name = match role.as_str() {
@@ -607,7 +595,8 @@ impl Installer {
         })?;
         let index: PackageIndex = serde_json::from_slice(&index_bytes)
             .map_err(|e| err("PACKAGE_INVALID", format!("package.json: {e}")))?;
-        if index.schema != "calve.package/1" || index.id != req.id {
+        if index.schema != calve_integration_contract::catalog::PACKAGE_SCHEMA || index.id != req.id
+        {
             return Err(err("PACKAGE_INVALID", "package.json schema or id mismatch"));
         }
         let revocations: Revocations = match &docs[1] {
@@ -652,9 +641,9 @@ impl Installer {
             )
         })?
         .clone();
-        let native = entry
+        let build = entry
             .native
-            .get(&platform())
+            .get(platform())
             .ok_or_else(|| {
                 err(
                     "EXTENSION_INCOMPATIBLE",
@@ -667,6 +656,13 @@ impl Installer {
                 )
             })?
             .clone();
+        if !calve_integration_contract::catalog::valid_sha256(&build.sha256) {
+            return Err(err(
+                "PACKAGE_INVALID",
+                "native build sha256 is not lowercase hex",
+            ));
+        }
+        let native = build.file.clone();
         let mut files: Vec<(&str, String)> = vec![("native", native.clone())];
         match entry.kind {
             Kind::CicCapable => {
@@ -732,7 +728,15 @@ impl Installer {
         // verified by the verifier; all must be signed by the index's role.
         let paths: Vec<String> = files
             .iter()
-            .map(|(_, f)| format!("{}/{}/{f}", req.id, entry.version))
+            .map(|(r, f)| match *r {
+                "native" => calve_integration_contract::catalog::native_path(
+                    req.id,
+                    &entry.version,
+                    platform(),
+                    f,
+                ),
+                _ => format!("{}/{}/{f}", req.id, entry.version),
+            })
             .collect();
         let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
         let fetched = c.fetch_all(&mirror, &refs, None).map_err(gen_err)?;
@@ -756,6 +760,17 @@ impl Installer {
                     format!(
                         "{file} is signed by {}, the package index by {role}",
                         info.role
+                    ),
+                ));
+            }
+            if *role_name == "native" && info.sha256 != build.sha256 {
+                return Err(err(
+                    "PACKAGE_INVALID",
+                    format!(
+                        "{}@{} {}: the target hash differs from the package index's native digest",
+                        req.id,
+                        entry.version,
+                        platform()
                     ),
                 ));
             }
@@ -881,6 +896,7 @@ impl Installer {
             kind: entry.kind.clone(),
             catalog: catalog.into(),
             role: role.clone(),
+            target: platform().into(),
             entrypoint: format!("{}/{}/{native}", req.id, digests["native"]),
             digests,
             manifest,

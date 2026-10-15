@@ -25,6 +25,25 @@ use crate::catalog::install::{
 use crate::registry::default_data_root;
 use crate::{Error, Project, Result, event, now};
 
+/// The manifest OpenAEVC recorded at registration equals the installed one (id, version,
+/// artifact digest and every declared kind and capability).
+pub fn registration_matches(r: &PackageRecord, body: &Value) -> std::result::Result<(), String> {
+    let got: openaevc::protocol::ExtensionManifest =
+        serde_json::from_value(body.clone()).map_err(|e| format!("registered manifest: {e}"))?;
+    if got == r.manifest {
+        return Ok(());
+    }
+    Err(format!(
+        "OpenAEVC registered {}@{} (artifact {}), the installed package is {}@{} (artifact {})",
+        got.id,
+        got.version,
+        got.artifact_digest,
+        r.manifest.id,
+        r.manifest.version,
+        r.manifest.artifact_digest
+    ))
+}
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
@@ -194,7 +213,7 @@ pub fn search(query: Option<&str>) -> Result<Value> {
             }
             let versions = match c.fetch(&mirror, &format!("{id}/package.json"), None) {
                 Ok(Some((info, b))) => serde_json::from_slice::<install::PackageIndex>(&b)
-                    .map(|p| json!({"versions": p.versions.iter().map(|v| json!({"version": v.version, "kind": v.kind})).collect::<Vec<_>>(), "publisher": info.role}))
+                    .map(|p| json!({"versions": p.versions.iter().map(|v| json!({"version": v.version, "kind": v.kind, "targets": v.native.keys().collect::<Vec<_>>()})).collect::<Vec<_>>(), "publisher": info.role}))
                     .unwrap_or_else(|e| json!({"problem": e.to_string()})),
                 Ok(None) => json!({"problem": "listed in index.json but not offered"}),
                 Err(e) => json!({"problem": format!("{e:?}")}),
@@ -487,6 +506,23 @@ impl Project {
             .client
             .register_extension(&r.entrypoint, digest, grants.to_vec())
             .await?;
+        // A1b: what OpenAEVC registered (it re-runs the handshake) must be exactly the installed
+        // manifest; a binary that answers differently now is unregistered, never activated.
+        let registered = self
+            .client
+            .query(Query::GetObject {
+                digest: manifest_digest,
+            })
+            .await?;
+        if let Err(why) = registration_matches(r, &registered["envelope"]["body"]) {
+            let _ = self
+                .client
+                .command(openaevc::protocol::Command::UnregisterExtension {
+                    extension: r.manifest.id.clone(),
+                })
+                .await;
+            return Err(invalid(format!("EXTENSION_IDENTITY_MISMATCH: {why}")));
+        }
         // A2: the desired state.
         self.record_grants(r, grants, true)?;
         set_usage(r.native_digest(), &self.identity.project_id, true)?;

@@ -380,9 +380,9 @@ pub struct Package<'a> {
     pub metadata: Option<Vec<u8>>,
 }
 
-/// `<arch>-<os>` of this host (the key Calve looks up in `package.json`).
+/// The exact target triple of this host (the key Calve looks up in `package.json`).
 pub fn host_platform() -> String {
-    format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
+    calve_integration_contract::catalog::HOST_TARGET.into()
 }
 
 impl Repo {
@@ -395,12 +395,12 @@ impl Repo {
         }
     }
 
-    /// Adds a package version under `role`: its files at `<id>/<version>/<file>` and a merged
+    /// Adds a package version under `role`: the host's native build at
+    /// `<id>/<version>/<triple>/<file>`, other files at `<id>/<version>/<file>`, and a merged
     /// `<id>/package.json`. Call [`Repo::publish`] afterwards.
     pub fn add_package(&mut self, role: &str, p: Package) {
-        let mut files = vec![(p.native.0.to_owned(), p.native.1.clone())];
-        let mut entry =
-            json!({"version": p.version, "kind": p.kind, "native": {host_platform(): p.native.0}});
+        let mut files: Vec<(String, Vec<u8>)> = vec![];
+        let mut entry = json!({"version": p.version, "kind": p.kind, "native": {}});
         if let Some(c) = p.cic {
             files.push(("cic.wasm".into(), c));
             entry["cic"] = json!("cic.wasm");
@@ -423,6 +423,40 @@ impl Repo {
             .unwrap()
             .retain(|v| v["version"] != p.version);
         index["versions"].as_array_mut().unwrap().push(entry);
+        t.insert(index_path, serde_json::to_vec(&index).unwrap());
+        self.add_native(
+            role,
+            p.id,
+            p.version,
+            &host_platform(),
+            p.native.0,
+            p.native.1,
+        );
+    }
+
+    /// Adds (or replaces) the native build for `target` to an existing package version.
+    pub fn add_native(
+        &mut self,
+        role: &str,
+        id: &str,
+        version: &str,
+        target: &str,
+        file: &str,
+        bytes: Vec<u8>,
+    ) {
+        let index_path = format!("{id}/package.json");
+        let digest = sha(&bytes);
+        let t = self.role_targets(role);
+        t.insert(
+            calve_integration_contract::catalog::native_path(id, version, target, file),
+            bytes,
+        );
+        let mut index: Value = serde_json::from_slice(&t[&index_path]).unwrap();
+        for v in index["versions"].as_array_mut().unwrap() {
+            if v["version"] == version {
+                v["native"][target] = json!({"file": file, "sha256": digest});
+            }
+        }
         t.insert(index_path, serde_json::to_vec(&index).unwrap());
     }
 

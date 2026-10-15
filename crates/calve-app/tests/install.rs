@@ -184,7 +184,10 @@ fn kind_rules_and_compatibility_gates() {
     let idx = r.targets.get_mut("org.example.toy/package.json").unwrap();
     *idx = String::from_utf8(idx.clone())
         .unwrap()
-        .replace(&calve_testkit::tuf::host_platform(), "riscv-plan9")
+        .replace(
+            &calve_testkit::tuf::host_platform(),
+            "riscv64gc-unknown-none-elf",
+        )
         .into_bytes();
     r.publish();
     catalog(&m, "main", &r);
@@ -229,7 +232,11 @@ fn publisher_identity_id_policy_and_path_authorization() {
     r.delegate(
         "acme",
         "targets",
-        &["org.example.toy/*", "org.example.toy/*/*"],
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
         false,
     );
     r.add_package("acme", toy(None));
@@ -246,7 +253,11 @@ fn publisher_identity_id_policy_and_path_authorization() {
     r.delegate(
         "examples",
         "targets",
-        &["org.example.toy/*", "org.example.toy/*/*"],
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
         false,
     );
     r.add_package("examples", toy(None));
@@ -257,7 +268,12 @@ fn publisher_identity_id_policy_and_path_authorization() {
     // A role whose paths do not cover the id: its listing is invisible to the verifier.
     let m = machine();
     let mut r = Repo::new();
-    r.delegate("evil", "targets", &["com.evil/*", "com.evil/*/*"], false);
+    r.delegate(
+        "evil",
+        "targets",
+        &["com.evil/*", "com.evil/*/*", "com.evil/*/*/*"],
+        false,
+    );
     r.add_package("evil", toy(None));
     r.id_policy("evil", &["org."]);
     r.publish();
@@ -407,11 +423,15 @@ fn catalog_names_and_ids_are_validated() {
 fn nested_role_reusing_an_authorized_name_is_not_that_publisher() {
     let m = machine();
     let mut r = Repo::new();
-    r.delegate("acme", "targets", &["*", "*/*", "*/*/*"], false);
+    r.delegate("acme", "targets", &["*", "*/*", "*/*/*", "*/*/*/*"], false);
     r.delegate(
         "examples",
         "acme",
-        &["org.example.toy/*", "org.example.toy/*/*"],
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
         false,
     );
     r.add_package("examples", toy(None));
@@ -435,7 +455,11 @@ fn slash_in_a_role_name_cannot_impersonate_a_chain() {
     r.delegate(
         "acme/examples",
         "targets",
-        &["org.example.toy/*", "org.example.toy/*/*"],
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
         false,
     );
     r.add_package("acme/examples", toy(None));
@@ -464,4 +488,87 @@ fn an_interrupted_retirement_restores_the_package() {
     let out = installer(&m).recover().unwrap();
     assert_eq!(out[0]["outcome"], "restored");
     verify_installed(&m.paths, &rec).unwrap();
+}
+
+#[test]
+fn native_builds_are_selected_by_exact_target_triple_and_digest() {
+    // Two targets ship a binary with the same file name in the same version: distinct paths,
+    // and the host's build is the one installed.
+    let m = machine();
+    let mut r = Repo::new();
+    r.add_package("targets", toy(None));
+    let other = if calve_testkit::tuf::host_platform() == "aarch64-apple-darwin" {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "aarch64-apple-darwin"
+    };
+    r.add_native(
+        "targets",
+        "org.example.toy",
+        "0.1.0",
+        other,
+        "calve-fixture-ext",
+        b"another platform's executable".to_vec(),
+    );
+    r.publish();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    assert_eq!(rec.target, calve_testkit::tuf::host_platform());
+    assert_eq!(rec.digests["native"], calve_testkit::tuf::sha(&native()));
+    assert_eq!(rec.manifest.artifact_digest.hex(), rec.digests["native"]);
+
+    // The package index's native digest must equal the TUF target hash.
+    let m = machine();
+    let mut r = repo_with_toy();
+    let idx = r.targets.get_mut("org.example.toy/package.json").unwrap();
+    *idx = String::from_utf8(idx.clone())
+        .unwrap()
+        .replace(&calve_testkit::tuf::sha(&native()), &"0".repeat(64))
+        .into_bytes();
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "PACKAGE_INVALID");
+    assert!(installed(&m.paths).unwrap().is_empty());
+
+    // An installed record of another target is never activated.
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let mut rec = installer(&m).install(&req(true)).unwrap();
+    rec.target = other.into();
+    assert_eq!(
+        verify_installed(&m.paths, &rec).unwrap_err().code,
+        "EXTENSION_INCOMPATIBLE"
+    );
+}
+
+#[test]
+fn the_registered_manifest_must_be_exactly_the_installed_one() {
+    use calve_app::extensions::registration_matches;
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    let body = serde_json::to_value(&rec.manifest).unwrap();
+    registration_matches(&rec, &body).unwrap();
+    for (field, value) in [
+        ("id", serde_json::json!("org.example.other")),
+        ("version", serde_json::json!("0.1.1")),
+        (
+            "host_capabilities",
+            if rec.manifest.host_capabilities.is_empty() {
+                serde_json::json!(["process.execute"])
+            } else {
+                serde_json::json!([])
+            },
+        ),
+        (
+            "artifact_digest",
+            serde_json::json!(format!("sha256:{}", "1".repeat(64))),
+        ),
+    ] {
+        let mut b = body.clone();
+        b[field] = value;
+        assert!(registration_matches(&rec, &b).is_err(), "{field}");
+    }
 }
