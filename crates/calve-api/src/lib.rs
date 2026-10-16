@@ -417,6 +417,11 @@ pub enum RecoverCommand {
         /// Acknowledge removal of the listed disposable leftovers.
         #[arg(long)]
         yes: bool,
+        /// Replace the product database with this backup (a file listed by `recover inspect`),
+        /// then reconcile it against OpenAEVC.
+        #[arg(long, value_name = "FILE")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore_backup: Option<String>,
     },
 }
 
@@ -1195,7 +1200,32 @@ pub enum ReviewCommand {
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
 pub enum BaselineCommand {
     /// Compose promoted packs into a Baseline.
-    Create { label: String, members: Vec<String> },
+    Create {
+        label: String,
+        members: Vec<String>,
+        /// A composition edge `FROM:TO` (FROM requires TO) or `FROM:TO:orders-after`; repeatable.
+        #[arg(long = "edge", value_name = "FROM:TO[:KIND]")]
+        #[serde(default)]
+        edges: Vec<String>,
+    },
+    /// A new Baseline from an existing one: add or remove promoted packs, or replace with a
+    /// promoted RevisionPack (a superseding revision replaces its targets).
+    Derive {
+        base: String,
+        label: String,
+        #[arg(long = "add", value_name = "DIGEST")]
+        #[serde(default)]
+        add: Vec<String>,
+        #[arg(long = "remove", value_name = "DIGEST")]
+        #[serde(default)]
+        remove: Vec<String>,
+        #[arg(long = "replace-with", value_name = "REVISION_DIGEST")]
+        #[serde(default)]
+        replace: Vec<String>,
+        #[arg(long = "edge", value_name = "FROM:TO[:KIND]")]
+        #[serde(default)]
+        edges: Vec<String>,
+    },
     /// List Baselines.
     List,
     /// Show a Baseline.

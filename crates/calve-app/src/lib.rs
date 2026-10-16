@@ -5,10 +5,13 @@ pub use calve_api::{ActivityFilter, GrantOptions};
 
 pub mod adopt;
 pub mod app;
+pub mod backup;
 pub mod catalog;
 pub mod checks;
 pub mod compatibility;
+pub mod composition;
 pub mod config;
+pub mod continuity;
 pub(crate) mod domains;
 pub mod extensions;
 pub mod extsort;
@@ -21,6 +24,7 @@ pub mod materialize;
 pub mod observe;
 pub mod ops;
 pub mod providers;
+pub mod recovery;
 pub mod redact;
 pub mod registry;
 pub mod resources;
@@ -57,6 +61,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("{0}")]
     Message(String),
+    /// A coded product error with machine-readable detail (`Fault::detail`).
+    #[error("{code}: {message}")]
+    Detailed {
+        code: &'static str,
+        message: String,
+        detail: serde_json::Value,
+    },
     #[error("project writer is busy: {0}")]
     Busy(String),
     #[error(transparent)]
@@ -81,6 +92,21 @@ impl From<openaevc::protocol::ProtocolError> for Error {
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
+}
+
+/// A coded product error carrying structured detail, e.g. a `RECOVERY_REQUIRED` reason or the
+/// paths of a `MATERIALIZE_CONFLICT`.
+pub(crate) fn detailed(
+    code: &'static str,
+    message: impl Into<String>,
+    detail: serde_json::Value,
+) -> Error {
+    debug_assert!(calve_api::errors::is_code(code), "{code}");
+    Error::Detailed {
+        code,
+        message: message.into(),
+        detail,
+    }
 }
 
 /// A product error with a stable code from [`calve_api::errors::CODES`] (`CODE: message`).
@@ -378,6 +404,76 @@ fn make_runtime(state: &Path, keys: &Keys, create: bool) -> Result<Arc<Runtime>>
     )?))
 }
 
+/// `.calve/{cache,run,logs,tmp}` (§12.1), private on Unix.
+fn ensure_layout(state: &Path) -> Result<()> {
+    for dir in ["cache", "run", "logs", "tmp"] {
+        let d = state.join(dir);
+        if !d.is_dir() {
+            fs::create_dir_all(&d)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&d, fs::Permissions::from_mode(0o700))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Keeps `.calve/` out of Git when the Project root is a Git checkout (§12.1): one line in the
+/// repository's `info/exclude` (local, never committed). `.git` may be a directory or a
+/// `gitdir:` file (worktrees, submodules).
+pub fn exclude_from_git(root: &Path) -> Result<()> {
+    let dot_git = root.join(".git");
+    let git_dir = if dot_git.is_dir() {
+        dot_git
+    } else if let Ok(text) = fs::read_to_string(&dot_git)
+        && let Some(dir) = text.strip_prefix("gitdir:")
+    {
+        let dir = root.join(dir.trim());
+        // A linked worktree keeps `info/` in the common directory.
+        match fs::read_to_string(dir.join("commondir")) {
+            Ok(common) => dir.join(common.trim()),
+            Err(_) => dir,
+        }
+    } else {
+        return Ok(());
+    };
+    let exclude = git_dir.join("info/exclude");
+    let text = fs::read_to_string(&exclude).unwrap_or_default();
+    if text
+        .lines()
+        .any(|l| matches!(l.trim(), "/.calve/" | ".calve/" | "/.calve" | ".calve"))
+    {
+        return Ok(());
+    }
+    fs::create_dir_all(git_dir.join("info"))?;
+    let sep = if text.is_empty() || text.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    fs::write(
+        &exclude,
+        format!("{text}{sep}# Calve local state\n/.calve/\n"),
+    )?;
+    Ok(())
+}
+
+/// OpenAEVC pack metadata Calve sets at creation: the title, so the pack index can be rebuilt
+/// from OpenAEVC after the product database is lost or restored from an older backup (§10).
+fn calve_pack_metadata(title: &str) -> Metadata {
+    let mut m = Metadata::new();
+    m.insert("org.calve.title".into(), json!(title));
+    m
+}
+
+/// The public key of a Project's runtime signer (verifies its signed journal checkpoints).
+pub(crate) fn project_runtime_key(state: &Path) -> Result<openaevc::protocol::PublicKey> {
+    let keys: Keys = toml::from_str(&fs::read_to_string(state.join("keys.toml"))?)?;
+    Ok(signing_key(&keys.runtime_seed)?.public_key())
+}
+
 fn write_private(path: &Path, content: &str) -> Result<()> {
     use std::io::Write;
     let mut options = fs::OpenOptions::new();
@@ -456,7 +552,7 @@ const PROJECT_SCHEMA: &str = "
          CREATE TABLE product_events (
            seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
            subject TEXT NOT NULL, detail TEXT NOT NULL, created_at INTEGER NOT NULL,
-           created_at_ns INTEGER NOT NULL
+           created_at_ns INTEGER NOT NULL, actor TEXT
          );
          INSERT INTO schema_migrations VALUES (8);
          INSERT INTO schema_migrations VALUES (9);
@@ -485,11 +581,54 @@ const PROJECT_SCHEMA: &str = "
          );
          CREATE INDEX pack_files_path ON pack_files(path);
          DELETE FROM projection_checkpoints WHERE name='packs';
-         INSERT INTO schema_migrations VALUES (13);";
+         INSERT INTO schema_migrations VALUES (13);
+         INSERT INTO schema_migrations VALUES (14);
+         CREATE TABLE store_binding (
+           id INTEGER PRIMARY KEY CHECK (id = 1),
+           project_id TEXT NOT NULL, namespace_id TEXT NOT NULL, genesis_hash TEXT NOT NULL,
+           checkpoint_seq INTEGER NOT NULL, checkpoint_hash TEXT NOT NULL,
+           signed_checkpoint TEXT, updated_at TEXT NOT NULL
+         );";
 
-fn init_db(path: &Path, create: bool) -> Result<Connection> {
+/// Current product database schema.
+pub const PRODUCT_SCHEMA: u32 = 14;
+
+/// Forward migrations: entry `i` takes version `i + 1` to `i + 2`.
+const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
+    migrate_task_dependencies,
+    migrate_review_evidence,
+    migrate_task_metadata,
+    migrate_inbox,
+    migrate_intents,
+    migrate_task_links,
+    migrate_activity_time,
+    migrate_intent_references,
+    migrate_task_work_units,
+    migrate_extension_grants,
+    migrate_pack_index,
+    migrate_pack_files,
+    migrate_store_binding,
+];
+
+/// How the product database is opened (§46.4: only a writer migrates, after the gate).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbOpen {
+    Create,
+    /// Apply pending migrations, each run preceded by a verified backup.
+    Migrate,
+    /// Refuse a database that needs migration (`MIGRATION_REQUIRED`).
+    Current,
+}
+
+/// Schema version of a product database without opening it for writing.
+pub fn product_schema_version(path: &Path) -> Result<u32> {
+    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    Ok(db.query_row("PRAGMA user_version", [], |row| row.get(0))?)
+}
+
+fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
-        | if create {
+        | if mode == DbOpen::Create {
             OpenFlags::SQLITE_OPEN_CREATE
         } else {
             OpenFlags::empty()
@@ -498,165 +637,70 @@ fn init_db(path: &Path, create: bool) -> Result<Connection> {
     db.busy_timeout(std::time::Duration::from_secs(5))?;
     db.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;")?;
     let version: u32 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    match (version, create) {
-        (0, true) => {
+    match (version, mode) {
+        (0, DbOpen::Create) => {
             let tx = db.transaction()?;
             tx.execute_batch(PROJECT_SCHEMA)?;
-            tx.execute_batch("PRAGMA user_version=13")?;
+            tx.execute_batch(&format!("PRAGMA user_version={PRODUCT_SCHEMA}"))?;
             tx.commit()?;
+            return Ok(db);
         }
-        (0, false) => {
-            // The first Calve slice recorded schema_migrations but not SQLite user_version.
-            let legacy: Option<u32> = db
-                .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
-                    row.get(0)
-                })
-                .optional()
-                .map_err(|_| {
-                    coded(
-                        "CORRUPT_PRODUCT_STATE",
-                        "unrecognized project database schema",
-                    )
-                })?
-                .flatten();
-            if legacy != Some(1) {
-                return Err(coded(
-                    "CORRUPT_PRODUCT_STATE",
-                    "unrecognized project database schema",
-                ));
-            }
-            migrate_task_dependencies(&mut db)?;
-            migrate_review_evidence(&mut db)?;
-            migrate_task_metadata(&mut db)?;
-            migrate_inbox(&mut db)?;
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (1, false) => {
-            migrate_task_dependencies(&mut db)?;
-            migrate_review_evidence(&mut db)?;
-            migrate_task_metadata(&mut db)?;
-            migrate_inbox(&mut db)?;
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (2, false) => {
-            migrate_review_evidence(&mut db)?;
-            migrate_task_metadata(&mut db)?;
-            migrate_inbox(&mut db)?;
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (3, false) => {
-            migrate_task_metadata(&mut db)?;
-            migrate_inbox(&mut db)?;
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (4, false) => {
-            migrate_inbox(&mut db)?;
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (5, false) => {
-            migrate_intents(&mut db)?;
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (6, false) => {
-            migrate_task_links(&mut db)?;
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (7, false) => {
-            migrate_activity_time(&mut db)?;
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (8, false) => {
-            migrate_intent_references(&mut db)?;
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (9, false) => {
-            migrate_task_work_units(&mut db)?;
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (10, false) => {
-            migrate_extension_grants(&mut db)?;
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (11, false) => {
-            migrate_pack_index(&mut db)?;
-            migrate_pack_files(&mut db)?;
-        }
-        (12, false) => migrate_pack_files(&mut db)?,
-        (13, false) => {}
-        (1..=13, true) => return Err(invalid("project database already exists")),
-        (other, _) => {
+        (_, DbOpen::Create) => return Err(invalid("project database already exists")),
+        (v, _) if v > PRODUCT_SCHEMA => {
             return Err(coded(
                 "MIGRATION_REQUIRED",
                 format!(
-                    "project database schema version {other} is newer than this Calve supports (13); upgrade Calve"
+                    "project database schema version {v} is newer than this Calve supports ({PRODUCT_SCHEMA}); upgrade Calve"
                 ),
             ));
         }
+        (v, _) if v == PRODUCT_SCHEMA => return Ok(db),
+        (v, DbOpen::Current) => {
+            return Err(coded(
+                "MIGRATION_REQUIRED",
+                format!(
+                    "project database schema {v} needs migration to {PRODUCT_SCHEMA}; run a command that changes the Project (it backs the database up first)"
+                ),
+            ));
+        }
+        _ => {}
     }
-    // Migration log (§45.1): every schema change of an existing database is recorded.
-    let now: u32 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if !create && now != version {
-        crate::observe::record(
-            "migration",
-            serde_json::json!({"database": "project", "path": path, "from": version, "to": now}),
-        );
+    // The first Calve slice recorded schema_migrations but not SQLite user_version.
+    let from = if version == 0 {
+        let legacy: Option<u32> = db
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(|_| {
+                coded(
+                    "CORRUPT_PRODUCT_STATE",
+                    "unrecognized project database schema",
+                )
+            })?
+            .flatten();
+        if legacy != Some(1) {
+            return Err(coded(
+                "CORRUPT_PRODUCT_STATE",
+                "unrecognized project database schema",
+            ));
+        }
+        1
+    } else {
+        version
+    };
+    // §10: a verified backup precedes every migration run.
+    crate::backup::take(&db, path, "pre-migration", from)?;
+    crate::journal::fault("migration.after_backup");
+    for migrate in &MIGRATIONS[(from - 1) as usize..] {
+        migrate(&mut db)?;
+        crate::journal::fault("migration.step");
     }
+    // Migration log (§45.1).
+    crate::observe::record(
+        "migration",
+        serde_json::json!({"database": "project", "path": path, "from": version, "to": PRODUCT_SCHEMA}),
+    );
     Ok(db)
 }
 
@@ -844,6 +888,26 @@ fn migrate_pack_files(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+const STORE_BINDING_SCHEMA: &str = "CREATE TABLE store_binding (
+           id INTEGER PRIMARY KEY CHECK (id = 1),
+           project_id TEXT NOT NULL, namespace_id TEXT NOT NULL, genesis_hash TEXT NOT NULL,
+           checkpoint_seq INTEGER NOT NULL, checkpoint_hash TEXT NOT NULL,
+           signed_checkpoint TEXT, updated_at TEXT NOT NULL
+         );";
+
+/// v14: the §11 store binding and checkpoint, and the actor of product activity (P18).
+fn migrate_store_binding(db: &mut Connection) -> Result<()> {
+    let tx = db.transaction()?;
+    tx.execute_batch(STORE_BINDING_SCHEMA)?;
+    tx.execute_batch(
+        "ALTER TABLE product_events ADD COLUMN actor TEXT;
+         INSERT INTO schema_migrations VALUES (14);
+         PRAGMA user_version=14;",
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 fn event(db: &Connection, kind: &str, subject: &str, detail: &str) -> Result<()> {
     let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -851,8 +915,8 @@ fn event(db: &Connection, kind: &str, subject: &str, detail: &str) -> Result<()>
     let nanos = i64::try_from(time.as_nanos())
         .map_err(|_| invalid("product activity timestamp exceeds SQLite range"))?;
     db.execute(
-        "INSERT INTO product_events(kind,subject,detail,created_at,created_at_ns) VALUES (?1,?2,?3,?4,?5)",
-        params![kind, subject, detail, time.as_secs(), nanos],
+        "INSERT INTO product_events(kind,subject,detail,created_at,created_at_ns,actor) VALUES (?1,?2,?3,?4,?5,?6)",
+        params![kind, subject, detail, time.as_secs(), nanos, crate::app::current_actor()],
     )?;
     Ok(())
 }
@@ -962,6 +1026,7 @@ impl Project {
             fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))?;
         }
         fs::create_dir(staging.join("extensions"))?;
+        ensure_layout(&staging)?;
         let result = async {
             let ids = UuidV7Ids::new(Arc::new(SystemClock));
             let admin = SigningKey::generate();
@@ -1009,7 +1074,7 @@ impl Project {
             };
             write_private(&staging.join("keys.toml"), &toml::to_string(&keys)?)?;
             fs::write(staging.join("project.toml"), toml::to_string(&identity)?)?;
-            let db = init_db(&staging.join("product.sqlite3"), true)?;
+            let db = init_db(&staging.join("product.sqlite3"), DbOpen::Create)?;
             db.execute(
                 "INSERT INTO preferences(key,value) VALUES ('project.display_name',?1)",
                 [&display_name],
@@ -1026,22 +1091,61 @@ impl Project {
             let _ = fs::remove_dir_all(&staging);
         }
         result?;
+        exclude_from_git(&root)?;
         Self::open(&root)
     }
 
+    /// Walks up from `start` to the first directory holding `.calve/project.toml` (§13.3),
+    /// stopping at the filesystem root or at a boundary in `CALVE_DISCOVERY_CEILING` (absolute
+    /// directories separated by the platform path separator; the search never looks at or
+    /// above one). Diagnostics name both the entered and the canonical path.
     pub fn discover(start: &Path) -> Result<PathBuf> {
-        let mut current = fs::canonicalize(start)?;
+        let ceilings: Vec<PathBuf> = std::env::var_os("CALVE_DISCOVERY_CEILING")
+            .map(|v| std::env::split_paths(&v).collect())
+            .unwrap_or_default();
+        Self::discover_bounded(start, &ceilings)
+    }
+
+    /// [`Project::discover`] with explicit ceilings (relative entries are ignored).
+    pub fn discover_bounded(start: &Path, ceilings: &[PathBuf]) -> Result<PathBuf> {
+        let canonical = fs::canonicalize(start).map_err(|e| {
+            detailed(
+                "PROJECT_NOT_FOUND",
+                format!("{}: {e}", start.display()),
+                serde_json::json!({"entered": start}),
+            )
+        })?;
+        let ceilings: Vec<PathBuf> = ceilings
+            .iter()
+            .filter(|p| p.is_absolute())
+            .map(|p| fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
+            .collect();
+        let mut current = canonical.clone();
         if current.is_file() {
             current.pop();
         }
         loop {
+            if ceilings.contains(&current) {
+                break;
+            }
             if current.join(".calve/project.toml").is_file() {
                 return Ok(current);
             }
             if !current.pop() {
-                return Err(coded("PROJECT_NOT_FOUND", "no Calve project found"));
+                break;
             }
         }
+        let shown = if canonical == start {
+            start.display().to_string()
+        } else {
+            format!("{} (canonical {})", start.display(), canonical.display())
+        };
+        Err(detailed(
+            "PROJECT_NOT_FOUND",
+            format!("no Calve Project at or above {shown}"),
+            serde_json::json!({"entered": start, "canonical": canonical, "stopped_at": current,
+                "ceilings": ceilings}),
+        ))
     }
 
     /// Reads identity and display name only; safe while another handle holds the runtime.
@@ -1090,7 +1194,19 @@ impl Project {
         }
     }
 
+    /// Opens for writing (commands): the §46.4 gate, then migration with a backup, continuity,
+    /// and the checkpoint advance.
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with(path, true)
+    }
+
+    /// Opens for queries: the same gate and continuity check, but never migrates and never
+    /// advances the checkpoint.
+    pub fn open_reader(path: &Path) -> Result<Self> {
+        Self::open_with(path, false)
+    }
+
+    fn open_with(path: &Path, writer: bool) -> Result<Self> {
         let root = Self::discover(path)?;
         let state = root.join(".calve");
         if fs::symlink_metadata(&state)?.file_type().is_symlink() {
@@ -1115,6 +1231,24 @@ impl Project {
             }
         }
         let keys: Keys = toml::from_str(&fs::read_to_string(key_path)?)?;
+        // §46.4 gate, nothing written until every check passed: product database version,
+        // OpenAEVC protocol/contract, enabled extensions.
+        let db_path = state.join("product.sqlite3");
+        if !db_path.is_file() {
+            return Err(coded(
+                "CORRUPT_PRODUCT_STATE",
+                "project product database is missing; restore a backup with `calve recover apply --restore-backup <file>`",
+            ));
+        }
+        let version = product_schema_version(&db_path)?;
+        if version > PRODUCT_SCHEMA {
+            return Err(coded(
+                "MIGRATION_REQUIRED",
+                format!(
+                    "project database schema version {version} is newer than this Calve supports ({PRODUCT_SCHEMA}); upgrade Calve"
+                ),
+            ));
+        }
         let runtime = make_runtime(&state, &keys, false)?;
         let client = EmbeddedClient::new(
             runtime.clone(),
@@ -1124,11 +1258,50 @@ impl Project {
                 Some(identity.namespace_id),
             ),
         );
-        let db_path = state.join("product.sqlite3");
-        if !db_path.is_file() {
-            return Err(invalid("project product database is missing"));
+        let gate =
+            |q: Query| -> Result<Value> { Ok(runtime.query(client.session().envelope(q)?)?) };
+        let info = gate(Query::GetRuntimeInfo {}).map_err(|e| match e {
+            // The store does not know this Project's namespace or principal: another store.
+            Error::Protocol(p)
+                if p.code == ErrorCode::Unauthorized || p.code == ErrorCode::NotFound =>
+            {
+                detailed(
+                    "RECOVERY_REQUIRED",
+                    format!(
+                        "the OpenAEVC store under {} does not hold this Project's namespace {}",
+                        state.display(),
+                        identity.namespace_id
+                    ),
+                    json!({"reason": "identity_mismatch", "openaevc": *p}),
+                )
+            }
+            other => other,
+        })?;
+        compatibility::check(&serde_json::from_value(info)?)?;
+        compatibility::check_enabled_extensions(&gate)?;
+        let db = init_db(
+            &db_path,
+            if writer {
+                DbOpen::Migrate
+            } else {
+                DbOpen::Current
+            },
+        )?;
+        let runtime_key = signing_key(&keys.runtime_seed)?.public_key();
+        continuity::verify(
+            &db,
+            &identity,
+            &continuity::RuntimeEvents {
+                runtime: &runtime,
+                session: client.session(),
+            },
+            &runtime_key,
+            writer,
+        )?;
+        if writer {
+            ensure_layout(&state)?;
+            backup::daily_if_due(&db, &db_path, PRODUCT_SCHEMA)?;
         }
-        let db = init_db(&db_path, false)?;
         let stored_name: Option<String> = db
             .query_row(
                 "SELECT value FROM preferences WHERE key='project.display_name'",
@@ -2133,7 +2306,7 @@ impl Project {
         let spec = PackSpec {
             intent: intent.map(|id| json!({"org.calve.intent": id})),
             required_policies,
-            metadata: Metadata::new(),
+            metadata: calve_pack_metadata(title),
             ..PackSpec::default()
         };
         let id = self.client.create_change_pack(spec).await?;
@@ -2195,11 +2368,40 @@ impl Project {
                 .collect::<std::result::Result<Vec<_>, _>>()?,
         );
         drop(missing);
-        let known: BTreeSet<String> = {
+        let mut known: BTreeSet<String> = {
             let mut stmt = self.db.prepare("SELECT id FROM pack_metadata")?;
             stmt.query_map([], |r| r.get::<_, String>(0))?
                 .collect::<std::result::Result<_, _>>()?
         };
+        // Reconciliation (§10–§11): a Calve pack whose metadata row is missing (database lost
+        // or restored from an older backup) is re-adopted from its OpenAEVC metadata.
+        let unknown: Vec<String> = dirty
+            .iter()
+            .filter(|id| !known.contains(*id))
+            .cloned()
+            .collect();
+        for id in &unknown {
+            let Ok(pack) = self.pack(id).await else {
+                continue;
+            };
+            let Some(title) = pack.metadata.get("org.calve.title").and_then(Value::as_str) else {
+                continue;
+            };
+            let intent = pack
+                .intent
+                .as_ref()
+                .and_then(|i| i["org.calve.intent"].as_str())
+                .filter(|i| {
+                    self.db
+                        .query_row("SELECT 1 FROM intents WHERE id=?1", [i], |_| Ok(()))
+                        .is_ok()
+                });
+            self.db.execute(
+                "INSERT OR IGNORE INTO pack_metadata VALUES (?1,?2,?3,?4)",
+                params![id, title, intent, pack.created_at.to_string()],
+            )?;
+            known.insert(id.clone());
+        }
         // The file domain classifies file effects; without one no files are indexed.
         let domain = self.file_domain().await.ok();
         let tx = self.db.unchecked_transaction()?;
@@ -2609,7 +2811,7 @@ impl Project {
         let spec = PackSpec {
             intent: intent.map(|id| json!({"org.calve.intent":id})),
             required_policies: self.register_pack_policies(false, require_review).await?,
-            metadata: Metadata::new(),
+            metadata: calve_pack_metadata(title),
             ..PackSpec::default()
         };
         let receipt = self
@@ -3272,12 +3474,44 @@ impl Project {
         label: &str,
         members: Vec<Digest>,
     ) -> Result<(BaselineId, Digest)> {
+        self.create_baseline_with(label, members, vec![], None)
+            .await
+    }
+
+    /// Creates a Baseline from explicit members and caller edges (REQUIRES/ORDERS_AFTER);
+    /// OpenAEVC validates the composition. The label (and the base of a derivation) is kept in
+    /// the object's metadata too, so the index can be rebuilt from OpenAEVC.
+    pub async fn create_baseline_with(
+        &self,
+        label: &str,
+        members: Vec<Digest>,
+        edges: Vec<openaevc::protocol::CompositionEdge>,
+        derived_from: Option<Digest>,
+    ) -> Result<(BaselineId, Digest)> {
         if label.trim().is_empty() || members.is_empty() {
             return Err(invalid(
                 "baseline needs a label and at least one promoted pack digest",
             ));
         }
-        let (id, digest) = self.client.create_baseline(members, vec![]).await?;
+        let receipt = self
+            .client
+            .command(Command::CreateBaseline {
+                members,
+                edges,
+                policies: vec![],
+                metadata: composition::baseline_metadata(label, derived_from),
+            })
+            .await?;
+        let id: BaselineId = receipt
+            .result
+            .id
+            .ok_or_else(|| invalid("baseline creation returned no ID"))?
+            .parse()
+            .map_err(|_| invalid("baseline creation returned an invalid ID"))?;
+        let digest = receipt
+            .result
+            .digest
+            .ok_or_else(|| invalid("baseline creation returned no digest"))?;
         self.db.execute(
             "INSERT INTO baseline_metadata VALUES (?1,?2,?3,?4)",
             params![id.to_string(), digest.to_string(), label, now()?],
@@ -3286,13 +3520,39 @@ impl Project {
         Ok((id, digest))
     }
 
-    pub fn list_baselines(&self) -> Result<Vec<Value>> {
-        let mut stmt = self
-            .db
-            .prepare("SELECT id,digest,label FROM baseline_metadata ORDER BY created_at,id")?;
-        let rows = stmt.query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"digest":r.get::<_,String>(1)?,"label":r.get::<_,String>(2)?})))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+    /// Every Baseline in the Namespace (OpenAEVC is authoritative; labels from the index or the
+    /// object's metadata), with its aliases and whether it is active.
+    pub async fn list_baselines(&self) -> Result<Vec<Value>> {
+        let active = self.active_baseline()?;
+        let aliases = self.list_baseline_aliases()?;
+        Ok(self
+            .protocol_baselines()
+            .await?
+            .into_iter()
+            .map(|(digest, b)| {
+                let id = b.id.to_string();
+                json!({"id": id, "digest": digest, "label": self.baseline_label(&b),
+                    "members": b.members.len(), "heads": b.heads, "graph_digest": b.graph_digest,
+                    "derived_from": b.metadata.get("org.calve.derived_from"),
+                    "aliases": aliases.iter().filter(|a| a["baseline_id"] == id.as_str()).map(|a| a["alias"].clone()).collect::<Vec<_>>(),
+                    "active": active.as_deref() == Some(id.as_str())})
+            })
+            .collect())
+    }
+
+    /// Rebuilds the Baseline index from OpenAEVC (labels kept, missing rows re-created).
+    pub(crate) async fn rebuild_baseline_index(&self) -> Result<usize> {
+        let mut n = 0;
+        for (digest, b) in self.protocol_baselines().await? {
+            let label = self
+                .baseline_label(&b)
+                .unwrap_or_else(|| "(unlabelled)".into());
+            n += self.db.execute(
+                "INSERT OR IGNORE INTO baseline_metadata VALUES (?1,?2,?3,?4)",
+                params![b.id.to_string(), digest.to_string(), label, now()?],
+            )?;
+        }
+        Ok(n)
     }
 
     pub async fn baseline(&self, id: &str) -> Result<Value> {
@@ -3323,28 +3583,8 @@ impl Project {
             .map_err(|_| invalid("invalid stored baseline alias"))
     }
 
-    fn local_baseline_digest(&self, id: BaselineId) -> Result<Digest> {
-        let stored: String = self
-            .db
-            .query_row(
-                "SELECT digest FROM baseline_metadata WHERE id=?1",
-                [id.to_string()],
-                |row| row.get(0),
-            )
-            .map_err(|error| match error {
-                rusqlite::Error::QueryReturnedNoRows => {
-                    crate::coded("NOT_FOUND", format!("unknown local baseline {id}"))
-                }
-                error => Error::Database(error),
-            })?;
-        stored
-            .parse()
-            .map_err(|_| invalid("invalid stored baseline digest"))
-    }
-
     pub async fn validate_baseline(&self, id_or_alias: &str) -> Result<Value> {
-        let id = self.resolve_baseline_id(id_or_alias)?;
-        let digest = self.local_baseline_digest(id)?;
+        let (digest, _) = self.baseline_object(id_or_alias).await?;
         Ok(self
             .client
             .query(Query::ValidateBaseline { digest })
@@ -3417,7 +3657,30 @@ impl Project {
             "left_heads":a.heads,"right_heads":b.heads,
             "left_graph_digest":a.graph_digest,"right_graph_digest":b.graph_digest,
             "left_missing_objects":a_missing,"right_missing_objects":b_missing,
+            "revisions": {"left": self.baseline_revisions(&a).await?, "right": self.baseline_revisions(&b).await?},
+            "resources": self.compare_resources(&a, &b).await?,
         }))
+    }
+
+    /// Domain-level difference of two compositions (file state by digest, §27.5).
+    async fn compare_resources(&self, a: &Baseline, b: &Baseline) -> Result<Value> {
+        let (fa, fb) = (self.composed_files(a).await?, self.composed_files(b).await?);
+        let paths: BTreeSet<&String> = fa.files.keys().chain(fb.files.keys()).collect();
+        let (mut only_left, mut only_right, mut different, mut same) = (vec![], vec![], vec![], 0);
+        for p in paths {
+            match (fa.files.get(p), fb.files.get(p)) {
+                (Some(x), Some(y)) if x.0 == y.0 => same += 1,
+                (Some(x), Some(y)) => different.push(json!({"path": p, "left": x.0, "right": y.0})),
+                (Some(x), None) => only_left.push(json!({"path": p, "digest": x.0})),
+                (None, Some(y)) => only_right.push(json!({"path": p, "digest": y.0})),
+                (None, None) => {}
+            }
+        }
+        Ok(
+            json!({"same": same, "only_left": only_left, "only_right": only_right,
+            "different": different,
+            "unordered_overlaps": {"left": fa.unordered_overlaps, "right": fb.unordered_overlaps}}),
+        )
     }
 
     pub fn list_baseline_aliases(&self) -> Result<Vec<Value>> {
@@ -3433,7 +3696,7 @@ impl Project {
             .map_err(Into::into)
     }
 
-    pub fn set_baseline_alias(&self, alias: &str, target: &str) -> Result<String> {
+    pub async fn set_baseline_alias(&self, alias: &str, target: &str) -> Result<String> {
         if alias.is_empty()
             || alias.len() > 64
             || !alias.as_bytes()[0].is_ascii_lowercase()
@@ -3445,8 +3708,7 @@ impl Project {
                 "alias must start with a lowercase letter and contain only lowercase letters, digits, '-' or '_', up to 64 characters",
             ));
         }
-        let id = self.resolve_baseline_id(target)?;
-        self.local_baseline_digest(id)?;
+        let id = self.baseline_object(target).await?.1.id;
         self.db.execute("INSERT INTO preferences(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             params![format!("baseline.alias.{alias}"), id.to_string()])?;
         event(&self.db, "baseline.alias.set", alias, &id.to_string())?;
@@ -3503,8 +3765,8 @@ impl Project {
         limit: i64,
         mut visit: impl FnMut(Value) -> Result<()>,
     ) -> Result<()> {
-        let mut stmt = self.db.prepare("SELECT seq,kind,subject,detail,created_at,created_at_ns FROM product_events ORDER BY seq DESC LIMIT ?1")?;
-        let rows = stmt.query_map([limit], |r| Ok(json!({"sequence":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"subject":r.get::<_,String>(2)?,"detail":r.get::<_,String>(3)?,"created_at":r.get::<_,u64>(4)?,"created_at_ns":r.get::<_,i64>(5)?})))?;
+        let mut stmt = self.db.prepare("SELECT seq,kind,subject,detail,created_at,created_at_ns,actor FROM product_events ORDER BY seq DESC LIMIT ?1")?;
+        let rows = stmt.query_map([limit], |r| Ok(json!({"sequence":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"subject":r.get::<_,String>(2)?,"detail":r.get::<_,String>(3)?,"created_at":r.get::<_,u64>(4)?,"created_at_ns":r.get::<_,i64>(5)?,"actor":r.get::<_,Option<String>>(6)?})))?;
         for row in rows {
             visit(row?)?;
         }
@@ -3617,7 +3879,7 @@ impl Project {
             let row = json!({
                 "id":format!("calve:{sequence}"),"source":"calve","source_event_id":sequence.to_string(),
                 "source_sequence":sequence,"project_id":self.identity.project_id,
-                "namespace_id":self.identity.namespace_id,"actor":null,
+                "namespace_id":self.identity.namespace_id,"actor":product["actor"],
                 "timestamp":Timestamp::from_unix_nanos(nanos).to_string(),"kind":kind,
                 "subject":subject,"subjects":[subject],"detail":detail,
                 "summary":format!("{kind} {subject}"),"body":null

@@ -84,7 +84,10 @@ impl Project {
             identity: self.identity.clone(),
             display_name: self.display_name.clone(),
             client,
-            db: crate::init_db(&self.root.join(".calve/product.sqlite3"), false)?,
+            db: crate::init_db(
+                &self.root.join(".calve/product.sqlite3"),
+                crate::DbOpen::Current,
+            )?,
             runtime: self.runtime.clone(),
             immutable_packs: Default::default(),
         })

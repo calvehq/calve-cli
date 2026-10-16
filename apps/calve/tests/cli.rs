@@ -1125,5 +1125,7 @@ fn cli_operations_surface() {
         .output()
         .unwrap();
     assert!(!refused.status.success());
-    assert_eq!(calve(&["recover", "inspect"])["opens"], true);
+    let inspected = calve(&["recover", "inspect"]);
+    assert_eq!(inspected["read_only"], true, "{inspected}");
+    assert_eq!(inspected["product_db"]["state"], "ok", "{inspected}");
 }

@@ -512,7 +512,7 @@ impl Project {
             json!({"project":{"id":self.identity.project_id,"name":self.display_name},
             "needs_attention":attention,"active_work":work,"recent_activity":activity,
             "counts":{"packs":packs.as_array().map_or(0, Vec::len),"intents":work.len(),
-                "baselines":self.list_baselines()?.len()}}),
+                "baselines":self.list_baselines().await?.len()}}),
         )
     }
 
@@ -577,11 +577,7 @@ impl Project {
             .into_iter()
             .filter(|alias| alias["baseline_id"] == baseline.id.to_string())
             .collect();
-        let label = self
-            .list_baselines()?
-            .into_iter()
-            .find(|b| b["id"] == baseline.id.to_string())
-            .map(|b| b["label"].clone());
+        let label = self.baseline_label(&baseline);
         Ok(json!({"id":baseline.id,"label":label,"members":members,
             "edges":serde_json::to_value(&baseline.edges)?,"heads":baseline.heads,
             "validation":validation,"aliases":aliases,

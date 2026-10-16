@@ -818,7 +818,7 @@ async fn project_pack_baseline_survives_restart() {
     );
     assert_eq!(reopened.list_intents().unwrap().len(), 1);
     assert_eq!(reopened.list_tasks().unwrap().len(), 1);
-    assert_eq!(reopened.list_baselines().unwrap().len(), 1);
+    assert_eq!(reopened.list_baselines().await.unwrap().len(), 1);
     assert!(reopened.baseline(&baseline.to_string()).await.is_ok());
 }
 
@@ -1182,10 +1182,15 @@ async fn project_database_migration_is_versioned() {
     drop(project);
     let path = temp.path().join(".calve/product.sqlite3");
     let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute_batch("DROP TABLE store_binding; ALTER TABLE product_events DROP COLUMN actor;")
+        .unwrap();
     remove_task_v7(&db);
     remove_intent_v6(&db);
     db.execute("UPDATE intents SET closed=1 WHERE id=?1", [&old_intent])
         .unwrap();
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; ALTER TABLE reviews DROP COLUMN evidence_digest; DROP TABLE task_dependencies; DELETE FROM schema_migrations WHERE version>=2; PRAGMA user_version=0").unwrap();
     drop(db);
     let migrated = Project::open(temp.path()).unwrap();
@@ -1205,7 +1210,7 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     db.prepare("SELECT actors,graph_node FROM intents").unwrap();
     db.prepare("SELECT task_id,work_unit_id FROM task_work_units")
         .unwrap();
@@ -1223,6 +1228,9 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     remove_task_v7(&db);
     remove_intent_v6(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; ALTER TABLE reviews DROP COLUMN evidence_digest; DELETE FROM schema_migrations WHERE version>=3; PRAGMA user_version=2").unwrap();
     drop(db);
     let migrated = Project::open(temp.path()).unwrap();
@@ -1231,9 +1239,12 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
     remove_intent_v6(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3").unwrap();
     drop(db);
     let migrated = Project::open(temp.path()).unwrap();
@@ -1242,9 +1253,12 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
     remove_intent_v6(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; DELETE FROM schema_migrations WHERE version>=5; PRAGMA user_version=4").unwrap();
     drop(db);
     let migrated = Project::open(temp.path()).unwrap();
@@ -1253,8 +1267,11 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=7; PRAGMA user_version=6")
         .unwrap();
     drop(db);
@@ -1264,8 +1281,11 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_activity_v8(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=8; PRAGMA user_version=7")
         .unwrap();
     drop(db);
@@ -1275,8 +1295,11 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_intent_references_v9(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=9; PRAGMA user_version=8")
         .unwrap();
     drop(db);
@@ -1291,8 +1314,11 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_work_units_v10(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=10; PRAGMA user_version=9")
         .unwrap();
     drop(db);
@@ -1303,8 +1329,11 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_extension_grants_v11(&db);
+    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+        .unwrap();
+    let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=11; PRAGMA user_version=10")
         .unwrap();
     drop(db);
@@ -1313,7 +1342,7 @@ async fn project_database_migration_is_versioned() {
     let version: u32 = db
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     db.prepare("SELECT capability FROM extension_grants")
         .unwrap();
     db.execute_batch("PRAGMA user_version=99").unwrap();
@@ -1344,7 +1373,7 @@ async fn baseline_alias_validation_and_comparison_use_protocol_objects() {
     let a = a.to_string();
     let b = b.to_string();
 
-    assert_eq!(project.set_baseline_alias("current", &b).unwrap(), b);
+    assert_eq!(project.set_baseline_alias("current", &b).await.unwrap(), b);
     assert_eq!(
         project.list_baseline_aliases().unwrap()[0]["alias"],
         "current"
@@ -1381,7 +1410,7 @@ async fn baseline_alias_validation_and_comparison_use_protocol_objects() {
             .unwrap()
             .is_empty()
     );
-    assert!(project.set_baseline_alias("../bad", &a).is_err());
+    assert!(project.set_baseline_alias("../bad", &a).await.is_err());
     project.remove_baseline_alias("current").unwrap();
     assert!(project.baseline("current").await.is_err());
     assert_eq!(

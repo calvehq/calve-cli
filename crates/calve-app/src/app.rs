@@ -16,8 +16,14 @@ use crate::registry::Registry;
 use crate::{Error, Project, Result};
 
 tokio::task_local! {
-    /// The Calve request being served: `(request_id, correlation_id, OpenAEVC calls so far)`.
-    static REQUEST: (uuid::Uuid, Option<uuid::Uuid>, std::cell::Cell<u32>);
+    /// The Calve request being served: `(request_id, correlation_id, OpenAEVC calls so far,
+    /// acting principal)`.
+    static REQUEST: (
+        uuid::Uuid,
+        Option<uuid::Uuid>,
+        std::cell::Cell<u32>,
+        std::cell::RefCell<Option<String>>,
+    );
 }
 
 /// The OpenAEVC idempotency key of the next state-changing call in this request (§45.2):
@@ -25,12 +31,73 @@ tokio::task_local! {
 /// OpenAEVC deduplicates it; outside a request a fresh key is used.
 pub(crate) fn idempotency_key(purpose: &str) -> String {
     REQUEST
-        .try_with(|(id, _, n)| {
+        .try_with(|(id, _, n, _)| {
             let k = n.get();
             n.set(k + 1);
             format!("calve:{id}:{purpose}:{k}")
         })
         .unwrap_or_else(|_| uuid::Uuid::now_v7().to_string())
+}
+
+fn parse_digests(values: &[String]) -> Result<Vec<Digest>> {
+    values
+        .iter()
+        .map(|s| {
+            s.parse()
+                .map_err(|_| crate::coded("INVALID_ARGUMENT", format!("invalid digest {s}")))
+        })
+        .collect()
+}
+
+/// `FROM:TO` (FROM requires TO) or `FROM:TO:orders-after` with promoted-pack digests (each
+/// `sha256:<hex>`, so the separator is the third `:`-field boundary).
+fn parse_edges(values: &[String]) -> Result<Vec<openaevc::protocol::CompositionEdge>> {
+    use openaevc::protocol::{CompositionEdge, CompositionEdgeKind};
+    values
+        .iter()
+        .map(|v| {
+            let parts: Vec<&str> = v.split(':').collect();
+            let (from, to, kind) = match parts.as_slice() {
+                [a, b, c, d] => (format!("{a}:{b}"), format!("{c}:{d}"), "requires"),
+                [a, b, c, d, k] => (format!("{a}:{b}"), format!("{c}:{d}"), *k),
+                _ => {
+                    return Err(crate::coded(
+                        "INVALID_ARGUMENT",
+                        format!("edge {v} must be FROM:TO[:requires|orders-after]"),
+                    ));
+                }
+            };
+            let kind = match kind {
+                "requires" => CompositionEdgeKind::Requires,
+                "orders-after" => CompositionEdgeKind::OrdersAfter,
+                k => {
+                    return Err(crate::coded(
+                        "INVALID_ARGUMENT",
+                        format!("edge kind {k} must be requires or orders-after"),
+                    ));
+                }
+            };
+            Ok(CompositionEdge {
+                from: parse_digests(&[from])?[0],
+                to: parse_digests(&[to])?[0],
+                kind,
+                relation: None,
+            })
+        })
+        .collect()
+}
+
+/// Records the principal acting in this request (product activity carries it, §30.2).
+pub(crate) fn set_actor(principal: String) {
+    let _ = REQUEST.try_with(|(.., actor)| *actor.borrow_mut() = Some(principal));
+}
+
+/// The acting principal of the current request, if any.
+pub(crate) fn current_actor() -> Option<String> {
+    REQUEST
+        .try_with(|(.., actor)| actor.borrow().clone())
+        .ok()
+        .flatten()
 }
 
 /// Maps product errors onto the stable codes of [`calve_api::errors`] (§41). OpenAEVC errors keep
@@ -49,6 +116,11 @@ pub fn fault(error: Error) -> Fault {
             Some((code, rest)) => (code, rest.to_owned(), false, None),
             None => ("PRODUCT_ERROR", message, false, None),
         },
+        Error::Detailed {
+            code,
+            message,
+            detail,
+        } => (code, message, false, Some(detail)),
         Error::Busy(message) => ("PROJECT_LOCKED", message, true, None),
         Error::Io(error) => ("IO_ERROR", error.to_string(), false, None),
         Error::Database(error) => match error.sqlite_error_code() {
@@ -490,11 +562,21 @@ pub fn enable_project_cache() {
     PROJECTS.with(|cache| *cache.borrow_mut() = Some(std::collections::HashMap::new()));
 }
 
-fn open_project(root: &Path) -> Result<std::rc::Rc<Project>> {
+/// Commands open as writers (migration, checkpoint); queries as readers (§46.4). A cached
+/// Project was opened by whichever came first; a reader-opened one is current (it refused to
+/// open otherwise), so commands may share it.
+fn open_project(root: &Path, writer: bool) -> Result<std::rc::Rc<Project>> {
+    let open = |root: &Path| {
+        if writer {
+            Project::open(root)
+        } else {
+            Project::open_reader(root)
+        }
+    };
     PROJECTS.with(|cell| {
         let mut cache = cell.borrow_mut();
         let Some(map) = cache.as_mut() else {
-            return Ok(std::rc::Rc::new(Project::open(root)?));
+            return Ok(std::rc::Rc::new(open(root)?));
         };
         if let Some(project) = map.get(root) {
             if root.join(".calve/project.toml").is_file() {
@@ -502,7 +584,7 @@ fn open_project(root: &Path) -> Result<std::rc::Rc<Project>> {
             }
             map.remove(root);
         }
-        let project = std::rc::Rc::new(Project::open(root)?);
+        let project = std::rc::Rc::new(open(root)?);
         map.insert(root.to_path_buf(), project.clone());
         Ok(project)
     })
@@ -517,19 +599,78 @@ pub fn evict_project(root: &Path) {
     });
 }
 
+/// The single-writer lock (§40.1, §40.3). Liveness is the OS lock itself (released when the
+/// owner exits or crashes); the owner record `{pid, nonce, session, host, started}` names who
+/// holds it, and its nonce distinguishes a reused PID from the original owner.
 pub(crate) fn project_writer(root: &Path) -> Result<std::fs::File> {
+    use std::io::{Read as _, Seek as _, Write as _};
     let lock = root.join(".calve/writer.lock");
-    let file = OpenOptions::new()
+    let mut file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
         .open(&lock)?;
-    file.try_lock().map_err(|error| match error {
-        std::fs::TryLockError::WouldBlock => Error::Busy(root.display().to_string()),
-        std::fs::TryLockError::Error(error) => Error::Io(error),
-    })?;
+    if let Err(error) = file.try_lock() {
+        return Err(match error {
+            std::fs::TryLockError::WouldBlock => {
+                let mut owner = String::new();
+                let _ = file.read_to_string(&mut owner);
+                let owner: Value = serde_json::from_str(&owner).unwrap_or(Value::Null);
+                crate::detailed(
+                    "PROJECT_LOCKED",
+                    format!(
+                        "{} is being changed by pid {} (session {}, since {}); retry when it finishes",
+                        root.display(),
+                        owner["pid"],
+                        owner["session"].as_str().unwrap_or("?"),
+                        owner["started"].as_str().unwrap_or("?")
+                    ),
+                    json!({"owner": owner, "lock": lock}),
+                )
+            }
+            std::fs::TryLockError::Error(error) => Error::Io(error),
+        });
+    }
+    let owner = json!({"pid": std::process::id(), "nonce": uuid::Uuid::now_v7(),
+        "session": session_id(), "host": hostname(), "started": crate::now()?});
+    file.set_len(0)?;
+    file.rewind()?;
+    file.write_all(owner.to_string().as_bytes())?;
     Ok(file)
+}
+
+/// This process's session id (one per process).
+fn session_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| format!("ses_{}", uuid::Uuid::now_v7()))
+}
+
+fn hostname() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .or_else(|_| std::fs::read_to_string("/etc/hostname").map(|h| h.trim().to_owned()))
+        .unwrap_or_default()
+}
+
+/// The writer lock's state for `recover inspect`: held (live owner) or free (last owner, if a
+/// previous holder crashed or exited), without taking or modifying it.
+pub(crate) fn writer_lock_state(root: &Path) -> Value {
+    let lock = root.join(".calve/writer.lock");
+    let Ok(file) = OpenOptions::new().read(true).open(&lock) else {
+        return json!({"state": "absent"});
+    };
+    let owner: Value = std::fs::read_to_string(&lock)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Value::Null);
+    match file.try_lock_shared() {
+        Ok(()) => {
+            let _ = file.unlock();
+            json!({"state": "free", "last_owner": owner})
+        }
+        Err(_) => json!({"state": "held", "owner": owner}),
+    }
 }
 
 /// Executes one typed request. The envelope always returns a correlated response, including
@@ -631,7 +772,12 @@ async fn execute_inner(request: Request) -> Response {
     } else {
         match REQUEST
             .scope(
-                (request_id, correlation_id, std::cell::Cell::new(0)),
+                (
+                    request_id,
+                    correlation_id,
+                    std::cell::Cell::new(0),
+                    std::cell::RefCell::new(None),
+                ),
                 dispatch(request),
             )
             .await
@@ -806,7 +952,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         None
     };
     if let Action::Recover { command } = &action {
-        return recover(&root, command);
+        return recover(&root, command).await;
     }
     // Store maintenance needs the runtime closed (one runtime per data root).
     if matches!(
@@ -836,13 +982,14 @@ async fn dispatch(request: Request) -> Result<Value> {
         } => Some(crate::ops::verify_store(&root)?),
         _ => None,
     };
-    let project_handle = open_project(&root)?;
+    let project_handle = open_project(&root, mutates_project(&action))?;
     // A request acting as a local identity gets its own session on the shared runtime.
     let acting = match scope.actor.as_deref() {
         Some(name) => Some(project_handle.acting_as(name)?),
         None => None,
     };
     let project: &Project = acting.as_ref().unwrap_or(&project_handle);
+    set_actor(project.client.session().principal().to_string());
     let workspace_id = match workspace {
         Some(name) => registry.show(name)?.workspace.id,
         None => registry.selected()?.workspace.id,
@@ -1332,18 +1479,42 @@ async fn dispatch(request: Request) -> Result<Value> {
             }
         },
         Action::Baseline { command } => match command {
-            BaselineCommand::Create { label, members } => {
-                let digests: Vec<Digest> = members
-                    .iter()
-                    .map(|s| {
-                        s.parse()
-                            .map_err(|_| Error::Message(format!("invalid digest {s}")))
-                    })
-                    .collect::<Result<_>>()?;
-                let (id, digest) = project.create_baseline(&label, digests).await?;
+            BaselineCommand::Create {
+                label,
+                members,
+                edges,
+            } => {
+                let digests = parse_digests(&members)?;
+                let edges = parse_edges(&edges)?;
+                let (id, digest) = project
+                    .create_baseline_with(&label, digests, edges, None)
+                    .await?;
                 Ok(json!({"id":id,"digest":digest}))
             }
-            BaselineCommand::List => Ok(json!(project.list_baselines()?)),
+            BaselineCommand::Derive {
+                base,
+                label,
+                add,
+                remove,
+                replace,
+                edges,
+            } => {
+                let (base_digest, base) = project.baseline_object(&base).await?;
+                let (members, edges) = project
+                    .derived_composition(
+                        &base,
+                        &parse_digests(&add)?,
+                        &parse_digests(&remove)?,
+                        &parse_digests(&replace)?,
+                        &parse_edges(&edges)?,
+                    )
+                    .await?;
+                let (id, digest) = project
+                    .create_baseline_with(&label, members.clone(), edges, Some(base_digest))
+                    .await?;
+                Ok(json!({"id":id,"digest":digest,"derived_from":base_digest,"members":members}))
+            }
+            BaselineCommand::List => Ok(json!(project.list_baselines().await?)),
             BaselineCommand::Show { id } => project.baseline(&id).await,
             BaselineCommand::Validate { id } => project.validate_baseline(&id).await,
             BaselineCommand::Compare { left, right } => {
@@ -1353,7 +1524,7 @@ async fn dispatch(request: Request) -> Result<Value> {
             BaselineCommand::Alias { command } => match command {
                 BaselineAliasCommand::List => Ok(json!(project.list_baseline_aliases()?)),
                 BaselineAliasCommand::Set { alias, baseline } => Ok(
-                    json!({"alias":alias,"baseline_id":project.set_baseline_alias(&alias,&baseline)?}),
+                    json!({"alias":alias,"baseline_id":project.set_baseline_alias(&alias,&baseline).await?}),
                 ),
                 BaselineAliasCommand::Remove { alias } => {
                     project.remove_baseline_alias(&alias)?;
@@ -1628,22 +1799,26 @@ fn init_report(project: &Project, registered: bool) -> Result<Value> {
     )
 }
 
-/// Recovery must work when the Project cannot open, so it inspects before opening anything.
-fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
+/// Recovery must work when the Project cannot open: inspect and plan open nothing writable.
+async fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
     evict_project(root);
-    let open = Project::open(root)
-        .map(|_| ())
-        .map_err(|error| error.to_string());
-    let actions = crate::ops::recovery_plan(root)?;
     match command {
-        RecoverCommand::Inspect => Ok(json!({"root":root,"opens":open.is_ok(),
-            "open_error":open.err(),"disposable_leftovers":actions.len()})),
-        RecoverCommand::Plan => Ok(json!({"root":root,"actions":actions,
-            "note":"recovery removes only disposable staging files; it never edits OpenAEVC state"})),
-        RecoverCommand::Apply { yes: false } => Err(Error::Message(format!(
-            "recover apply would perform {} action(s); rerun with --yes after reviewing `calve recover plan`",
-            actions.len()
-        ))),
-        RecoverCommand::Apply { yes: true } => crate::ops::recovery_apply(root),
+        RecoverCommand::Inspect => crate::recovery::inspect(root),
+        RecoverCommand::Plan => Ok(
+            json!({"root": root, "actions": crate::recovery::plan(root)?,
+            "note": "recovery never edits OpenAEVC state; `--restore-backup` replaces only the product database, then reconciles it against OpenAEVC"}),
+        ),
+        RecoverCommand::Apply { yes: false, .. } => Err(crate::coded(
+            "CONFIRMATION_REQUIRED",
+            format!(
+                "recover apply would perform {} action(s); rerun with --yes after reviewing `calve recover plan` (and `recover inspect` for backups)",
+                crate::recovery::plan(root)?.len()
+            ),
+        )),
+        RecoverCommand::Apply {
+            yes: true,
+            restore_backup: Some(file),
+        } => crate::recovery::restore_and_reconcile(root, file).await,
+        RecoverCommand::Apply { yes: true, .. } => crate::ops::recovery_apply(root),
     }
 }

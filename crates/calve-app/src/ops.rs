@@ -409,11 +409,15 @@ impl Project {
         self.db
             .execute("DELETE FROM inbox_items WHERE resolved_at IS NOT NULL", [])?;
         self.refresh_inbox().await?;
+        let baselines = self.rebuild_baseline_index().await?;
         let active: i64 = self
             .db
             .query_row("SELECT count(*) FROM inbox_items", [], |row| row.get(0))?;
         event(&self.db, "maintenance.projections_rebuilt", "inbox", "")?;
-        Ok(json!({"rebuilt":["packs","inbox"],"active_items":active,"at":now()?}))
+        Ok(
+            json!({"rebuilt":["packs","inbox","baselines"],"active_items":active,
+            "baselines_reindexed":baselines,"at":now()?}),
+        )
     }
 
     pub async fn extension_info(&self, id: &str) -> Result<Value> {

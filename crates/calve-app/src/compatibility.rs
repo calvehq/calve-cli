@@ -26,6 +26,41 @@ pub struct Compatibility {
     pub extension_contract: String,
 }
 
+/// §46.4 step 4: every extension registered (active) in the Namespace speaks a contract this
+/// build supports. `query` runs one OpenAEVC query.
+pub fn check_enabled_extensions(
+    query: &dyn Fn(openaevc::protocol::Query) -> Result<serde_json::Value>,
+) -> Result<()> {
+    let listed = query(openaevc::protocol::Query::ListExtensions {})?;
+    for e in listed
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|e| e["active"] == true)
+    {
+        let Ok(digest) = serde_json::from_value(e["manifest"].clone()) else {
+            continue;
+        };
+        let manifest = query(openaevc::protocol::Query::GetObject { digest })?;
+        let contract: VersionRange =
+            serde_json::from_value(manifest["envelope"]["body"]["contract"].clone())?;
+        if SUPPORTED_CONTRACT.negotiate(&contract).is_none() {
+            return Err(crate::coded(
+                "EXTENSION_INCOMPATIBLE",
+                format!(
+                    "enabled extension {} speaks contract {}..={}, this Calve supports {}..={}; disable it or upgrade",
+                    e["id"].as_str().unwrap_or("?"),
+                    contract.min,
+                    contract.max,
+                    SUPPORTED_CONTRACT.min,
+                    SUPPORTED_CONTRACT.max
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn check(info: &RuntimeInfo) -> Result<Compatibility> {
     let protocol = check_range("protocol", &SUPPORTED_PROTOCOL, &info.protocol)?;
     let contract = check_range("extension contract", &SUPPORTED_CONTRACT, &info.contract)?;

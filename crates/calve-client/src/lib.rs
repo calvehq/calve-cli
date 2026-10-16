@@ -29,13 +29,28 @@ pub struct Client {
     options: Options,
 }
 
+/// The daemon socket (§12.2): in the platform runtime directory when there is one
+/// (`$XDG_RUNTIME_DIR/calve/<data root digest>/daemon.sock`, so each data root has its own
+/// daemon), otherwise in the data directory. The pid file sits beside the socket.
 pub fn default_endpoint() -> Result<PathBuf> {
-    Ok(calve_app::registry::default_data_root()?.join("daemon.sock"))
+    let data = calve_app::registry::default_data_root()?;
+    match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+        Some(run) if cfg!(unix) && run.is_absolute() && run.is_dir() => {
+            let key = calve_app::journal::sha256_hex(data.to_string_lossy().as_bytes());
+            Ok(run.join("calve").join(&key[..16]).join("daemon.sock"))
+        }
+        _ => Ok(data.join("daemon.sock")),
+    }
 }
 
-/// Daemon pid and log files live beside whichever socket the daemon serves.
+/// The daemon pid file beside the socket it serves.
 fn daemon_file(endpoint: &Path, name: &str) -> PathBuf {
     endpoint.with_file_name(name)
+}
+
+/// The daemon log: `<data>/logs/daemon.log` (runtime directories are not for logs).
+fn daemon_log() -> Result<PathBuf> {
+    Ok(calve_app::registry::default_data_root()?.join("logs/daemon.log"))
 }
 
 fn ipc_error(error: calve_ipc::Error) -> Error {
@@ -166,7 +181,7 @@ impl Client {
                 if let Some(version) = daemon_alive(&endpoint).await {
                     return Ok(json!({"running":true,"already_running":true,"version":version}));
                 }
-                let log_path = daemon_file(&endpoint, "daemon.log");
+                let log_path = daemon_log()?;
                 if let Some(parent) = log_path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -228,7 +243,7 @@ impl Client {
                 Box::pin(self.daemon(DaemonCommand::Start)).await
             }
             DaemonCommand::Logs { lines } => {
-                let text = match std::fs::read_to_string(daemon_file(&endpoint, "daemon.log")) {
+                let text = match std::fs::read_to_string(daemon_log()?) {
                     Ok(text) => text,
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
                     Err(error) => return Err(error.into()),
