@@ -1287,6 +1287,20 @@ async fn dispatch(request: Request) -> Result<Value> {
                 lifecycle(project, &settings, command).await
             }
         },
+        Action::Capture { command } => match command {
+            CaptureCommand::List => Ok(json!(crate::capture::list(&project.root)?)),
+            CaptureCommand::Resume { session } => project.resume_capture(&session).await,
+            CaptureCommand::Rollback { session, mode, .. } => {
+                project.rollback_capture(&session, &mode).await
+            }
+        },
+        Action::Supersede { command } => match command {
+            SupersedeCommand::Start { pack, keep, .. } => {
+                project.supersede_pack(&pack, keep, None).await
+            }
+            SupersedeCommand::List => Ok(json!(crate::supersede::list(&project.root)?)),
+            SupersedeCommand::Resume { saga } => project.resume_supersede(&saga).await,
+        },
         Action::Evidence { command } => match command {
             EvidenceCommand::Add {
                 pack,

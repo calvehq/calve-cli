@@ -1182,13 +1182,13 @@ async fn project_database_migration_is_versioned() {
     drop(project);
     let path = temp.path().join(".calve/product.sqlite3");
     let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE store_binding; ALTER TABLE product_events DROP COLUMN actor;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE pack_commitments; DROP TABLE store_binding; ALTER TABLE product_events DROP COLUMN actor;")
         .unwrap();
     remove_task_v7(&db);
     remove_intent_v6(&db);
     db.execute("UPDATE intents SET closed=1 WHERE id=?1", [&old_intent])
         .unwrap();
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; ALTER TABLE reviews DROP COLUMN evidence_digest; DROP TABLE task_dependencies; DELETE FROM schema_migrations WHERE version>=2; PRAGMA user_version=0").unwrap();
@@ -1228,7 +1228,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     remove_task_v7(&db);
     remove_intent_v6(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; ALTER TABLE reviews DROP COLUMN evidence_digest; DELETE FROM schema_migrations WHERE version>=3; PRAGMA user_version=2").unwrap();
@@ -1242,7 +1242,7 @@ async fn project_database_migration_is_versioned() {
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
     remove_intent_v6(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; ALTER TABLE tasks DROP COLUMN description; ALTER TABLE tasks DROP COLUMN priority; ALTER TABLE tasks DROP COLUMN assignee; ALTER TABLE tasks DROP COLUMN updated_at; DELETE FROM schema_migrations WHERE version>=4; PRAGMA user_version=3").unwrap();
@@ -1256,7 +1256,7 @@ async fn project_database_migration_is_versioned() {
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
     remove_intent_v6(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DROP TABLE inbox_items; DELETE FROM schema_migrations WHERE version>=5; PRAGMA user_version=4").unwrap();
@@ -1269,7 +1269,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_v7(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=7; PRAGMA user_version=6")
@@ -1283,7 +1283,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_activity_v8(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=8; PRAGMA user_version=7")
@@ -1297,7 +1297,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_intent_references_v9(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=9; PRAGMA user_version=8")
@@ -1316,7 +1316,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_task_work_units_v10(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=10; PRAGMA user_version=9")
@@ -1331,7 +1331,7 @@ async fn project_database_migration_is_versioned() {
         .unwrap();
     assert_eq!(version, calve_app::PRODUCT_SCHEMA);
     remove_extension_grants_v11(&db);
-    db.execute_batch("DROP TABLE IF EXISTS store_binding;")
+    db.execute_batch("DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE IF EXISTS pack_commitments; DROP TABLE IF EXISTS store_binding;")
         .unwrap();
     let _ = db.execute_batch("ALTER TABLE product_events DROP COLUMN actor;");
     db.execute_batch("DELETE FROM schema_migrations WHERE version>=11; PRAGMA user_version=10")

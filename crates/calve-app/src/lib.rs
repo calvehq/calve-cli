@@ -14,6 +14,7 @@ pub mod composition;
 pub mod config;
 pub mod continuity;
 pub(crate) mod domains;
+pub mod envelope;
 pub mod extensions;
 pub mod extsort;
 pub mod general_ops;
@@ -31,6 +32,7 @@ pub mod redact;
 pub mod registry;
 pub mod resources;
 pub mod sandbox;
+pub mod supersede;
 pub mod views;
 pub mod workspace_io;
 
@@ -44,11 +46,11 @@ use openaevc::core::{IdGeneratorExt, SystemClock, UuidV7Ids};
 use openaevc::crypto::{Signer, SigningKey, sha256};
 use openaevc::protocol::{
     Baseline, BaselineId, Blob, ChangePack, Command, Digest, EffectProposal, ErrorCode, Event,
-    EvidenceCondition, ExecutionId, ExecutionRequest, ExecutionState, Expr, GrantBody, GrantId,
-    Metadata, NamespaceId, NewPrincipal, NodeRef, ObjectEnvelope, ObjectKind, PackId, PackSpec,
-    PackState, PolicyDocument, PolicyRule, PrincipalId, PrincipalKind, ProviderDescriptor, Query,
-    ResourceRef, ResourceSelector, RevisionRelation, Timestamp, VerificationStatus,
-    VerifierCondition, WorkUnitId, WorkerInfo,
+    EvidenceCondition, ExecutionId, ExecutionState, Expr, GrantBody, GrantId, Metadata,
+    NamespaceId, NewPrincipal, NodeRef, ObjectEnvelope, ObjectKind, PackId, PackSpec, PackState,
+    PolicyDocument, PolicyRule, PrincipalId, PrincipalKind, ProviderDescriptor, Query, ResourceRef,
+    ResourceSelector, RevisionRelation, Timestamp, VerificationStatus, VerifierCondition,
+    WorkUnitId,
 };
 use openaevc::runtime::{Admin, Runtime, RuntimeConfig, RuntimeDeps};
 use openaevc::store::{SqliteOptions, SqliteStore};
@@ -121,7 +123,6 @@ const REVIEW_POLICY_NAME: &str = "org.calve.review.required/v1";
 const REVIEW_APPROVAL_KIND: &str = "org.calve.review.approval/v1";
 const REVIEW_REJECTION_KIND: &str = "org.calve.review.rejection/v1";
 const CHECKPOINT_INTERVAL: u64 = 1000;
-const CAPTURE_MAX_ATTEMPTS: u32 = 3;
 
 /// Matching rules for the API's activity filter.
 pub(crate) trait ActivityRules {
@@ -593,7 +594,7 @@ const PROJECT_SCHEMA: &str = "
          );";
 
 /// Current product database schema.
-pub const PRODUCT_SCHEMA: u32 = 14;
+pub const PRODUCT_SCHEMA: u32 = 15;
 
 /// Forward migrations: entry `i` takes version `i + 1` to `i + 2`.
 const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
@@ -610,6 +611,7 @@ const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
     migrate_pack_index,
     migrate_pack_files,
     migrate_store_binding,
+    migrate_pack_commitments,
 ];
 
 /// How the product database is opened (§46.4: only a writer migrates, after the gate).
@@ -643,6 +645,8 @@ fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
         (0, DbOpen::Create) => {
             let tx = db.transaction()?;
             tx.execute_batch(PROJECT_SCHEMA)?;
+            tx.execute_batch(PACK_COMMITMENTS_SCHEMA)?;
+            tx.execute_batch("INSERT INTO schema_migrations VALUES (15);")?;
             tx.execute_batch(&format!("PRAGMA user_version={PRODUCT_SCHEMA}"))?;
             tx.commit()?;
             return Ok(db);
@@ -886,6 +890,43 @@ fn migrate_pack_files(db: &mut Connection) -> Result<()> {
          INSERT INTO schema_migrations VALUES (13);
          PRAGMA user_version=13;",
     )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// v15 (§12): the versioned product commitment of each pack. Any product change to a pack's
+/// links (task links, intent, title) bumps its version through triggers, so the supersede
+/// saga's compare-and-swap sees concurrent changes. A pack without a row is `active` at 0.
+const PACK_COMMITMENTS_SCHEMA: &str = "CREATE TABLE pack_commitments (
+           pack_id TEXT PRIMARY KEY,
+           state TEXT NOT NULL DEFAULT 'active'
+             CHECK (state IN ('active','replacement_pending','superseded','conflicted')),
+           commitment_version INTEGER NOT NULL DEFAULT 0,
+           supersede_id TEXT, replaces TEXT
+         );
+         CREATE TRIGGER pack_link_added AFTER INSERT ON task_links WHEN NEW.kind = 'pack' BEGIN
+           INSERT INTO pack_commitments(pack_id, commitment_version) VALUES (NEW.object_id, 1)
+           ON CONFLICT(pack_id) DO UPDATE SET commitment_version = commitment_version + 1;
+         END;
+         CREATE TRIGGER pack_link_removed AFTER DELETE ON task_links WHEN OLD.kind = 'pack' BEGIN
+           INSERT INTO pack_commitments(pack_id, commitment_version) VALUES (OLD.object_id, 1)
+           ON CONFLICT(pack_id) DO UPDATE SET commitment_version = commitment_version + 1;
+         END;
+         CREATE TRIGGER pack_link_moved AFTER UPDATE OF object_id ON task_links WHEN NEW.kind = 'pack' BEGIN
+           INSERT INTO pack_commitments(pack_id, commitment_version) VALUES (OLD.object_id, 1)
+           ON CONFLICT(pack_id) DO UPDATE SET commitment_version = commitment_version + 1;
+           INSERT INTO pack_commitments(pack_id, commitment_version) VALUES (NEW.object_id, 1)
+           ON CONFLICT(pack_id) DO UPDATE SET commitment_version = commitment_version + 1;
+         END;
+         CREATE TRIGGER pack_metadata_changed AFTER UPDATE ON pack_metadata BEGIN
+           INSERT INTO pack_commitments(pack_id, commitment_version) VALUES (NEW.id, 1)
+           ON CONFLICT(pack_id) DO UPDATE SET commitment_version = commitment_version + 1;
+         END;";
+
+fn migrate_pack_commitments(db: &mut Connection) -> Result<()> {
+    let tx = db.transaction()?;
+    tx.execute_batch(PACK_COMMITMENTS_SCHEMA)?;
+    tx.execute_batch("INSERT INTO schema_migrations VALUES (15); PRAGMA user_version=15;")?;
     tx.commit()?;
     Ok(())
 }
@@ -2758,9 +2799,14 @@ impl Project {
         self.refresh_pack_index().await?;
         let mut stmt = self.db.prepare(
             "SELECT m.id,m.title,m.intent_id,s.state,s.generation,s.candidate_digest,s.promoted_digest,
-                    s.created_at,s.updated_at,s.changed,s.revision
-             FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id ORDER BY m.created_at,m.id",
+                    s.created_at,s.updated_at,s.changed,s.revision,c.state
+             FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id
+             LEFT JOIN pack_commitments c ON c.pack_id=m.id
+             WHERE c.state IS NULL OR c.state != 'replacement_pending'
+             ORDER BY m.created_at,m.id",
         )?;
+        // A pending supersession is shown on the pack it replaces, never as success (§12).
+        let superseding = crate::supersede::pending(&self.root)?;
         let rows = stmt.query_map([], |r| {
             Ok(
                 json!({"id":r.get::<_,String>(0)?,"title":r.get::<_,String>(1)?,
@@ -2768,11 +2814,18 @@ impl Project {
                 "generation":r.get::<_,u64>(4)?,"candidate_digest":r.get::<_,Option<String>>(5)?,
                 "promoted_digest":r.get::<_,Option<String>>(6)?,"created_at":r.get::<_,String>(7)?,
                 "updated_at":r.get::<_,String>(8)?,"changed":r.get::<_,i64>(9)?,
-                "revision":r.get::<_,bool>(10)?}),
+                "revision":r.get::<_,bool>(10)?,
+                "commitment":r.get::<_,Option<String>>(11)?.unwrap_or_else(|| "active".into())}),
             )
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        let mut rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        for row in &mut rows {
+            if let Some((saga, step)) = row["id"].as_str().and_then(|id| superseding.get(id)) {
+                row["superseding"] = json!({"saga": saga, "pending_step": step,
+                    "display": format!("superseding (pending: {step})")});
+            }
+        }
+        Ok(rows)
     }
 
     /// Creates a protocol RevisionPack linked to immutable promoted-pack targets.
@@ -2968,43 +3021,55 @@ impl Project {
             ));
         }
         let (harness, provider) = (d.capture_harness(), d.provider());
-        self.client
-            .command(Command::RegisterProvider {
-                provider: ProviderDescriptor {
-                    id: provider.clone(),
-                    version: "0.1.0".into(),
-                    worker_kinds: vec![harness.clone()],
-                    harnesses: vec![harness.clone()],
-                    required_actions: vec![d.decl.write_action.clone()],
-                    cancellation: true,
-                    resumable: false,
-                    heartbeat: false,
-                    limits: BTreeMap::new(),
-                    provenance_fields: vec![],
-                    principal: self.identity.created_by,
-                },
+        // §12: the whole plan becomes a spool before any OpenAEVC command.
+        let mut observations: Vec<capture::SpoolObservation> = files
+            .iter()
+            .map(|change| capture::SpoolObservation {
+                kind: d.captured_observation(),
+                payload: change.summary(),
+                related_resources: vec![change.effect(d).target],
+                related_paths: vec![],
             })
-            .await?;
-        let work_unit = match retry {
-            Some((work_unit, _)) => work_unit,
-            None => {
-                self.client
-                    .add_work_unit(pack.id, pack.generation, &harness)
-                    .await?
-            }
-        };
-        let generation = self.pack(pack_id).await?.generation;
-        let request = ExecutionRequest {
+            .collect();
+        let mut relations = Vec::new();
+        for r in &plan.relations {
+            let paths: Vec<String> = r
+                .members
+                .iter()
+                .filter_map(|i| plan.op_paths.get(*i as usize).cloned())
+                .collect();
+            relations.push(json!({"kind":r.kind,"paths":paths,"payload":r.payload}));
+            observations.push(capture::SpoolObservation {
+                kind: r.kind.clone(),
+                payload: r.payload.clone(),
+                related_resources: vec![],
+                related_paths: paths,
+            });
+        }
+        observations.push(capture::SpoolObservation {
+            kind: format!("{}.capture-session", d.extension),
+            payload: json!({"input_digest":plan.input_digest,"output_digest":plan.output_digest,
+                "relations_omitted":plan.omitted,"refused":refused}),
+            related_resources: vec![],
+            related_paths: vec![],
+        });
+        let spool = capture::Spool {
             pack: pack.id,
-            expected_generation: generation,
-            work_unit,
-            provider: provider.clone(),
-            harness: harness.clone(),
-            worker: Some(WorkerInfo {
-                id: "local".into(),
-                kind: harness.clone(),
-                attributes: BTreeMap::new(),
-            }),
+            generation: pack.generation,
+            provider: ProviderDescriptor {
+                id: provider.clone(),
+                version: "0.1.0".into(),
+                worker_kinds: vec![harness.clone()],
+                harnesses: vec![harness.clone()],
+                required_actions: vec![d.decl.write_action.clone()],
+                cancellation: true,
+                resumable: false,
+                heartbeat: false,
+                limits: BTreeMap::new(),
+                provenance_fields: vec![],
+                principal: self.identity.created_by,
+            },
+            harness,
             allowed_resources: files
                 .iter()
                 .map(|c| ResourceSelector {
@@ -3013,116 +3078,26 @@ impl Project {
                 })
                 .collect(),
             allowed_effects: vec![d.decl.put.clone(), d.decl.delete.clone()],
-            context: vec![],
-            timeout_ms: 1_800_000,
-            budget: BTreeMap::new(),
-            max_attempts: CAPTURE_MAX_ATTEMPTS,
-            idempotency_key: crate::app::idempotency_key("capture"),
-            retry_of: retry.map(|(_, execution)| execution),
-        };
-        let (execution, lease) = self.client.start_execution(request).await?;
-        self.client.heartbeat(&lease).await?;
-        let fail = |reason: &'static str| Command::FailExecution {
-            execution,
-            lease: lease.id,
-            reason: reason.into(),
-        };
-        let mut captured = Vec::new();
-        for change in &files {
-            let effect = change.effect(d);
-            let resource = effect.target.clone();
-            let applied = match self.client.submit_effect(&lease, effect).await {
-                Ok(applied) => applied,
-                Err(error) => {
-                    let _ = self.client.command(fail("file capture failed")).await;
-                    return Err(error.into());
-                }
-            };
-            if !applied {
-                let _ = self
-                    .client
-                    .command(fail("extension rejected file change"))
-                    .await;
-                return Err(invalid(format!(
-                    "{} rejected the change to {}",
-                    d.extension,
-                    change.path()
-                )));
-            }
-            self.client.heartbeat(&lease).await?;
-            self.client
-                .command(Command::AppendObservation {
-                    execution,
-                    lease: lease.id,
-                    kind: d.captured_observation(),
-                    payload: Some(change.summary()),
-                    blob: None,
-                    related_resources: vec![resource],
-                    related_effects: vec![],
-                })
-                .await?;
-            captured.push(change.summary());
-        }
-        // Relations reference the effects of their member paths.
-        let effects: BTreeMap<String, openaevc::protocol::EffectId> = self
-            .pack(pack_id)
-            .await?
-            .candidate_effects
-            .iter()
-            .filter(|e| e.work_unit == work_unit)
-            .map(|e| (e.target.locator.clone(), e.id))
-            .collect();
-        let mut relations = Vec::new();
-        for r in &plan.relations {
-            let paths: Vec<&str> = r
-                .members
+            proposals: files.iter().map(|c| c.effect(d)).collect(),
+            observations,
+            captured: files.iter().map(FileChange::summary).collect(),
+            refused,
+            relations,
+            events: files
                 .iter()
-                .filter_map(|i| plan.op_paths.get(*i as usize).map(String::as_str))
-                .collect();
-            let related_effects: Vec<_> = paths
-                .iter()
-                .filter_map(|p| effects.get(*p).copied())
-                .collect();
-            self.client
-                .command(Command::AppendObservation {
-                    execution,
-                    lease: lease.id,
-                    kind: r.kind.clone(),
-                    payload: Some(r.payload.clone()),
-                    blob: None,
-                    related_resources: vec![],
-                    related_effects,
+                .map(|c| {
+                    (
+                        c.path().to_owned(),
+                        c.digest()
+                            .map_or_else(|| "deleted".to_owned(), |d| d.to_string()),
+                    )
                 })
-                .await?;
-            relations.push(json!({"kind":r.kind,"paths":paths,"payload":r.payload}));
-        }
-        self.client
-            .command(Command::AppendObservation {
-                execution,
-                lease: lease.id,
-                kind: format!("{}.capture-session", d.extension),
-                payload: Some(
-                    json!({"input_digest":plan.input_digest,"output_digest":plan.output_digest,
-                    "relations_omitted":plan.omitted,"refused":refused}),
-                ),
-                blob: None,
-                related_resources: vec![],
-                related_effects: vec![],
-            })
-            .await?;
-        self.client.heartbeat(&lease).await?;
-        self.client.complete_execution(&lease).await?;
-        for change in &files {
-            let digest = change
-                .digest()
-                .map_or_else(|| "deleted".to_owned(), |d| d.to_string());
-            event(&self.db, "file.captured", change.path(), &digest)?;
-        }
-        let generation = self.pack(pack_id).await?.generation;
-        Ok(
-            json!({"generation":generation,"execution":execution,"work_unit":work_unit,"captured":captured,
-            "unchanged":[],"refused":refused,"relations":relations}),
-        )
+                .collect(),
+            input_digest: plan.input_digest.clone(),
+            output_digest: plan.output_digest.clone(),
+            retry,
+        };
+        self.run_capture(spool).await
     }
 
     /// Runs the first-party snapshot verifier against a sealed candidate.
@@ -3238,6 +3213,18 @@ impl Project {
                 "STALE_VIEW",
                 format!("generation conflict: current is {}", pack.generation),
                 json!({"expected": expected_generation, "current": pack.generation}),
+            ));
+        }
+        if let Ok(state) = self.db.query_row(
+            "SELECT state FROM pack_commitments WHERE pack_id=?1",
+            [id],
+            |r| r.get::<_, String>(0),
+        ) && state == "replacement_pending"
+        {
+            return Err(detailed(
+                "SUPERSEDE_CONFLICT",
+                "this pack is a pending replacement; it becomes usable when its supersession completes",
+                json!({"pack": id}),
             ));
         }
         // §12 guard: Calve refuses to seal while a capture session is not terminal.

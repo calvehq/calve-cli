@@ -172,6 +172,16 @@ pub enum Action {
         #[command(subcommand)]
         command: ReceiptCommand,
     },
+    /// Capture sessions: list, resume an interrupted one, roll one back (§12).
+    Capture {
+        #[command(subcommand)]
+        command: CaptureCommand,
+    },
+    /// Replace a pack by a new pack holding its first effects (supersede saga, §12).
+    Supersede {
+        #[command(subcommand)]
+        command: SupersedeCommand,
+    },
     /// Start, inspect, cancel and retry executions.
     Execution {
         #[command(subcommand)]
@@ -942,6 +952,43 @@ pub enum ReceiptCommand {
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
+pub enum CaptureCommand {
+    /// Capture sessions with their state.
+    List,
+    /// Continue an interrupted capture session.
+    Resume { session: String },
+    /// Roll a capture session back: `supersede` (default) replaces the pack by one holding its
+    /// pre-capture effects; `compensate` appends effects restoring the pre-capture files.
+    Rollback {
+        session: String,
+        #[arg(long, default_value = "supersede", value_parser = ["supersede", "compensate"])]
+        mode: String,
+        /// Confirm without prompting (the pack is replaced or changed).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
+pub enum SupersedeCommand {
+    /// Replace an OPEN pack by a new pack holding its first `--keep` effects; the original is
+    /// abandoned last, after the replacement is verified and relinked.
+    Start {
+        pack: String,
+        #[arg(long)]
+        keep: usize,
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
+    /// Supersede sagas with their state.
+    List,
+    /// Continue an interrupted supersede saga.
+    Resume { saga: String },
+}
+
+#[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
 pub enum ExecutionCommand {
     /// List executions.
     List {
@@ -1366,6 +1413,17 @@ impl Action {
             Self::Extension { command: E::Catalog { command: CatalogCommand::Remove { name, yes } } } => {
                 ask(*yes, format!("Stop trusting catalog {name} (installed packages stay)."))
             }
+            Self::Capture { command: CaptureCommand::Rollback { session, mode, yes } } => ask(
+                *yes,
+                format!(
+                    "Roll capture {session} back by {mode}: the pack is {}.",
+                    if mode == "compensate" { "changed by compensating effects" } else { "replaced and the original abandoned" }
+                ),
+            ),
+            Self::Supersede { command: SupersedeCommand::Start { pack, keep, yes } } => ask(
+                *yes,
+                format!("Replace pack {pack} by a new pack holding its first {keep} effects; {pack} is abandoned."),
+            ),
             _ => None,
         }
     }
@@ -1406,6 +1464,12 @@ impl Action {
                     E::Catalog {
                         command: CatalogCommand::Remove { yes, .. },
                     },
+            }
+            | Self::Capture {
+                command: CaptureCommand::Rollback { yes, .. },
+            }
+            | Self::Supersede {
+                command: SupersedeCommand::Start { yes, .. },
             } => *yes = true,
             _ => {}
         }
@@ -1460,6 +1524,13 @@ impl Action {
                 EvidenceCommand::Show { .. } | EvidenceCommand::List { .. } => OperationKind::Query,
             },
             Self::Receipt { .. } => OperationKind::Query,
+            Self::Capture {
+                command: CaptureCommand::List,
+            }
+            | Self::Supersede {
+                command: SupersedeCommand::List,
+            } => OperationKind::Query,
+            Self::Capture { .. } | Self::Supersede { .. } => OperationKind::Command,
             Self::Execution { command } => match command {
                 ExecutionCommand::List { .. }
                 | ExecutionCommand::Show { .. }

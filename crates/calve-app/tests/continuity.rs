@@ -196,8 +196,8 @@ async fn migration_is_gated_and_backed_up_and_readers_never_migrate() {
         // Make it a v13 database again.
         let db = rusqlite::Connection::open(&db_path).unwrap();
         db.execute_batch(
-            "DROP TABLE store_binding; ALTER TABLE product_events DROP COLUMN actor;
-             DELETE FROM schema_migrations WHERE version=14; PRAGMA user_version=13;",
+            "DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed; DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed; DROP TABLE pack_commitments; DROP TABLE store_binding; ALTER TABLE product_events DROP COLUMN actor;
+             DELETE FROM schema_migrations WHERE version>=14; PRAGMA user_version=13;",
         )
         .unwrap();
     }
