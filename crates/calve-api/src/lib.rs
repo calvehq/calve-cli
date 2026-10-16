@@ -839,11 +839,14 @@ pub enum LifecycleCommand {
         #[arg(long)]
         warn_after_files: Option<u64>,
     },
-    /// Seal the candidate.
+    /// Seal the candidate (`--preflight` reports what sealing would capture and what blocks it).
     Seal {
         id: String,
         #[arg(long)]
         generation: u64,
+        #[arg(long)]
+        #[serde(default)]
+        preflight: bool,
     },
     /// Run language checks on the sealed candidate and verify their evidence.
     Check {
@@ -879,11 +882,19 @@ pub enum LifecycleCommand {
         #[arg(long, default_value = "")]
         reason: String,
     },
-    /// Promote a qualified pack into accepted history.
+    /// Promote a qualified pack into accepted history (`--preflight` reports qualification,
+    /// policies, reviews and capabilities without promoting).
     Promote {
         id: String,
         #[arg(long)]
         generation: u64,
+        /// Refuse unless the sealed candidate is this digest (the one you reviewed).
+        #[arg(long, value_name = "DIGEST")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        candidate: Option<String>,
+        #[arg(long)]
+        #[serde(default)]
+        preflight: bool,
     },
 }
 

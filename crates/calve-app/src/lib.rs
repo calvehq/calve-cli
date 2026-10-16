@@ -6,6 +6,7 @@ pub use calve_api::{ActivityFilter, GrantOptions};
 pub mod adopt;
 pub mod app;
 pub mod backup;
+pub mod capture;
 pub mod catalog;
 pub mod checks;
 pub mod compatibility;
@@ -23,6 +24,7 @@ pub mod manifests;
 pub mod materialize;
 pub mod observe;
 pub mod ops;
+pub mod promotion;
 pub mod providers;
 pub mod recovery;
 pub mod redact;
@@ -3232,10 +3234,20 @@ impl Project {
     pub async fn seal(&self, id: &str, expected_generation: u64) -> Result<Digest> {
         let pack = self.pack(id).await?;
         if pack.generation != expected_generation {
-            return Err(invalid(format!(
-                "generation conflict: current is {}",
-                pack.generation
-            )));
+            return Err(detailed(
+                "STALE_VIEW",
+                format!("generation conflict: current is {}", pack.generation),
+                json!({"expected": expected_generation, "current": pack.generation}),
+            ));
+        }
+        // §12 guard: Calve refuses to seal while a capture session is not terminal.
+        let captures = self.incomplete_captures(&pack)?;
+        if !captures.is_empty() {
+            return Err(detailed(
+                "CAPTURE_INCOMPLETE",
+                "a capture session on this pack has not finished; resume or roll it back first",
+                json!({"captures": captures}),
+            ));
         }
         Ok(self.client.seal(pack.id, expected_generation).await?)
     }

@@ -1736,7 +1736,12 @@ async fn lifecycle(
                 .evaluate_change_size(&id, generation, warn_after_bytes, warn_after_files)
                 .await
         }
-        LifecycleCommand::Seal { id, generation } => {
+        LifecycleCommand::Seal {
+            id,
+            generation,
+            preflight: true,
+        } => project.seal_preflight(&id, generation).await,
+        LifecycleCommand::Seal { id, generation, .. } => {
             Ok(json!({"candidate_digest":project.seal(&id,generation).await?}))
         }
         LifecycleCommand::Review { id } => {
@@ -1753,8 +1758,23 @@ async fn lifecycle(
             generation,
             reason,
         } => Ok(json!({"id":project.review(&id,generation,"REJECT",&reason).await?})),
-        LifecycleCommand::Promote { id, generation } => {
-            Ok(json!({"promoted_digest":project.promote(&id,generation).await?}))
+        LifecycleCommand::Promote {
+            id,
+            generation,
+            preflight: true,
+            ..
+        } => project.promote_preflight(&id, generation).await,
+        LifecycleCommand::Promote {
+            id,
+            generation,
+            candidate,
+            ..
+        } => {
+            let candidate = candidate
+                .map(|c| parse_digests(&[c]))
+                .transpose()?
+                .map(|v| v[0]);
+            project.promote_checked(&id, generation, candidate).await
         }
     }
 }
