@@ -37,6 +37,10 @@ pub struct FilesDecl {
     pub resource_kind: String,
     pub put: String,
     pub delete: String,
+    /// Content stored as chunk Blobs (`{digest, size, chunks: [{blob_digest, digest, size}]}`),
+    /// for files over the inline limit (rev 10 §13). Without it larger files are refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub put_chunked: Option<String>,
     /// Effect kinds still accepted in recorded history but never emitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub history: Vec<String>,
@@ -134,6 +138,7 @@ impl Metadata {
             if !kinds
                 .into_iter()
                 .chain(&f.history)
+                .chain(&f.put_chunked)
                 .chain(&f.verifier)
                 .chain(&f.evaluator)
                 .all(|k| own(k))

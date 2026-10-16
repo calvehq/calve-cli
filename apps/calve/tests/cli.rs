@@ -928,6 +928,7 @@ fn cli_captures_a_file_with_the_file_extension() {
         root_str,
         "pack",
         "capture-tree",
+        "--accept-deletions",
         id,
         ".",
         "--generation",

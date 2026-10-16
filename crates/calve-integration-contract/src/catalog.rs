@@ -46,6 +46,11 @@ pub struct VersionEntry {
     pub metadata: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui: Option<String>,
+    /// The `calve.refs/1` document (its SHA-256 is the native manifest's
+    /// `schemas["calve.refs/1"]`), so accepted history stays portable without running the
+    /// extension (rev 10 §13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refs: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

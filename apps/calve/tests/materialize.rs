@@ -65,6 +65,7 @@ fn baseline_materialization_protects_uncaptured_work() {
                 p,
                 "pack",
                 "capture-tree",
+                "--accept-deletions",
                 &id,
                 ".",
                 "--generation",

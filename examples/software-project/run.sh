@@ -18,7 +18,7 @@ printf 'pub fn greet() -> &%sstr { "hi" }\n' "'static" > "$PROJECT/src/lib.rs"
 expect "no git repository needed" "$(test -d "$PROJECT/.git" && echo yes || echo no)" "no"
 
 pack=$(calve pack create "Greeting" --require-check rust | get '["id"]')
-calve pack capture-tree "$pack" . --generation 1 >/dev/null
+calve pack capture-tree --accept-deletions "$pack" . --generation 1 >/dev/null
 g=$(generation "$pack")
 calve pack seal "$pack" --generation "$g" >/dev/null
 status=$(calve pack check "$pack" --generation "$g" | get '["languages"][0]["verification"]["status"]')

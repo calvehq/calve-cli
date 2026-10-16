@@ -9,9 +9,11 @@ pub mod backup;
 pub mod capture;
 pub mod catalog;
 pub mod checks;
+pub mod closure;
 pub mod compatibility;
 pub mod composition;
 pub mod config;
+pub mod content;
 pub mod continuity;
 pub(crate) mod domains;
 pub mod envelope;
@@ -988,6 +990,17 @@ impl FileChange {
 
     fn effect(&self, d: &domains::FileDomain) -> EffectProposal {
         let (kind, payload) = match self {
+            // Over the inline limit: a chunked payload whose chunks the capture session fills
+            // in after uploading them (rev 10 §13).
+            Self::Put(_, content)
+                if content.len() as u64 > calve_integration_contract::content::INLINE_MAX
+                    && d.decl.put_chunked.is_some() =>
+            {
+                (
+                    d.decl.put_chunked.clone().unwrap_or_default(),
+                    json!({"digest":sha256(content),"size":content.len(),"chunks":[]}),
+                )
+            }
             Self::Put(_, content) => (
                 d.decl.put.clone(),
                 json!({"digest":sha256(content),"size":content.len(),"content":openaevc::protocol::b64::encode(content)}),
@@ -2986,11 +2999,18 @@ impl Project {
                 json!({"generation":pack.generation,"captured":[],"unchanged":[],"refused":refused,"relations":[]}),
             );
         }
-        if files.iter().any(
-            |c| matches!(c, FileChange::Put(_, b) if b.len() as u64 > resources::MAX_CAPTURE_BYTES),
-        ) {
-            return Err(invalid(
-                "FILE_TOO_LARGE: capture needs files of at most 1 MiB",
+        if let Some(big) = files
+            .iter()
+            .find(|c| matches!(c, FileChange::Put(_, b) if b.len() as u64 > d.capture_limit()))
+        {
+            return Err(detailed(
+                "FILE_TOO_LARGE",
+                format!(
+                    "{} exceeds the {}-byte capture limit",
+                    big.path(),
+                    d.capture_limit()
+                ),
+                json!({"path": big.path(), "limit": d.capture_limit()}),
             ));
         }
         if !pack.candidate_effects.is_empty() {
@@ -3053,7 +3073,31 @@ impl Project {
             related_resources: vec![],
             related_paths: vec![],
         });
+        // Chunk layout of the files over the inline limit; their bytes go to the session.
+        let mut chunked = vec![];
+        let mut chunk_data = vec![];
+        for (i, c) in files.iter().enumerate() {
+            if let FileChange::Put(path, content) = c
+                && content.len() as u64 > calve_integration_contract::content::INLINE_MAX
+            {
+                let digest = sha256(content).to_string();
+                let chunks = content
+                    .chunks(calve_integration_contract::content::CHUNK_MAX as usize)
+                    .map(|b| (sha256(b).to_string(), b.len() as u64))
+                    .collect();
+                chunked.push(capture::SpoolChunked {
+                    index: i,
+                    path: path.clone(),
+                    digest: digest.clone(),
+                    size: content.len() as u64,
+                    chunks,
+                });
+                chunk_data.push((digest, content.clone()));
+            }
+        }
         let spool = capture::Spool {
+            chunk_kind: format!("{}.content-chunk", d.extension),
+            chunked,
             pack: pack.id,
             generation: pack.generation,
             provider: ProviderDescriptor {
@@ -3077,7 +3121,14 @@ impl Project {
                     locator_prefix: Some(c.path().to_owned()),
                 })
                 .collect(),
-            allowed_effects: vec![d.decl.put.clone(), d.decl.delete.clone()],
+            allowed_effects: [
+                Some(d.decl.put.clone()),
+                Some(d.decl.delete.clone()),
+                d.decl.put_chunked.clone(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
             proposals: files.iter().map(|c| c.effect(d)).collect(),
             observations,
             captured: files.iter().map(FileChange::summary).collect(),
@@ -3097,7 +3148,7 @@ impl Project {
             output_digest: plan.output_digest.clone(),
             retry,
         };
-        self.run_capture(spool).await
+        self.run_capture(spool, chunk_data).await
     }
 
     /// Runs the first-party snapshot verifier against a sealed candidate.

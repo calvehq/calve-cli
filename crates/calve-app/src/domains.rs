@@ -40,8 +40,19 @@ pub(crate) struct FileDomain {
 }
 
 impl FileDomain {
+    /// The largest file capture accepts: chunked content when the domain declares it (rev 10
+    /// §13), the inline limit otherwise (`FILE_TOO_LARGE` above it).
+    pub fn capture_limit(&self) -> u64 {
+        use calve_integration_contract::content::{FILE_MAX, INLINE_MAX};
+        if self.decl.put_chunked.is_some() {
+            FILE_MAX
+        } else {
+            INLINE_MAX
+        }
+    }
+
     pub fn op(&self, kind: &str) -> Option<FileOp> {
-        if kind == self.decl.put {
+        if kind == self.decl.put || self.decl.put_chunked.as_deref() == Some(kind) {
             Some(FileOp::Put)
         } else if kind == self.decl.delete {
             Some(FileOp::Delete)

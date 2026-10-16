@@ -413,6 +413,7 @@ pub fn verify_installed(paths: &Paths, r: &PackageRecord) -> Result<()> {
             "cic" => "cic.wasm".into(),
             "metadata" => "calve-integration.json".into(),
             "ui" => "calve-ui.json".into(),
+            "refs" => "calve-refs.json".into(),
             _ => return Err(err("PACKAGE_INVALID", format!("unknown file role {role}"))),
         };
         let bytes = fs::read(dir.join(&name))
@@ -686,6 +687,9 @@ impl Installer {
         if let Some(ui) = &entry.ui {
             files.push(("ui", ui.clone()));
         }
+        if let Some(refs) = &entry.refs {
+            files.push(("refs", refs.clone()));
+        }
         if files.iter().any(|(_, f)| !valid_file(f)) {
             return Err(err(
                 "PACKAGE_INVALID",
@@ -789,6 +793,7 @@ impl Installer {
                 "native" => native.clone(),
                 "cic" => "cic.wasm".into(),
                 "metadata" => "calve-integration.json".into(),
+                "refs" => "calve-refs.json".into(),
                 _ => "calve-ui.json".into(),
             };
             fs::write(staging.join(&local), &bytes).map_err(io)?;
@@ -874,6 +879,37 @@ impl Installer {
                 "PACKAGE_INVALID",
                 "native artifact reports a different digest than its bytes",
             ));
+        }
+        // §13: the reference schema the manifest binds by content hash travels with the package.
+        let declared = manifest
+            .schemas
+            .get(calve_integration_contract::refs::SCHEMA);
+        match (declared, bytes_by_role.get("refs")) {
+            (None, None) => {}
+            (Some(h), Some(b)) => {
+                if openaevc::crypto::sha256(b) != *h {
+                    return Err(err(
+                        "PACKAGE_INVALID",
+                        "calve-refs.json does not match the manifest's calve.refs/1 hash",
+                    ));
+                }
+                let doc: Value = serde_json::from_slice(b)
+                    .map_err(|e| err("PACKAGE_INVALID", format!("calve-refs.json: {e}")))?;
+                calve_integration_contract::refs::parse(&doc)
+                    .map_err(|e| err("PACKAGE_INVALID", e))?;
+            }
+            (Some(_), None) => {
+                return Err(err(
+                    "PACKAGE_INVALID",
+                    "the manifest declares calve.refs/1 but the package ships no calve-refs.json",
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(err(
+                    "PACKAGE_INVALID",
+                    "calve-refs.json is not bound by the manifest (schemas[\"calve.refs/1\"])",
+                ));
+            }
         }
         if manifest.id != req.id || manifest.version != entry.version {
             return Err(err(
@@ -967,6 +1003,12 @@ impl Installer {
             .join(&record.id)
             .join(record.native_digest());
         fs::create_dir_all(final_dir.parent().expect("id dir")).map_err(io)?;
+        // The reference schema outlives the package (retirement removes the directory, history
+        // stays walkable): content-addressed, written once.
+        let staged_refs = staging.join("calve-refs.json");
+        if staged_refs.is_file() {
+            refs_put(&self.paths, &fs::read(&staged_refs).map_err(io)?)?;
+        }
         if final_dir.join("package.json").is_file() {
             // Already installed with the same digests? Keep the existing directory.
             let existing: PackageRecord =
@@ -1190,6 +1232,41 @@ impl Installer {
         )
         .map_err(io)?;
         Ok(())
+    }
+}
+
+/// The machine's content-addressed store of `calve.refs/1` documents (`<data>/refs/<hex>.json`).
+pub fn refs_dir(paths: &Paths) -> PathBuf {
+    paths.data.join("refs")
+}
+
+/// Stores a refs document by its SHA-256 (idempotent; existing content is re-verified).
+pub fn refs_put(paths: &Paths, bytes: &[u8]) -> Result<String> {
+    let hex = sha(bytes);
+    let dir = refs_dir(paths);
+    fs::create_dir_all(&dir).map_err(io)?;
+    let path = dir.join(format!("{hex}.json"));
+    if path.is_file() && sha(&fs::read(&path).map_err(io)?) == hex {
+        return Ok(hex);
+    }
+    let tmp = dir.join(format!(".{hex}.tmp"));
+    fs::write(&tmp, bytes).map_err(io)?;
+    fs::File::open(&tmp).map_err(io)?.sync_all().map_err(io)?;
+    fs::rename(&tmp, &path).map_err(io)?;
+    Ok(hex)
+}
+
+/// A refs document by content hash (`sha256:<hex>` or `<hex>`), verified.
+pub fn refs_get(paths: &Paths, hash: &str) -> Result<Option<Vec<u8>>> {
+    let hex = hash.trim_start_matches("sha256:");
+    match fs::read(refs_dir(paths).join(format!("{hex}.json"))) {
+        Ok(b) if sha(&b) == hex => Ok(Some(b)),
+        Ok(_) => Err(err(
+            "CONTENT_CORRUPT",
+            format!("refs document {hex} fails its hash"),
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(io(e)),
     }
 }
 

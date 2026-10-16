@@ -16,6 +16,7 @@ const ID: &str = "org.example.toy";
 const RESOURCE: &str = "org.example.toy.file";
 const PUT: &str = "org.example.toy.put";
 const DELETE: &str = "org.example.toy.delete";
+const PUT_CHUNKED: &str = "org.example.toy.put-chunked";
 const VERIFIER: &str = "org.example.toy.verify";
 const CHECKS: &str = "org.example.toy.checks";
 const SIZE: &str = "org.example.toy.size";
@@ -48,9 +49,13 @@ fn note(e: &EffectProposal) -> Result<Option<Value>, String> {
 fn inspect(e: &EffectProposal) -> Result<Option<Digest>, String> {
     if e.target.kind != RESOURCE
         || e.target.extension != ID
-        || ![PUT, DELETE].contains(&e.kind.as_str())
+        || ![PUT, DELETE, PUT_CHUNKED].contains(&e.kind.as_str())
     {
         return Err("not a toy file effect".into());
+    }
+    if e.kind == PUT_CHUNKED {
+        let (d, _) = calve_integration_contract::content::validate_chunked(&e.payload)?;
+        return Ok(Some(d.parse().map_err(|_| "digest")?));
     }
     let p = e.payload.as_object().ok_or("payload must be an object")?;
     if e.kind == DELETE {
@@ -99,6 +104,7 @@ impl Extension for Toy {
             effect_kinds: [
                 (PUT, RESOURCE),
                 (DELETE, RESOURCE),
+                (PUT_CHUNKED, RESOURCE),
                 (NOTE_SET, NOTE),
                 (NOTE_REMOVE, NOTE),
             ]
@@ -112,7 +118,11 @@ impl Extension for Toy {
             evaluator_kinds: vec![SIZE.into()],
             composition_validators: vec![],
             host_capabilities: vec![],
-            schemas: Default::default(),
+            schemas: [(
+                calve_integration_contract::refs::SCHEMA.to_owned(),
+                sha256(calve_testkit::TOY_REFS.as_bytes()),
+            )]
+            .into(),
             execution_modes: vec!["subprocess".into()],
             entrypoint: Entrypoint {
                 command: "calve-fixture-ext".into(),

@@ -11,6 +11,10 @@ use std::process::Command;
 
 use serde_json::Value;
 
+/// The `calve.refs/1` document of the toy fixture extension (its SHA-256 is the native
+/// manifest's `schemas["calve.refs/1"]`; the fixture package ships it as `calve-refs.json`).
+pub const TOY_REFS: &str = r#"{"kinds":{"org.example.toy.delete":[{"edge":"ContentHash","pointer":"/previous_digest"}],"org.example.toy.note.remove":[],"org.example.toy.note.set":[],"org.example.toy.put":[{"edge":"ContentHash","pointer":"/digest"}],"org.example.toy.put-chunked":[{"edge":"ContentHash","pointer":"/digest"},{"edge":"ObjectRef","pointer":"/chunks/*/blob_digest"},{"edge":"ContentHash","pointer":"/chunks/*/digest"}]},"schema":"calve.refs/1"}"#;
+
 /// The `data` of a `--json` success envelope (`{"api_version","command","data"}`) on `stdout`;
 /// `Null` when stdout is not one.
 pub fn json_data(stdout: &[u8]) -> Value {
@@ -180,6 +184,7 @@ pub fn fixture_package() -> tuf::Package<'static> {
         metadata: Some(
             fs::read(cic::fixtures().join("fixture-metadata.json")).expect("fixture metadata"),
         ),
+        refs: Some(TOY_REFS.as_bytes().to_vec()),
     }
 }
 

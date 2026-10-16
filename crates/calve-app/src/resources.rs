@@ -27,8 +27,10 @@ const MAX_SCAN_ENTRIES: usize = 10_000;
 const MAX_SCAN_DEPTH: usize = 32;
 /// Inline content limit per file (the approved over-limit refusal until chunked content, M4).
 pub(crate) const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
-const MAX_TREE_FILES: usize = 64;
-const MAX_TREE_BYTES: u64 = 16 * 1024 * 1024;
+/// One capture batch (P12). ponytail: the batch is held in memory while it is planned and
+/// spooled; a streaming spool lifts the byte bound if larger single batches matter.
+const MAX_TREE_FILES: usize = 10_000;
+const MAX_TREE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_IGNORE_SOURCE: u64 = 64 * 1024;
 
 fn invalid(message: impl Into<String>) -> Error {
@@ -45,12 +47,40 @@ pub(crate) fn effect_content(effect: &AppliedEffect) -> Option<Vec<u8>> {
     (effect.payload["digest"].as_str() == Some(&sha256(&content).to_string())).then_some(content)
 }
 
+/// The content of a file effect: inline bytes (verified) or chunk Blobs, resolved and verified
+/// on use by [`Project::content_bytes`] (rev 10 §13).
+#[derive(Debug, Clone)]
+pub(crate) enum Content {
+    Inline(Vec<u8>),
+    /// The `put_chunked` payload.
+    Chunked(serde_json::Value),
+}
+
+impl Content {
+    /// The bytes when inline (diffs and small files); chunked content needs the store.
+    pub fn inline(&self) -> Option<&[u8]> {
+        match self {
+            Content::Inline(b) => Some(b),
+            Content::Chunked(_) => None,
+        }
+    }
+}
+
 /// File state produced by applying file-domain effects in order. `removed` remembers paths a
 /// delete or move took away, so materialization can remove them locally.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct FileState {
-    pub files: BTreeMap<String, Vec<u8>>,
+    pub files: BTreeMap<String, Content>,
     pub removed: BTreeSet<String>,
+}
+
+/// An effect's content: chunked (structure checked) or inline (digest checked).
+pub(crate) fn effect_file_content(d: &FileDomain, effect: &AppliedEffect) -> Option<Content> {
+    if d.decl.put_chunked.as_deref() == Some(effect.kind.as_str()) {
+        calve_integration_contract::content::validate_chunked(&effect.payload).ok()?;
+        return Some(Content::Chunked(effect.payload.clone()));
+    }
+    effect_content(effect).map(Content::Inline)
 }
 
 impl FileState {
@@ -61,7 +91,7 @@ impl FileState {
         let path = effect.target.locator.clone();
         match d.op(&effect.kind) {
             Some(FileOp::Put) => {
-                let content = effect_content(effect)
+                let content = effect_file_content(d, effect)
                     .ok_or_else(|| invalid(format!("snapshot of {path} fails its digest")))?;
                 self.removed.remove(&path);
                 self.files.insert(path, content);
@@ -71,7 +101,7 @@ impl FileState {
                 self.removed.insert(path);
             }
             Some(FileOp::Move) => {
-                let content = effect_content(effect)
+                let content = effect_file_content(d, effect)
                     .ok_or_else(|| invalid(format!("move to {path} fails its digest")))?;
                 let from = effect.payload["from"]
                     .as_str()
@@ -381,10 +411,13 @@ impl Project {
             plan.op_paths.push(path.clone());
             match op["op"].as_str() {
                 Some("add" | "modify") => {
-                    let content = ws.read(&path, MAX_CAPTURE_BYTES).map_err(|e| match e {
-                        crate::workspace_io::IoError::TooLarge(_) => invalid(format!(
-                            "FILE_TOO_LARGE: {path} exceeds the 1 MiB capture limit"
-                        )),
+                    let limit = d.capture_limit();
+                    let content = ws.read(&path, limit).map_err(|e| match e {
+                        crate::workspace_io::IoError::TooLarge(_) => crate::detailed(
+                            "FILE_TOO_LARGE",
+                            format!("{path} exceeds the {limit}-byte capture limit"),
+                            json!({"path": path, "limit": limit}),
+                        ),
                         other => io_err(other),
                     })?;
                     if Some(sha256(&content).hex().as_str()) != digests.get(path.as_str()).copied()
@@ -529,11 +562,15 @@ impl Project {
 
     /// Captures every kept file below a directory and the deletions inside it, in one
     /// execution, as planned by the file extension.
+    /// `preview` returns the plan without submitting; deletions are applied only with
+    /// `accept_deletions` (P12: no destructive effect without an explicit acceptance).
     pub async fn capture_tree(
         &self,
         pack_id: &str,
         expected_generation: u64,
         directory: &Path,
+        preview: bool,
+        accept_deletions: bool,
     ) -> Result<Value> {
         let root_requested = directory == Path::new(".") || directory.as_os_str().is_empty();
         let scope = if root_requested {
@@ -564,21 +601,62 @@ impl Project {
         }
         let (plan, files) = self.plan_tree(&d, &scope).await?;
         if files.len() > MAX_TREE_FILES {
-            return Err(invalid(
-                "capture tree exceeds 64 files; choose a smaller directory",
+            return Err(crate::coded(
+                "LIMIT_EXCEEDED",
+                format!(
+                    "capture tree exceeds {MAX_TREE_FILES} files in one batch; capture subdirectories separately"
+                ),
             ));
         }
         let total = files
             .iter()
             .try_fold(0u64, |sum, e| sum.checked_add(e.size.unwrap_or(0)))
-            .ok_or_else(|| invalid("capture tree exceeds size limit"))?;
-        if files
+            .ok_or_else(|| crate::coded("LIMIT_EXCEEDED", "capture tree exceeds the size limit"))?;
+        if let Some(big) = files
             .iter()
-            .any(|e| e.size.unwrap_or(0) > MAX_CAPTURE_BYTES)
-            || total > MAX_TREE_BYTES
+            .find(|e| e.size.unwrap_or(0) > d.capture_limit())
         {
-            return Err(invalid(
-                "FILE_TOO_LARGE: capture tree needs files of at most 1 MiB each and 16 MiB total",
+            return Err(crate::detailed(
+                "FILE_TOO_LARGE",
+                format!(
+                    "{} exceeds the {}-byte capture limit",
+                    big.path,
+                    d.capture_limit()
+                ),
+                json!({"path": big.path, "limit": d.capture_limit()}),
+            ));
+        }
+        if total > MAX_TREE_BYTES {
+            return Err(crate::coded(
+                "LIMIT_EXCEEDED",
+                format!(
+                    "capture tree is {total} bytes; one batch holds at most {MAX_TREE_BYTES}; capture subdirectories separately"
+                ),
+            ));
+        }
+        let deletions: Vec<&str> = plan
+            .changes
+            .iter()
+            .filter_map(|c| match c {
+                FileChange::Delete { path, .. } => Some(path.as_str()),
+                _ => None,
+            })
+            .collect();
+        if preview {
+            return Ok(json!({"directory": scope, "preview": true,
+                "changes": plan.changes.iter().map(FileChange::summary).collect::<Vec<_>>(),
+                "deletions": deletions,
+                "refused": plan.refused.iter().map(|(p, r)| json!({"path": p, "reason": r})).collect::<Vec<_>>(),
+                "relations": plan.relations.iter().map(|r| json!({"kind": r.kind, "payload": r.payload})).collect::<Vec<_>>()}));
+        }
+        if !deletions.is_empty() && !accept_deletions {
+            return Err(crate::detailed(
+                "CONFIRMATION_REQUIRED",
+                format!(
+                    "capture tree would record {} deletion(s); review them with --preview, then pass --accept-deletions",
+                    deletions.len()
+                ),
+                json!({"deletions": deletions}),
             ));
         }
         let batch = self

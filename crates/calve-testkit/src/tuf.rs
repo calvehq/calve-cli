@@ -378,6 +378,8 @@ pub struct Package<'a> {
     pub native: (&'a str, Vec<u8>),
     pub cic: Option<Vec<u8>>,
     pub metadata: Option<Vec<u8>>,
+    /// `calve-refs.json` (required when the native manifest declares `calve.refs/1`).
+    pub refs: Option<Vec<u8>>,
 }
 
 /// The exact target triple of this host (the key Calve looks up in `package.json`).
@@ -408,6 +410,10 @@ impl Repo {
         if let Some(m) = p.metadata {
             files.push(("calve-integration.json".into(), m));
             entry["metadata"] = json!("calve-integration.json");
+        }
+        if let Some(r) = p.refs {
+            files.push(("calve-refs.json".into(), r));
+            entry["refs"] = json!("calve-refs.json");
         }
         let index_path = format!("{}/package.json", p.id);
         let t = self.role_targets(role);

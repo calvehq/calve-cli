@@ -777,6 +777,14 @@ pub enum PackCommand {
         directory: PathBuf,
         #[arg(long)]
         generation: u64,
+        /// Show what would be captured (changes, deletions, refusals) without capturing.
+        #[arg(long)]
+        #[serde(default)]
+        preview: bool,
+        /// Record the deletions the plan contains (they are refused otherwise).
+        #[arg(long)]
+        #[serde(default)]
+        accept_deletions: bool,
     },
     /// Ask OpenAEVC to evaluate promotion policy.
     Qualify {

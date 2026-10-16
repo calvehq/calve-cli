@@ -19,8 +19,19 @@ fn invalid(message: impl Into<String>) -> Error {
 
 const BACKUP_PREFIX: &str = ".calve-adopt-source-";
 
-/// Accepted history: promoted packs and Baselines, with everything they reach.
-async fn export_accepted(source: &Project) -> Result<Vec<(Digest, Vec<u8>)>> {
+/// Refs documents from the machine store (filled at install).
+pub(crate) fn machine_refs(hash: &str) -> Result<Option<Vec<u8>>> {
+    Ok(crate::catalog::install::refs_get(
+        &crate::extensions::machine_paths()?,
+        hash,
+    )?)
+}
+
+/// Accepted history: promoted packs and Baselines with their transfer closure (native plus
+/// supplemental refs edges, rev 10 §13), as `(roots, objects, refs documents)`.
+async fn export_accepted(
+    source: &Project,
+) -> Result<(Vec<Digest>, Vec<(Digest, Vec<u8>)>, Bundle)> {
     let mut roots = Vec::new();
     for kind in [ObjectKind::PromotedPack, ObjectKind::Baseline] {
         let mut after = None;
@@ -44,25 +55,16 @@ async fn export_accepted(source: &Project) -> Result<Vec<(Digest, Vec<u8>)>> {
             }
         }
     }
-    let mut digests = BTreeSet::new();
-    for root in roots {
-        let closure = source
-            .client
-            .query(Query::GetObjectClosure { digest: root })
-            .await?;
-        if closure["missing"]
-            .as_array()
-            .is_some_and(|missing| !missing.is_empty())
-        {
-            return Err(invalid(format!(
-                "accepted object {root} is incomplete in the source copy (missing {}); it cannot be transferred",
-                closure["missing"]
-            )));
-        }
-        digests.insert(root);
-        for digest in closure["objects"].as_array().into_iter().flatten() {
-            digests.insert(serde_json::from_value(digest.clone())?);
-        }
+    let (digests, used) = source.transfer_closure(&roots, &machine_refs).await?;
+    let mut refs = Bundle::new();
+    for h in used {
+        let doc = machine_refs(&h)?.ok_or_else(|| {
+            crate::coded(
+                "CLOSURE_UNCLASSIFIED",
+                format!("refs document {h} vanished"),
+            )
+        })?;
+        refs.insert(h, doc);
     }
     let mut objects = Vec::new();
     for digest in digests {
@@ -71,8 +73,11 @@ async fn export_accepted(source: &Project) -> Result<Vec<(Digest, Vec<u8>)>> {
             .map_err(|_| invalid(format!("object {digest} has no canonical bytes")))?;
         objects.push((digest, bytes));
     }
-    Ok(objects)
+    Ok((roots, objects, refs))
 }
+
+/// Refs documents carried with a transfer, by content hash.
+type Bundle = std::collections::BTreeMap<String, Vec<u8>>;
 
 /// Adopts the copy at `path`. The source `.calve` is kept aside until the new Project has
 /// imported and verified everything, so any failure restores the copy untouched.
@@ -89,7 +94,7 @@ pub async fn adopt_copy(path: &Path, name: Option<&str>) -> Result<(Project, Val
     let display_name = name
         .map(str::to_owned)
         .unwrap_or_else(|| source.display_name.clone());
-    let objects = export_accepted(&source).await?;
+    let (roots, objects, refs) = export_accepted(&source).await?;
     drop(source);
     drop(lock);
 
@@ -132,6 +137,17 @@ pub async fn adopt_copy(path: &Path, name: Option<&str>) -> Result<(Project, Val
                 )));
             }
         }
+        // Fail closed: the destination, with only the carried refs documents, must reproduce the
+        // same closure.
+        let carried = |h: &str| Ok(refs.get(h).cloned());
+        let (at_destination, _) = project.transfer_closure(&roots, &carried).await?;
+        let sent: BTreeSet<Digest> = objects.iter().map(|(d, _)| *d).collect();
+        if at_destination != sent {
+            return Err(crate::coded(
+                "CONTENT_NOT_PORTABLE",
+                "the transferred history does not reproduce its closure at the destination",
+            ));
+        }
         let detail = json!({"objects":objects.len(),"source_path":root});
         project.db.execute(
             "INSERT INTO adoptions VALUES (?1,?2,?3,?4,?5)",
@@ -169,6 +185,7 @@ pub async fn adopt_copy(path: &Path, name: Option<&str>) -> Result<(Project, Val
             let summary = json!({"project_id":project.identity.project_id,
                 "namespace_id":project.identity.namespace_id,"adopted_from":source_id,
                 "transferred_objects":objects.len(),
+                "refs_documents":refs.len(),
                 "note":"transferred history is inert: inspectable and verifiable, but it cannot authorize, gate, or join new Baselines"});
             Ok((project, summary))
         }

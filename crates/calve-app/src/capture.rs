@@ -81,8 +81,25 @@ pub(crate) struct SpoolObservation {
     pub related_paths: Vec<String>,
 }
 
+/// A file over the inline limit: its chunk layout (bytes in `<id>.chunks/<hex>`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SpoolChunked {
+    /// Index of its proposal.
+    pub index: usize,
+    pub path: String,
+    pub digest: String,
+    pub size: u64,
+    /// `(chunk digest, size)` in order.
+    pub chunks: Vec<(String, u64)>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Spool {
+    /// Observation kind of uploaded chunks.
+    #[serde(default)]
+    pub chunk_kind: String,
+    #[serde(default)]
+    pub chunked: Vec<SpoolChunked>,
     pub pack: PackId,
     pub generation: u64,
     pub provider: ProviderDescriptor,
@@ -112,6 +129,8 @@ struct Log {
     attempts: Vec<Attempt>,
     /// Steps acknowledged as applied.
     applied: BTreeSet<String>,
+    /// Result of each applied step.
+    results: std::collections::BTreeMap<String, Value>,
     /// A trailing intent without ack.
     pending: Option<Value>,
 }
@@ -151,6 +170,7 @@ fn read_log(records: &[Record]) -> Log {
                         a.3 = serde_json::from_value(result["lease"].clone()).ok();
                     }
                 }
+                log.results.insert(step.clone(), result.clone());
                 log.applied.insert(step);
             }
             _ => {}
@@ -221,8 +241,13 @@ impl Project {
         Ok(serde_json::from_slice(&bytes)?)
     }
 
-    /// Writes the spool and the journal (state `Planned`), then drives the session.
-    pub(crate) async fn run_capture(&self, spool: Spool) -> Result<Value> {
+    /// Writes the spool (and the bytes of chunked files) and the journal (state `Planned`), then
+    /// drives the session.
+    pub(crate) async fn run_capture(
+        &self,
+        spool: Spool,
+        chunk_data: Vec<(String, Vec<u8>)>,
+    ) -> Result<Value> {
         let id = format!("cap_{}", uuid::Uuid::now_v7());
         let d = dir(&self.root);
         fs::create_dir_all(&d)?;
@@ -232,6 +257,15 @@ impl Project {
             fs::set_permissions(&d, fs::Permissions::from_mode(0o700))?;
         }
         let (journal_path, spool_path) = self.session_paths(&id);
+        if !chunk_data.is_empty() {
+            let cdir = d.join(format!("{id}.chunks"));
+            fs::create_dir_all(&cdir)?;
+            for (digest, content) in &chunk_data {
+                let f = cdir.join(digest.trim_start_matches("sha256:"));
+                fs::write(&f, content)?;
+                fs::File::open(&f)?.sync_all()?;
+            }
+        }
         let bytes = serde_json::to_vec(&spool)?;
         let tmp = spool_path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
@@ -315,7 +349,11 @@ impl Project {
                 .next()
                 .and_then(|i| i.parse().ok())
                 .unwrap_or(usize::MAX);
-            let want = spool.proposals.get(i).map(proposal_projection);
+            let want = self
+                .assemble(spool, &log.results)
+                .await
+                .ok()
+                .and_then(|p| p.get(i).map(proposal_projection));
             let present = self
                 .effects_of(&pack, &wus)
                 .await
@@ -340,6 +378,30 @@ impl Project {
                         if o["envelope"]["body"]["payload"] == want.payload {
                             found = Some(json!({"digest": d}));
                         }
+                    }
+                }
+            }
+            found
+        } else if let Some(rest) = step.strip_prefix("chunk.") {
+            let (i, k) = rest.split_once('.').unwrap_or(("", ""));
+            let want = spool
+                .chunked
+                .iter()
+                .find(|c| c.index.to_string() == i)
+                .and_then(|c| {
+                    let k: usize = k.parse().ok()?;
+                    let (cd, size) = c.chunks.get(k)?;
+                    Some(json!({"file_digest": c.digest, "index": k, "chunk_digest": cd, "size": size}))
+                });
+            let mut found = None;
+            if let Some(want) = want {
+                for e in self.events_after(intent["head"].as_u64().unwrap_or(0))? {
+                    if e.kind == "observation.appended"
+                        && e.body["kind"] == spool.chunk_kind.as_str()
+                        && let Ok(d) = serde_json::from_value(e.body["digest"].clone())
+                        && self.object_json(d).await?["envelope"]["body"]["payload"] == want
+                    {
+                        found = Some(json!({"digest": d}));
                     }
                 }
             }
@@ -535,6 +597,16 @@ impl Project {
                     (n, wu, exe, lease)
                 }
             };
+            // Chunks first (they outlive a lost attempt: the blobs stay indexed).
+            if self
+                .upload_chunks(&mut j, &spool, exe, &lease, &log)
+                .await?
+            {
+                log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
+                continue 'attempts;
+            }
+            log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
+            let proposals = self.assemble(&spool, &log.results).await?;
             let wus: Vec<WorkUnitId> = log.attempts.iter().filter_map(|a| a.1).collect();
             let present: BTreeSet<String> = self
                 .effects_of(&pack, &wus)
@@ -542,7 +614,7 @@ impl Project {
                 .iter()
                 .map(applied_projection)
                 .collect();
-            for (i, proposal) in spool.proposals.iter().enumerate() {
+            for (i, proposal) in proposals.iter().enumerate() {
                 if present.contains(&proposal_projection(proposal)) {
                     continue;
                 }
@@ -765,6 +837,8 @@ impl Project {
                     }
                 }
                 let comp = Spool {
+                    chunk_kind: String::new(),
+                    chunked: vec![],
                     pack: p.id,
                     generation: p.generation,
                     provider: spool.provider.clone(),
@@ -776,7 +850,14 @@ impl Project {
                             locator_prefix: Some(x.target.locator.clone()),
                         })
                         .collect(),
-                    allowed_effects: vec![d.decl.put.clone(), d.decl.delete.clone()],
+                    allowed_effects: [
+                        Some(d.decl.put.clone()),
+                        Some(d.decl.delete.clone()),
+                        d.decl.put_chunked.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
                     captured: proposals
                         .iter()
                         .map(|x| json!({"path": x.target.locator, "change": "compensation"}))
@@ -795,7 +876,7 @@ impl Project {
                     output_digest: String::new(),
                     retry: None,
                 };
-                let report = self.run_capture(comp).await?;
+                let report = self.run_capture(comp, vec![]).await?;
                 let after = self.pack(&pack).await?;
                 let pre_state: Vec<_> = after.candidate_effects[..pre.len()].to_vec();
                 let rse_holds =
@@ -813,5 +894,95 @@ impl Project {
                 format!("--mode {other}: use supersede or compensate"),
             )),
         }
+    }
+}
+
+impl Project {
+    /// Uploads every chunk not yet acknowledged as a Blob observation of the current execution.
+    /// Returns `true` when the attempt was lost (a new attempt continues).
+    async fn upload_chunks(
+        &self,
+        j: &mut Journal,
+        spool: &Spool,
+        exe: ExecutionId,
+        lease: &Lease,
+        log: &Log,
+    ) -> Result<bool> {
+        let id = j.header["journal_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        for c in &spool.chunked {
+            let bytes = fs::read(
+                dir(&self.root)
+                    .join(format!("{id}.chunks"))
+                    .join(c.digest.trim_start_matches("sha256:")),
+            )?;
+            let mut offset = 0usize;
+            for (k, (cd, size)) in c.chunks.iter().enumerate() {
+                let slice = &bytes[offset..offset + *size as usize];
+                offset += *size as usize;
+                let step = format!("chunk.{}.{k}", c.index);
+                if log.applied.contains(&step) {
+                    continue;
+                }
+                let out = self.send_journaled(j, "capture", &step, Command::AppendObservation {
+                    execution: exe,
+                    lease: lease.id,
+                    kind: spool.chunk_kind.clone(),
+                    payload: Some(json!({"file_digest": c.digest, "index": k, "chunk_digest": cd, "size": size})),
+                    blob: Some(openaevc::protocol::Blob {
+                        media_type: "application/octet-stream".into(),
+                        data: slice.to_vec(),
+                    }),
+                    related_resources: vec![],
+                    related_effects: vec![],
+                })?;
+                if out.is_err() {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// The proposals with each chunked payload filled from the uploaded, read-back-verified
+    /// chunk blobs (§13 step 2).
+    async fn assemble(
+        &self,
+        spool: &Spool,
+        results: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<Vec<EffectProposal>> {
+        let mut proposals = spool.proposals.clone();
+        for c in &spool.chunked {
+            let mut chunks = vec![];
+            for (k, (cd, size)) in c.chunks.iter().enumerate() {
+                let obs: openaevc::protocol::Digest = results
+                    .get(&format!("chunk.{}.{k}", c.index))
+                    .and_then(|r| r["digest"].as_str())
+                    .and_then(|d| d.parse().ok())
+                    .ok_or_else(|| {
+                        crate::coded(
+                            "CAPTURE_INCOMPLETE",
+                            format!("{}: chunk {k} is not uploaded", c.path),
+                        )
+                    })?;
+                let blob = self.object_json(obs).await?["envelope"]["body"]["blob"].clone();
+                let blob_digest: openaevc::protocol::Digest = serde_json::from_value(blob)
+                    .map_err(|_| {
+                        crate::coded(
+                            "CONTENT_CORRUPT",
+                            format!("{}: chunk {k} has no blob", c.path),
+                        )
+                    })?;
+                chunks.push(json!({"blob_digest": blob_digest, "digest": cd, "size": size}));
+            }
+            let mut p = proposals[c.index].payload.clone();
+            p["chunks"] = json!(chunks);
+            // Read back and verify every chunk and the whole file before proposing it.
+            self.chunked_bytes(&c.path, &p).await?;
+            proposals[c.index].payload = p;
+        }
+        Ok(proposals)
     }
 }

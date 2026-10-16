@@ -77,7 +77,14 @@ impl T {
 fn capture_two(t: &T, pack: &str) {
     fs::write(t.root().join("a.toy"), "aaa").unwrap();
     fs::write(t.root().join("b.toy"), "bbb").unwrap();
-    t.ok(&["pack", "capture-tree", pack, "--generation", "1"]);
+    t.ok(&[
+        "pack",
+        "capture-tree",
+        "--accept-deletions",
+        pack,
+        "--generation",
+        "1",
+    ]);
 }
 
 #[test]
@@ -97,7 +104,14 @@ fn an_interrupted_capture_resumes_without_duplicate_effects() {
             t.crash(
                 point,
                 window0,
-                &["pack", "capture-tree", &pack, "--generation", "1"],
+                &[
+                    "pack",
+                    "capture-tree",
+                    "--accept-deletions",
+                    &pack,
+                    "--generation",
+                    "1",
+                ],
             );
             let s = t.session_of(&pack);
             assert_ne!(s["state"], "Done", "{point}: {s}");
@@ -126,6 +140,64 @@ fn an_interrupted_capture_resumes_without_duplicate_effects() {
     }
 }
 
+/// Chunk uploads are journaled steps too: a crash around any of them resumes to one chunked
+/// effect whose blobs reconstruct the file byte for byte.
+#[test]
+fn an_interrupted_chunk_upload_resumes_to_identical_content() {
+    let big: Vec<u8> = (0..(5u32 << 20))
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    for window0 in [false, true] {
+        for point in [
+            "capture.chunk.0.0.after_intent",
+            "capture.chunk.0.0.after_send",
+            "capture.chunk.0.1.after_send",
+            "capture.submit.1.1.after_send",
+        ] {
+            let mut t = T::new();
+            let pack = t.pack("P");
+            fs::write(t.root().join("big.toy"), &big).unwrap();
+            t.crash(
+                point,
+                window0,
+                &[
+                    "pack",
+                    "capture-tree",
+                    "--accept-deletions",
+                    &pack,
+                    "--generation",
+                    "1",
+                ],
+            );
+            let s = t.session_of(&pack);
+            let done = t.ok(&["capture", "resume", s["session"].as_str().unwrap()]);
+            assert_eq!(done["state"], "Done", "{point} window0={window0}: {done}");
+            let effects = t.effects(&pack);
+            let chunked: Vec<&Value> = effects
+                .iter()
+                .filter(|e| e["target"]["locator"] == "big.toy")
+                .collect();
+            assert_eq!(chunked.len(), 1, "{point} window0={window0}");
+            assert_eq!(chunked[0]["kind"], "org.example.toy.put-chunked");
+            assert_eq!(chunked[0]["payload"]["chunks"].as_array().unwrap().len(), 2);
+            fs::remove_file(t.root().join("big.toy")).unwrap();
+            let m = t.ok(&[
+                "resource",
+                "materialize",
+                "big.toy",
+                "--from",
+                &pack,
+                "--apply",
+            ]);
+            assert_eq!(m["applied"], true, "{point}: {m}");
+            assert!(
+                fs::read(t.root().join("big.toy")).unwrap() == big,
+                "{point} window0={window0}"
+            );
+        }
+    }
+}
+
 #[test]
 fn an_interrupted_capture_rolls_back_by_supersede_or_compensate() {
     // Supersede: the pack is replaced by one holding its pre-capture effects (none); tasks follow.
@@ -145,7 +217,14 @@ fn an_interrupted_capture_rolls_back_by_supersede_or_compensate() {
     t.crash(
         "capture.submit.1.1.after_send",
         false,
-        &["pack", "capture-tree", &pack, "--generation", "1"],
+        &[
+            "pack",
+            "capture-tree",
+            "--accept-deletions",
+            &pack,
+            "--generation",
+            "1",
+        ],
     );
     let s = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
     let r = t.ok(&["capture", "rollback", &s, "--yes"]);
@@ -168,7 +247,14 @@ fn an_interrupted_capture_rolls_back_by_supersede_or_compensate() {
     t.crash(
         "capture.submit.1.1.after_send",
         false,
-        &["pack", "capture-tree", &pack, "--generation", "1"],
+        &[
+            "pack",
+            "capture-tree",
+            "--accept-deletions",
+            &pack,
+            "--generation",
+            "1",
+        ],
     );
     let s = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
     let r = t.ok(&["capture", "rollback", &s, "--mode", "compensate", "--yes"]);

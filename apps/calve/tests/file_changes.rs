@@ -22,6 +22,7 @@ fn deletes_and_renames_flow_through_the_lifecycle() {
             p,
             "pack",
             "capture-tree",
+            "--accept-deletions",
             &id,
             ".",
             "--generation",

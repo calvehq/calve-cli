@@ -156,7 +156,7 @@ fn covered_digest(package: &Value, c: &PlannedCheck, exe: &Executable) -> Result
 impl Project {
     /// Copies the working tree (respecting ignore rules), then overlays the candidate's
     /// snapshots so tools see the candidate content for every captured path.
-    fn materialize_candidate(
+    async fn materialize_candidate(
         &self,
         d: &crate::domains::FileDomain,
         effects: &[openaevc::protocol::AppliedEffect],
@@ -201,6 +201,7 @@ impl Project {
             files.retain(|f| f != locator);
         }
         for (locator, content) in &candidate.files {
+            let content = self.content_bytes(locator, content).await?;
             let target = scratch.0.join(locator);
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;
@@ -208,7 +209,7 @@ impl Project {
             if fs::read(&target).ok().as_deref() != Some(content.as_slice()) {
                 drift.push(locator.clone());
             }
-            fs::write(&target, content)?;
+            fs::write(&target, &content)?;
             if !files.contains(locator) {
                 files.push(locator.clone());
             }
@@ -241,7 +242,9 @@ impl Project {
             .ok_or_else(|| invalid("pack has no sealed candidate"))?
             .candidate;
         let d = self.file_domain().await?;
-        let (scratch, files, drift) = self.materialize_candidate(&d, &pack.candidate_effects)?;
+        let (scratch, files, drift) = self
+            .materialize_candidate(&d, &pack.candidate_effects)
+            .await?;
         // Detection and plans come from each checks package's CIC `detect` / `check_plan`.
         let markers: Vec<String> = fs::read_dir(&scratch.0)?
             .filter_map(|e| e.ok()?.file_name().into_string().ok())

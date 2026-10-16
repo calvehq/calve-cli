@@ -1225,7 +1225,13 @@ async fn dispatch(request: Request) -> Result<Value> {
                 id,
                 directory,
                 generation,
-            } => project.capture_tree(&id, generation, &directory).await,
+                preview,
+                accept_deletions,
+            } => {
+                project
+                    .capture_tree(&id, generation, &directory, preview, accept_deletions)
+                    .await
+            }
             PackCommand::Lifecycle(command) => lifecycle(project, &settings, command).await,
             PackCommand::Qualify { id, generation } => project.qualify(&id, generation).await,
             PackCommand::Reopen { id, generation } => project.reopen(&id, generation).await,

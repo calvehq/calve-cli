@@ -125,7 +125,13 @@ impl Project {
             _ if before.files.contains_key(path) => ("modified", path),
             _ => ("added", path),
         };
-        let old = before.files.get(old_path).cloned().unwrap_or_default();
+        // Diffs are inline-only (≤ 1 MiB per side); chunked content shows digests, not lines.
+        let old = before
+            .files
+            .get(old_path)
+            .and_then(|c| c.inline())
+            .map(<[u8]>::to_vec)
+            .unwrap_or_default();
         let new = content(effect).unwrap_or_default();
         let mut diff = diff_lines(&old, &new);
         diff["path"] = json!(path);

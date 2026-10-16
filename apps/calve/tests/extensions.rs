@@ -36,6 +36,7 @@ fn openaevc_only(version: &'static str, caps: &[&str]) -> Package<'static> {
         native: ("fixture_ext", bytes),
         cic: None,
         metadata: None,
+        refs: None,
     }
 }
 
@@ -271,7 +272,15 @@ fn cic_product_paths_on_the_fixture_package() {
         .to_owned();
     let cap = run(
         &env,
-        &["pack", "capture-tree", &pack, ".", "--generation", "1"],
+        &[
+            "pack",
+            "capture-tree",
+            "--accept-deletions",
+            &pack,
+            ".",
+            "--generation",
+            "1",
+        ],
     );
     assert!(
         cap["captured"]
@@ -294,7 +303,15 @@ fn cic_product_paths_on_the_fixture_package() {
         .to_owned();
     let cap = run(
         &env,
-        &["pack", "capture-tree", &second, "src", "--generation", "1"],
+        &[
+            "pack",
+            "capture-tree",
+            "--accept-deletions",
+            &second,
+            "src",
+            "--generation",
+            "1",
+        ],
     );
     assert_eq!(
         cap["relations"][0]["kind"], "org.example.toy.rename",

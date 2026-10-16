@@ -2,7 +2,9 @@
 //! copies Calve can restore and then reconcile against OpenAEVC (§11).
 //!
 //! `.calve/backups/product-<UTC>-v<schema>-<kind>.db`, written with SQLite's `VACUUM INTO` (a
-//! consistent online copy), verified with `PRAGMA integrity_check` before it is kept. Kinds:
+//! consistent online copy), verified with `PRAGMA integrity_check` before it is kept, with its
+//! SHA-256 in `<file>.sha256` (integrity_check does not see damaged row bytes or free pages; the
+//! digest does, and restore requires it). Kinds:
 //! `daily` (the first write-open of a day; 7 kept), `pre-migration` and `pre-restore` (kept 30
 //! days). Backups hold the same product data as the database (never secret values: those are
 //! never stored).
@@ -39,6 +41,22 @@ pub fn integrity(path: &Path) -> Result<String> {
     Ok(db.query_row("PRAGMA integrity_check", [], |r| r.get(0))?)
 }
 
+fn sidecar(path: &Path) -> PathBuf {
+    let mut s = path.as_os_str().to_owned();
+    s.push(".sha256");
+    PathBuf::from(s)
+}
+
+/// Whether `path` still has the SHA-256 recorded when it was taken.
+fn digest_ok(path: &Path) -> Result<bool> {
+    let recorded = match fs::read_to_string(sidecar(path)) {
+        Ok(r) => r,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e.into()),
+    };
+    Ok(recorded.trim() == crate::journal::sha256_hex(&fs::read(path)?))
+}
+
 /// Writes a verified backup of `db` and applies retention.
 pub fn take(db: &Connection, db_path: &Path, kind: &str, schema: u32) -> Result<PathBuf> {
     let dir = dir(db_path);
@@ -67,6 +85,10 @@ pub fn take(db: &Connection, db_path: &Path, kind: &str, schema: u32) -> Result<
     }
     fs::File::open(&tmp)?.sync_all()?;
     let path = dir.join(&name);
+    // The digest first: a backup file never exists without one.
+    let side = sidecar(&path);
+    fs::write(&side, crate::journal::sha256_hex(&fs::read(&tmp)?))?;
+    fs::File::open(&side)?.sync_all()?;
     fs::rename(&tmp, &path)?;
     if let Ok(d) = fs::File::open(&dir) {
         let _ = d.sync_all();
@@ -119,6 +141,7 @@ fn retain(dir: &Path) -> Result<()> {
         };
         if drop && i > 0 {
             fs::remove_file(dir.join(name))?;
+            let _ = fs::remove_file(sidecar(&dir.join(name)));
         }
     }
     Ok(())
@@ -147,7 +170,8 @@ pub fn list(db_path: &Path) -> Result<Vec<Value>> {
             Ok(json!({"file": name, "kind": kind, "schema": schema,
                 "bytes": fs::metadata(&path)?.len(),
                 "created": jiff::Timestamp::try_from(modified).map(|t| t.to_string()).unwrap_or_default(),
-                "integrity": integrity(&path).unwrap_or_else(|e| e.to_string())}))
+                "integrity": integrity(&path).unwrap_or_else(|e| e.to_string()),
+                "digest_ok": digest_ok(&path)?}))
         })
         .collect()
 }
@@ -165,6 +189,12 @@ pub fn restore(db_path: &Path, backup: &str) -> Result<Value> {
     let source = dir(db_path).join(backup);
     if !source.is_file() {
         return Err(coded("NOT_FOUND", format!("backup {backup} not found")));
+    }
+    if !digest_ok(&source)? {
+        return Err(coded(
+            "CORRUPT_PRODUCT_STATE",
+            format!("backup {backup} does not match its recorded SHA-256"),
+        ));
     }
     let check = integrity(&source)?;
     if check != "ok" {

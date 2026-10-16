@@ -35,6 +35,7 @@ fn toy(meta: Option<Vec<u8>>) -> Package<'static> {
         metadata: Some(meta.unwrap_or_else(|| {
             fs::read(calve_testkit::cic::fixtures().join("toy-metadata.json")).unwrap()
         })),
+        refs: Some(calve_testkit::TOY_REFS.as_bytes().to_vec()),
     }
 }
 

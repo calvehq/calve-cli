@@ -178,7 +178,7 @@ async fn file_capture_body() {
     fs::write(temp.path().join("src/second.txt"), b"second file\n").unwrap();
     assert!(
         project
-            .capture_tree(&pack_id, pack.generation, Path::new("src"))
+            .capture_tree(&pack_id, pack.generation, Path::new("src"), false, true)
             .await
             .is_err()
     );
@@ -188,7 +188,7 @@ async fn file_capture_body() {
         .unwrap()
         .to_string();
     let tree = project
-        .capture_tree(&pack_id, 1, Path::new("src"))
+        .capture_tree(&pack_id, 1, Path::new("src"), false, true)
         .await
         .unwrap();
     assert_eq!(tree["captured"].as_array().unwrap().len(), 2);
@@ -204,14 +204,20 @@ async fn file_capture_body() {
     assert_eq!(tree["generation"], pack.generation);
     assert_eq!(pack.candidate_effects.len(), 2);
     let repeat_tree = project
-        .capture_tree(&pack_id, pack.generation, Path::new("src"))
+        .capture_tree(&pack_id, pack.generation, Path::new("src"), false, true)
         .await
         .unwrap();
     assert_eq!(repeat_tree["captured"].as_array().unwrap().len(), 0);
     assert_eq!(repeat_tree["unchanged"].as_array().unwrap().len(), 2);
     assert!(
         project
-            .capture_tree(&pack_id, pack.generation, Path::new("src/cache"))
+            .capture_tree(
+                &pack_id,
+                pack.generation,
+                Path::new("src/cache"),
+                false,
+                true
+            )
             .await
             .is_err()
     );

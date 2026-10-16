@@ -11,8 +11,7 @@ use std::path::Path;
 
 use openaevc::crypto::sha256;
 use openaevc::protocol::{
-    Command, Digest, ExecutionRequest, PackSpec, ProviderDescriptor, Query, ResourceRef,
-    WorkerInfo, b64,
+    Command, Digest, ExecutionRequest, PackSpec, ProviderDescriptor, Query, ResourceRef, WorkerInfo,
 };
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde_json::{Value, json};
@@ -47,18 +46,6 @@ impl Project {
             }
         }
         Ok(known)
-    }
-
-    fn snapshot_content(effect: &openaevc::protocol::AppliedEffect) -> Result<Vec<u8>> {
-        let content = b64::decode(effect.payload["content"].as_str().unwrap_or_default())
-            .map_err(|_| invalid("snapshot content is not valid base64"))?;
-        if effect.payload["digest"].as_str() != Some(&sha256(&content).to_string()) {
-            return Err(invalid(format!(
-                "snapshot of {} fails its digest",
-                effect.target.locator
-            )));
-        }
-        Ok(content)
     }
 
     /// Accepted file state of a Baseline: member packs in promotion order, later writes win.
@@ -99,11 +86,10 @@ impl Project {
                 }
             }
         }
-        let mut desired: Desired = state
-            .files
-            .into_iter()
-            .map(|(path, content)| (path, Some(content)))
-            .collect();
+        let mut desired: Desired = Desired::new();
+        for (path, content) in &state.files {
+            desired.insert(path.clone(), Some(self.content_bytes(path, content).await?));
+        }
         for path in state.removed {
             desired.entry(path).or_insert(None);
         }
@@ -399,7 +385,15 @@ impl Project {
             .ok_or_else(|| invalid(format!("pack {pack_id} does not change {path}")))?;
         let content = match d.op(&effect.kind) {
             Some(crate::domains::FileOp::Delete) => None,
-            _ => Some(Self::snapshot_content(effect)?),
+            _ => {
+                let c = crate::resources::effect_file_content(&d, effect).ok_or_else(|| {
+                    crate::coded(
+                        "CONTENT_CORRUPT",
+                        format!("snapshot of {path} fails its digest"),
+                    )
+                })?;
+                Some(self.content_bytes(path, &c).await?)
+            }
         };
         let desired = Desired::from([(path.to_owned(), content)]);
         let discard = if discard {
