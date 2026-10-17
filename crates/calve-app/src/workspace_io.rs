@@ -13,6 +13,21 @@ use cap_std::fs::{Dir, File, OpenOptions};
 use sha2::{Digest, Sha256};
 
 pub use calve_integration_contract::locator::{MAX_COMPONENTS, MAX_LOCATOR_BYTES};
+/// Name prefixes of Calve's own transient entries in the tree (init staging, materialization
+/// temp and trash files, atomic-write temps, adopt-copy backups). A crash can leave one behind
+/// until recovery; it is never user content, so scans skip it.
+pub const TRANSIENT_PREFIXES: [&str; 5] = [
+    ".calve-init-",
+    ".calve-mat-",
+    ".calve-trash-",
+    ".calve-tmp-",
+    ".calve-adopt-source-",
+];
+
+fn transient(name: &str) -> bool {
+    TRANSIENT_PREFIXES.iter().any(|p| name.starts_with(p))
+}
+
 /// Rehash attempts before a file that keeps changing is reported `unstable_file`.
 const MAX_REHASH: usize = 3;
 
@@ -258,6 +273,9 @@ impl Workspace {
             names.sort();
             for name in names {
                 let loc = format!("{prefix}{name}");
+                if transient(&name) {
+                    continue;
+                }
                 if loc == ".calve" || validate_locator(&loc).is_err() {
                     if loc != ".calve" {
                         on_error(&loc, IoError::Locator("invalid name".into()));
@@ -376,7 +394,10 @@ impl Workspace {
             } else {
                 format!("{loc}/{name}")
             };
-            if (loc.is_empty() && name == ".calve") || validate_locator(&full).is_err() {
+            if (loc.is_empty() && name == ".calve")
+                || transient(&name)
+                || validate_locator(&full).is_err()
+            {
                 continue;
             }
             let m = dir.symlink_metadata(&name)?;

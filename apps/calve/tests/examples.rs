@@ -65,3 +65,25 @@ fn revision() {
 fn local_agent() {
     run_example("local-agent");
 }
+
+/// §57 Scenario A runs with the first-party general-project extension.
+#[test]
+#[ignore = "needs the first-party catalog in CALVE_CATALOG_ADD"]
+fn scenario_a() {
+    run_example("scenario-a");
+}
+
+#[test]
+fn scenario_d() {
+    run_example("scenario-d");
+}
+
+#[test]
+fn scenario_e() {
+    run_example("scenario-e");
+}
+
+#[test]
+fn scenario_i() {
+    run_example("scenario-i");
+}

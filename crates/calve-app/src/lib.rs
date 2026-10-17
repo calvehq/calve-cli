@@ -2466,6 +2466,20 @@ impl Project {
         let tx = self.db.unchecked_transaction()?;
         for id in dirty.into_iter().filter(|id| known.contains(id)) {
             let pack = self.pack(&id).await?;
+            // The intent link is OpenAEVC's (`pack.intent`); a crash after the update but
+            // before Calve recorded it is reconciled here.
+            let intent = pack
+                .intent
+                .as_ref()
+                .and_then(|i| i["org.calve.intent"].as_str())
+                .filter(|i| {
+                    tx.query_row("SELECT 1 FROM intents WHERE id=?1", [i], |_| Ok(()))
+                        .is_ok()
+                });
+            tx.execute(
+                "UPDATE pack_metadata SET intent_id=?1 WHERE id=?2 AND intent_id IS NOT ?1",
+                params![intent, id],
+            )?;
             let changed: BTreeSet<&str> = pack
                 .candidate_effects
                 .iter()

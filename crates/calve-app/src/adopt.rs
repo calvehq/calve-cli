@@ -18,6 +18,9 @@ fn invalid(message: impl Into<String>) -> Error {
 }
 
 const BACKUP_PREFIX: &str = ".calve-adopt-source-";
+/// Written into the source backup once the new Project is recorded and its store verified; only
+/// then may recovery discard the source. Without it the adoption did not finish.
+const COMPLETE_MARKER: &str = "adoption-complete";
 
 /// Refs documents from the machine store (filled at install).
 pub(crate) fn machine_refs(hash: &str) -> Result<Option<Vec<u8>>> {
@@ -180,6 +183,10 @@ pub async fn adopt_copy(path: &Path, name: Option<&str>) -> Result<(Project, Val
                     "new Project failed store verification: {store:?}"
                 )));
             }
+            let marker = backup.join(COMPLETE_MARKER);
+            fs::write(&marker, source_id.as_bytes())?;
+            fs::File::open(&marker)?.sync_all()?;
+            crate::journal::fault("adopt.after_complete");
             fs::remove_dir_all(&backup)?;
             let project = Project::open(&root)?;
             let summary = json!({"project_id":project.identity.project_id,
@@ -204,8 +211,10 @@ pub fn adoption_leftovers(root: &Path) -> Result<Vec<Value>> {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with(BACKUP_PREFIX) && entry.file_type()?.is_dir() {
-            let healthy = Project::peek(root).is_ok();
-            actions.push(if healthy {
+            // A new `.calve` that opens is not proof of success: a crash mid-import leaves one.
+            let complete =
+                entry.path().join(COMPLETE_MARKER).is_file() && Project::peek(root).is_ok();
+            actions.push(if complete {
                 json!({"action":"remove_staging_dir","path":entry.path(),
                     "reason":"source state left by a completed adoption"})
             } else {

@@ -10,8 +10,9 @@ set -euo pipefail
 
 CALVE_BIN="${CALVE:-calve}"
 WORK="$(mktemp -d)"
-# Installed packages are read-only by design; make them writable again to clean up.
-trap 'chmod -R u+w "$WORK"; rm -rf "$WORK"' EXIT
+# Installed packages are read-only by design; make them writable again to clean up. A daemon an
+# example started is stopped first.
+trap '"$CALVE_BIN" daemon stop >/dev/null 2>&1 || true; chmod -R u+w "$WORK"; rm -rf "$WORK"' EXIT
 export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config"
 PROJECT="$WORK/project"
 
@@ -21,6 +22,9 @@ calve() { "$CALVE_BIN" --json --no-daemon-start --project "$PROJECT" "$@"; }
 # get '<python subscript>': reads JSON on stdin, prints one field, e.g. get '["id"]'.
 # --json output is the envelope {"api_version","command","data"}; get reads data.
 get() { python3 -c "import json,sys; v=json.load(sys.stdin)['data']$1; print(v if isinstance(v,str) else json.dumps(v))"; }
+
+# q '<python expression over d>': reads JSON on stdin and prints the expression, d = data.
+q() { python3 -c "import json,sys; d=json.load(sys.stdin)['data']; v=$1; print(v if isinstance(v,str) else json.dumps(v))"; }
 
 # expect <description> <actual> <expected>
 expect() {
