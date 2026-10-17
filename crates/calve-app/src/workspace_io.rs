@@ -128,7 +128,7 @@ impl Workspace {
 
     /// The parent directory of `loc`, opened component by component without following
     /// symlinks, and the final name.
-    fn parent<'a>(&self, loc: &'a str) -> Result<(Dir, &'a str)> {
+    pub(crate) fn parent<'a>(&self, loc: &'a str) -> Result<(Dir, &'a str)> {
         validate_locator(loc)?;
         let (dirs, name) = loc.rsplit_once('/').unwrap_or(("", loc));
         let mut dir = self.root.try_clone()?;
@@ -302,19 +302,7 @@ impl Workspace {
     /// directories (never through a symlink). Durability of the rename itself: Unix syncs the
     /// directory; Windows uses write-through rename in calve-win-sec (ADR 0013).
     pub fn write_atomic(&self, loc: &str, bytes: &[u8]) -> Result<()> {
-        validate_locator(loc)?;
-        let (dirs, name) = loc.rsplit_once('/').unwrap_or(("", loc));
-        let mut dir = self.root.try_clone()?;
-        for part in dirs.split('/').filter(|p| !p.is_empty()) {
-            dir = match dir.open_dir_nofollow(part) {
-                Ok(d) => d,
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                    dir.create_dir(part)?;
-                    dir.open_dir_nofollow(part)?
-                }
-                Err(_) => return Err(IoError::NotFollowed(loc.to_owned())),
-            };
-        }
+        let (dir, name) = self.parent_create(loc)?;
         if dir
             .symlink_metadata(name)
             .is_ok_and(|m| m.file_type().is_symlink())
@@ -340,6 +328,24 @@ impl Workspace {
             let _ = dir.remove_file(&tmp);
         }
         Ok(res?)
+    }
+
+    /// Like [`Workspace::parent`], creating missing directories (never through a symlink).
+    pub(crate) fn parent_create<'a>(&self, loc: &'a str) -> Result<(Dir, &'a str)> {
+        validate_locator(loc)?;
+        let (dirs, name) = loc.rsplit_once('/').unwrap_or(("", loc));
+        let mut dir = self.root.try_clone()?;
+        for part in dirs.split('/').filter(|p| !p.is_empty()) {
+            dir = match dir.open_dir_nofollow(part) {
+                Ok(d) => d,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    dir.create_dir(part)?;
+                    dir.open_dir_nofollow(part)?
+                }
+                Err(_) => return Err(IoError::NotFollowed(loc.to_owned())),
+            };
+        }
+        Ok((dir, name))
     }
 
     /// The entries of directory `loc` (`""` = the root): `(name, kind, size)`, sorted by

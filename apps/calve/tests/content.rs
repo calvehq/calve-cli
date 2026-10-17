@@ -137,7 +137,7 @@ async fn body() {
         fs::remove_file(root.join(name)).unwrap();
     }
     let applied = project
-        .materialize_baseline(&baseline, &[], true, false)
+        .materialize_baseline(&baseline, &[], true, false, false)
         .await
         .unwrap();
     assert_eq!(applied["applied"], true, "{applied}");
@@ -207,7 +207,7 @@ async fn body() {
     fs::remove_file(&object).unwrap();
     let err = code(
         project
-            .materialize_baseline(&baseline, &[], true, false)
+            .materialize_baseline(&baseline, &[], true, false, false)
             .await
             .unwrap_err(),
     );
@@ -229,7 +229,7 @@ async fn body() {
     )
     .unwrap();
     let err = project
-        .materialize_baseline(&baseline, &[], true, false)
+        .materialize_baseline(&baseline, &[], true, false, false)
         .await
         .unwrap_err();
     match err {

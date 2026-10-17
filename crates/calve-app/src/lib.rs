@@ -36,6 +36,7 @@ pub mod resources;
 pub mod sandbox;
 pub mod supersede;
 pub mod views;
+pub(crate) mod wal;
 pub mod workspace_io;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

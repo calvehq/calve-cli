@@ -177,6 +177,11 @@ pub enum Action {
         #[command(subcommand)]
         command: CaptureCommand,
     },
+    /// Materialization operations: list, resume, resolve conflicts, roll back (§14).
+    Materialize {
+        #[command(subcommand)]
+        command: MaterializeCommand,
+    },
     /// Replace a pack by a new pack holding its first effects (supersede saga, §12).
     Supersede {
         #[command(subcommand)]
@@ -979,6 +984,29 @@ pub enum CaptureCommand {
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
+pub enum MaterializeCommand {
+    /// Journaled materialization operations with their state and unresolved conflicts.
+    List,
+    /// Continue an interrupted operation.
+    Resume { op: String },
+    /// Resolve the operation's conflicts by keeping `ours` (the planned content) or `theirs`
+    /// (the concurrent writer's bytes), then continue it. Conflict artifacts are kept.
+    Resolve {
+        op: String,
+        #[arg(long, value_parser = ["ours", "theirs"])]
+        keep: String,
+    },
+    /// Reverse the operation's completed steps, each revalidated first.
+    Rollback {
+        op: String,
+        /// Confirm without prompting (working-tree files are rewritten).
+        #[arg(long, short = 'y')]
+        #[serde(default)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
 pub enum SupersedeCommand {
     /// Replace an OPEN pack by a new pack holding its first `--keep` effects; the original is
     /// abandoned last, after the replacement is verified and relinked.
@@ -1213,6 +1241,11 @@ pub enum ResourceCommand {
         discard: bool,
         #[arg(long)]
         apply: bool,
+        /// On a filesystem without atomic exchange/no-replace, replace and delete anyway (a
+        /// concurrent write in the final window can be lost; recorded in the journal).
+        #[arg(long)]
+        #[serde(default)]
+        allow_unsafe_fs: bool,
     },
     /// Diff one captured file against the working copy.
     Diff { pack: String, path: PathBuf },
@@ -1320,6 +1353,11 @@ pub enum BaselineCommand {
         /// Make the Baseline active after a successful apply.
         #[arg(long)]
         activate: bool,
+        /// On a filesystem without atomic exchange/no-replace, replace and delete anyway (a
+        /// concurrent write in the final window can be lost; recorded in the journal).
+        #[arg(long)]
+        #[serde(default)]
+        allow_unsafe_fs: bool,
     },
 }
 
@@ -1428,6 +1466,10 @@ impl Action {
                     if mode == "compensate" { "changed by compensating effects" } else { "replaced and the original abandoned" }
                 ),
             ),
+            Self::Materialize { command: MaterializeCommand::Rollback { op, yes } } => ask(
+                *yes,
+                format!("Roll materialization {op} back: its completed steps are reversed in the working tree."),
+            ),
             Self::Supersede { command: SupersedeCommand::Start { pack, keep, yes } } => ask(
                 *yes,
                 format!("Replace pack {pack} by a new pack holding its first {keep} effects; {pack} is abandoned."),
@@ -1475,6 +1517,9 @@ impl Action {
             }
             | Self::Capture {
                 command: CaptureCommand::Rollback { yes, .. },
+            }
+            | Self::Materialize {
+                command: MaterializeCommand::Rollback { yes, .. },
             }
             | Self::Supersede {
                 command: SupersedeCommand::Start { yes, .. },
@@ -1537,8 +1582,13 @@ impl Action {
             }
             | Self::Supersede {
                 command: SupersedeCommand::List,
+            }
+            | Self::Materialize {
+                command: MaterializeCommand::List,
             } => OperationKind::Query,
-            Self::Capture { .. } | Self::Supersede { .. } => OperationKind::Command,
+            Self::Capture { .. } | Self::Supersede { .. } | Self::Materialize { .. } => {
+                OperationKind::Command
+            }
             Self::Execution { command } => match command {
                 ExecutionCommand::List { .. }
                 | ExecutionCommand::Show { .. }

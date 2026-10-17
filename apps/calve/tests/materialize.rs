@@ -159,10 +159,15 @@ fn baseline_materialization_protects_uncaptured_work() {
     assert_eq!(applied["active_baseline"], baseline);
     assert_eq!(fs::read_to_string(root.join("a.txt")).unwrap(), "one\n");
     assert_eq!(fs::read_to_string(root.join("dir/b.txt")).unwrap(), "bee\n");
-    let backups: Vec<_> = fs::read_dir(root.join(".calve/cache/discarded"))
+    // The discarded local edit is the verified backup of its WAL step.
+    let op = applied["op"].as_str().unwrap();
+    let backups: Vec<Vec<u8>> = fs::read_dir(root.join(".calve/run/materialize").join(op))
         .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "backup"))
+        .map(|p| fs::read(p).unwrap())
         .collect();
-    assert_eq!(backups.len(), 1);
+    assert!(backups.contains(&b"local edit\n".to_vec()), "{backups:?}");
     let logs = ok(
         data,
         &[

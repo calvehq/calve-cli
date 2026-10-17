@@ -1300,6 +1300,16 @@ async fn dispatch(request: Request) -> Result<Value> {
                 project.rollback_capture(&session, &mode).await
             }
         },
+        Action::Materialize { command } => match command {
+            MaterializeCommand::List => Ok(json!(project.list_materializations()?)),
+            MaterializeCommand::Resume { op } => project.materialize_resume(&op).await,
+            MaterializeCommand::Resolve { op, keep } => {
+                project.materialize_resolve(&op, &keep).await
+            }
+            MaterializeCommand::Rollback { op, yes } => {
+                project.materialize_rollback(&op, yes).await
+            }
+        },
         Action::Supersede { command } => match command {
             SupersedeCommand::Start { pack, keep, .. } => {
                 project.supersede_pack(&pack, keep, None).await
@@ -1443,9 +1453,10 @@ async fn dispatch(request: Request) -> Result<Value> {
                 pack,
                 discard,
                 apply,
+                allow_unsafe_fs,
             } => {
                 project
-                    .materialize_resource(&pack, &path, discard, apply)
+                    .materialize_resource(&pack, &path, discard, apply, allow_unsafe_fs)
                     .await
             }
             ResourceCommand::Set {
@@ -1556,9 +1567,10 @@ async fn dispatch(request: Request) -> Result<Value> {
                 discard,
                 apply,
                 activate,
+                allow_unsafe_fs,
             } => {
                 project
-                    .materialize_baseline(&id, &discard, apply, activate)
+                    .materialize_baseline(&id, &discard, apply, activate, allow_unsafe_fs)
                     .await
             }
             BaselineCommand::Activate { id } => {
