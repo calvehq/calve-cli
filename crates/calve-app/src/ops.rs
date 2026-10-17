@@ -580,12 +580,10 @@ pub fn verify_store(root: &Path) -> Result<Value> {
     )
 }
 
-/// Delegates collection to OpenAEVC, which never removes indexed (accepted) objects.
-pub fn collect_garbage(root: &Path, grace_secs: u64, dry_run: bool) -> Result<Value> {
-    if dry_run {
-        return Ok(json!({"dry_run":true,"grace_secs":grace_secs,
-            "plan":"OpenAEVC removes unindexed objects and orphan CAS files older than the grace period; indexed history is never removed"}));
-    }
-    let report = open_store(root)?.collect_garbage(std::time::Duration::from_secs(grace_secs))?;
-    Ok(json!({"dry_run":false,"scanned":report.scanned,"removed":report.removed}))
+/// OpenAEVC's collector, which never removes indexed (accepted) objects.
+pub fn collect_protocol_garbage(
+    root: &Path,
+    grace: std::time::Duration,
+) -> Result<openaevc::store::GcReport> {
+    Ok(open_store(root)?.collect_garbage(grace)?)
 }

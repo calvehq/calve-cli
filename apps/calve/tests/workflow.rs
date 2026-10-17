@@ -1109,7 +1109,7 @@ async fn completed_task_surfaces_cancelled_linked_execution() {
             .contains("cancelled execution")
     );
     assert_eq!(
-        project.status().await.unwrap()["tasks"][0]["inconsistencies"]
+        project.status(None).await.unwrap()["tasks"]["attention"][0]["inconsistencies"]
             .as_array()
             .unwrap()
             .len(),

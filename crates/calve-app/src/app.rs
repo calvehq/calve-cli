@@ -214,7 +214,35 @@ fn project_command(
     })
 }
 
-fn project_health(registry: &Registry, identifier: &str) -> Result<Value> {
+/// §29.4: per-Project attention counts of the selected Workspace, from each product DB opened
+/// read-only (the counts are as of that Project's last Inbox refresh).
+fn inbox_summary(registry: &Registry) -> Result<Value> {
+    let now = crate::now()?;
+    let mut projects = vec![];
+    for p in registry.selected()?.projects {
+        let db = p.path.join(".calve/product.sqlite3");
+        let counts = rusqlite::Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .and_then(|c| {
+                c.query_row(
+                    "SELECT count(*), coalesce(sum(severity='danger'),0), max(last_seen) FROM inbox_items
+                     WHERE resolved_at IS NULL AND acknowledged_at IS NULL
+                     AND (snoozed_until IS NULL OR snoozed_until <= ?1)",
+                    [now],
+                    |r| Ok(json!({"attention": r.get::<_, u64>(0)?, "danger": r.get::<_, u64>(1)?,
+                        "as_of": r.get::<_, Option<u64>>(2)?})),
+                )
+            });
+        let mut row = json!({"project_id": p.project_id, "name": p.name, "path": p.path});
+        match counts {
+            Ok(c) => row["inbox"] = c,
+            Err(e) => row["error"] = json!(e.to_string()),
+        }
+        projects.push(row);
+    }
+    Ok(json!({"projects": projects}))
+}
+
+pub(crate) fn project_health(registry: &Registry, identifier: &str) -> Result<Value> {
     let supplied = Path::new(identifier);
     let entry = if supplied.exists() {
         match Project::peek(supplied) {
@@ -839,6 +867,9 @@ async fn dispatch(request: Request) -> Result<Value> {
             return init_report(&project, !no_register);
         }
         Action::Workspace { command } => return workspace_command(&mut registry, command),
+        Action::Inbox {
+            command: InboxCommand::Summary,
+        } => return inbox_summary(&registry),
         Action::Project {
             command: ProjectCommand::AdoptCopy { path, name },
         } => {
@@ -974,9 +1005,22 @@ async fn dispatch(request: Request) -> Result<Value> {
                 MaintenanceCommand::Gc {
                     dry_run,
                     grace_secs,
+                    conflicts,
+                    older_than_secs,
                     ..
                 },
-        } => return crate::ops::collect_garbage(&root, *grace_secs, *dry_run),
+        } => {
+            let o = crate::gc::Options {
+                grace: std::time::Duration::from_secs(*grace_secs),
+                conflicts: conflicts.then(|| std::time::Duration::from_secs(*older_than_secs)),
+            };
+            if *dry_run {
+                return crate::gc::dry_run(&root, &o);
+            }
+            return crate::gc::collect(&root, &o, &|| {
+                crate::ops::collect_protocol_garbage(&root, o.grace)
+            });
+        }
         Action::Maintenance {
             command: MaintenanceCommand::Check,
         } => Some(crate::ops::verify_store(&root)?),
@@ -1008,7 +1052,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         | Action::Config { .. }
         | Action::Provider { .. }
         | Action::Harness { .. } => unreachable!(),
-        Action::Status => project.status().await,
+        Action::Status => project.status(Some(&settings)).await,
         Action::Intent { command } => match command {
             IntentCommand::Create {
                 title,
@@ -1159,6 +1203,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         },
         Action::Inbox { command } => match command {
             InboxCommand::List { all } => Ok(json!(project.inbox(all).await?)),
+            InboxCommand::Summary => unreachable!("handled before a Project opens"),
             InboxCommand::Show { source_key } => project.inbox_item(&source_key).await,
             InboxCommand::Unack { source_keys } => {
                 for key in &source_keys {
@@ -1680,7 +1725,7 @@ async fn dispatch(request: Request) -> Result<Value> {
                                 json!({"calve":env!("CARGO_PKG_VERSION"),"openaevc_revision":compatibility::OPENAEVC_REVISION}),
                             ),
                             ("config", serde_json::to_value(&config)?),
-                            ("status", project.status().await?),
+                            ("status", project.status(Some(&config)).await?),
                             ("extensions-installed", crate::extensions::list_installed()?),
                             ("recovery", json!(crate::ops::recovery_plan(&project.root)?)),
                         ],

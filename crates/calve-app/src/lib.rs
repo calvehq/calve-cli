@@ -9,6 +9,7 @@ pub mod backup;
 pub mod capture;
 pub mod catalog;
 pub mod checks;
+pub mod client;
 pub mod closure;
 pub mod compatibility;
 pub mod composition;
@@ -19,6 +20,7 @@ pub(crate) mod domains;
 pub mod envelope;
 pub mod extensions;
 pub mod extsort;
+pub mod gc;
 pub mod general_ops;
 pub mod identities;
 pub mod integration;
@@ -57,7 +59,7 @@ use openaevc::protocol::{
 };
 use openaevc::runtime::{Admin, Runtime, RuntimeConfig, RuntimeDeps};
 use openaevc::store::{SqliteOptions, SqliteStore};
-use openaevc_sdk::{EmbeddedClient, OpenAevcClient, Session, TypedClient};
+use openaevc_sdk::{OpenAevcClient, Session, TypedClient};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1048,7 +1050,7 @@ pub struct Project {
     pub root: PathBuf,
     pub identity: ProjectIdentity,
     pub display_name: String,
-    pub client: EmbeddedClient,
+    pub client: crate::client::Client,
     db: Connection,
     /// Shared runtime, so other identities can get their own session on it.
     runtime: Arc<Runtime>,
@@ -1097,7 +1099,7 @@ impl Project {
                 runtime_seed: runtime_key.seed().to_vec(),
             };
             let runtime = make_runtime(&staging, &keys, true)?;
-            let admin_client = EmbeddedClient::new(
+            let admin_client = crate::client::Client::new(
                 runtime.clone(),
                 Session::new(Arc::new(admin), keys.admin_id, None),
             );
@@ -1307,7 +1309,7 @@ impl Project {
             ));
         }
         let runtime = make_runtime(&state, &keys, false)?;
-        let client = EmbeddedClient::new(
+        let client = crate::client::Client::new(
             runtime.clone(),
             Session::new(
                 signing_key(&keys.root_seed)?,
@@ -2598,7 +2600,10 @@ impl Project {
 
     pub async fn list_receipts(&self, after: Option<Digest>, limit: u32) -> Result<Value> {
         if !(1..=100).contains(&limit) {
-            return Err(invalid("receipt page limit must be 1–100"));
+            return Err(crate::coded(
+                "INVALID_ARGUMENT",
+                "receipt page limit must be 1–100",
+            ));
         }
         let page = self
             .client
@@ -2697,7 +2702,10 @@ impl Project {
         current_only: bool,
     ) -> Result<Value> {
         if !(1..=100).contains(&limit) {
-            return Err(invalid("evidence page limit must be 1–100"));
+            return Err(crate::coded(
+                "INVALID_ARGUMENT",
+                "evidence page limit must be 1–100",
+            ));
         }
         let pack = self.pack(id).await?;
         let page = self
@@ -4230,7 +4238,14 @@ impl Project {
                 ));
             }
         }
-        for pack in self.list_packs().await? {
+        let packs = self.list_packs().await?;
+        // Live packs at their current generation, for verification/evaluation/qualification.
+        let live: BTreeMap<String, u64> = packs
+            .iter()
+            .filter(|p| !matches!(p["state"].as_str(), Some("PROMOTED" | "ABANDONED")))
+            .filter_map(|p| Some((p["id"].as_str()?.to_owned(), p["generation"].as_u64()?)))
+            .collect();
+        for pack in &packs {
             let id = pack["id"]
                 .as_str()
                 .ok_or_else(|| invalid("pack has no ID"))?;
@@ -4274,6 +4289,149 @@ impl Project {
                     "warning".into(),
                 ));
             }
+        }
+        // The latest verification, evaluation and qualification result of each live pack's
+        // current generation; a later passing result resolves the item.
+        // ponytail: rescans the protocol journal on each refresh; a checkpointed projection when
+        // journals grow large.
+        let mut results: BTreeMap<String, (String, String, String, String)> = BTreeMap::new();
+        self.scan_protocol_events(0, |e| {
+            let pack = e.body["pack"].as_str().unwrap_or_default().to_owned();
+            let Some(g) = e.body["generation"].as_u64() else {
+                return Ok(());
+            };
+            if live.get(&pack) != Some(&g) {
+                return Ok(());
+            }
+            let (key, bad, kind, summary, severity) = match e.kind.as_str() {
+                "verification.completed" => {
+                    let (v, st) = (
+                        e.body["verifier"].as_str().unwrap_or("?"),
+                        e.body["status"].as_str().unwrap_or("?"),
+                    );
+                    (
+                        format!("verification:{pack}:{g}:{v}"),
+                        matches!(st, "FAIL" | "ERROR"),
+                        "verification_failed",
+                        format!("Verification {v}: {st}"),
+                        "danger",
+                    )
+                }
+                "evaluation.completed" => {
+                    let (v, st) = (
+                        e.body["evaluator"].as_str().unwrap_or("?"),
+                        e.body["verdict"].as_str().unwrap_or("?"),
+                    );
+                    (
+                        format!("evaluation:{pack}:{g}:{v}"),
+                        matches!(st, "WARN" | "DENY"),
+                        "evaluation_warning",
+                        format!("Evaluation {v}: {st}"),
+                        if st == "DENY" { "danger" } else { "warning" },
+                    )
+                }
+                "qualification.evaluated" => (
+                    format!("qualification:{pack}:{g}"),
+                    e.body["outcome"] == "DENY",
+                    "promotion_blocked",
+                    "Qualification denied; the pack cannot be promoted".to_owned(),
+                    "danger",
+                ),
+                _ => return Ok(()),
+            };
+            if bad {
+                results.insert(key, (kind.into(), pack, summary, severity.into()));
+            } else {
+                results.remove(&key);
+            }
+            Ok(())
+        })
+        .await?;
+        for (key, (kind, pack, summary, severity)) in results {
+            sources.push((key, kind, pack, summary, severity));
+        }
+        // Extension and provider failures.
+        for x in self
+            .extension_health()
+            .await?
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            if x["healthy"] != true && x["active"] == true {
+                let id = x["id"].as_str().unwrap_or_default();
+                sources.push((
+                    format!("extension:{id}:unhealthy"),
+                    "extension_failure".into(),
+                    id.into(),
+                    format!(
+                        "Extension {id}: {}",
+                        x["problem"].as_str().unwrap_or("unavailable")
+                    ),
+                    "danger".into(),
+                ));
+            }
+        }
+        // Interrupted or conflicted operations that need recovery.
+        for c in crate::capture::list(&self.root)? {
+            let st = c["state"].as_str().unwrap_or_default();
+            if !crate::capture::TERMINAL.contains(&st) {
+                let session = c["session"].as_str().unwrap_or_default();
+                sources.push((
+                    format!("capture:{session}"),
+                    "recovery_required".into(),
+                    c["pack"].as_str().unwrap_or_default().into(),
+                    format!("Capture session {session} is {st}; run `calve capture resume {session}` or roll it back"),
+                    "danger".into(),
+                ));
+            }
+        }
+        for sg in crate::supersede::list(&self.root)? {
+            let st = sg["state"].as_str().unwrap_or_default();
+            if st != crate::supersede::DONE {
+                let saga = sg["saga"].as_str().unwrap_or_default();
+                sources.push((
+                    format!("supersede:{saga}"),
+                    "recovery_required".into(),
+                    sg["pack"].as_str().unwrap_or_default().into(),
+                    format!("Supersession {saga} is {st}; run `calve supersede resume {saga}` (the original pack is kept)"),
+                    "danger".into(),
+                ));
+            }
+        }
+        for m in self.unfinished_materializations()? {
+            let op = m["op"].as_str().unwrap_or_default();
+            let conflicted = m["state"] == "Conflicted";
+            sources.push((
+                format!("materialize:{op}"),
+                if conflicted { "materialization_divergence" } else { "recovery_required" }.into(),
+                op.into(),
+                if conflicted {
+                    format!("Materialization {op} found concurrent changes; run `calve materialize resolve {op} --keep ours|theirs`")
+                } else {
+                    format!("Materialization {op} was interrupted; run `calve materialize resume {op}`")
+                },
+                "danger".into(),
+            ));
+        }
+        // Project identity conflicts (a duplicate live copy, a mismatched registration).
+        if let Ok(registry) = crate::registry::Registry::open_default()
+            && let Ok(h) = crate::app::project_health(&registry, &self.root.to_string_lossy())
+            && matches!(
+                h["status"].as_str(),
+                Some("identity_conflict" | "duplicate_copy")
+            )
+        {
+            sources.push((
+                format!("identity:{}", self.identity.project_id),
+                "identity_conflict".into(),
+                self.identity.project_id.clone(),
+                h["findings"][0]["message"]
+                    .as_str()
+                    .unwrap_or("Project identity conflict")
+                    .into(),
+                "danger".into(),
+            ));
         }
         let timestamp = now()?;
         let tx = self.db.unchecked_transaction()?;
@@ -4373,8 +4531,9 @@ impl Project {
         event(&self.db, "inbox.item.updated", key, action)
     }
 
-    /// Derived summary; every field comes from OpenAEVC queries or Calve metadata.
-    pub async fn status(&self) -> Result<Value> {
+    /// Derived summary (PLAN §17.5); every field comes from OpenAEVC queries or Calve metadata,
+    /// never a second authority. `config` supplies the provider profiles to health-check.
+    pub async fn status(&self, config: Option<&crate::config::EffectiveConfig>) -> Result<Value> {
         let packs = self.list_packs().await?;
         let tasks = self.tasks_with_protocol().await?;
         let mut project = serde_json::to_value(&self.identity)?;
@@ -4395,12 +4554,18 @@ impl Project {
             Ok(scan) => json!(scan["uncaptured"].as_array().map_or(0, Vec::len)),
             Err(error) => json!({"error":error.to_string()}),
         };
-        let attention = self
-            .inbox(false)
-            .await?
-            .into_iter()
-            .filter(|item| item["needs_attention"] == true)
+        let inbox = self.inbox(false).await?;
+        let attention = inbox
+            .iter()
+            .filter(|i| i["needs_attention"] == true)
             .count();
+        let pick = |kinds: &[&str]| -> Vec<Value> {
+            inbox
+                .iter()
+                .filter(|i| kinds.contains(&i["kind"].as_str().unwrap_or_default()))
+                .map(|i| json!({"kind": i["kind"], "pack": i["subject"], "summary": i["summary"], "source_key": i["source_key"]}))
+                .collect()
+        };
         let unhealthy: Vec<Value> = self
             .extension_health()
             .await?
@@ -4410,15 +4575,61 @@ impl Project {
             .filter(|item| item["healthy"] != true)
             .cloned()
             .collect();
-        let blocked_tasks = tasks
+        let providers: Vec<Value> = config
+            .map(|c| {
+                c.providers
+                    .iter()
+                    .filter(|(_, p)| p.enabled)
+                    .filter_map(|(id, _)| crate::providers::test_provider(c, id).ok())
+                    .filter(|h| h["healthy"] != true)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut by_state: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for p in packs
             .iter()
-            .filter(|task| task["state"] == "BLOCKED")
-            .count();
+            .filter(|p| matches!(p["state"].as_str(), Some("OPEN" | "SEALED" | "QUALIFIED")))
+        {
+            by_state.entry(p["state"].as_str().unwrap_or_default().to_lowercase()).or_default().push(
+                json!({"id": p["id"], "title": p["title"], "generation": p["generation"], "superseding": p.get("superseding")}),
+            );
+        }
+        let count = |k: &str| by_state.get(k).map_or(0, Vec::len);
+        let attention_tasks: Vec<&Value> = tasks
+            .iter()
+            .filter(|t| {
+                t["state"] == "BLOCKED"
+                    || t["inconsistencies"]
+                        .as_array()
+                        .is_some_and(|i| !i.is_empty())
+            })
+            .collect();
+        let active_baseline = match self.active_baseline()? {
+            Some(id) => {
+                let aliases: Vec<Value> = self
+                    .list_baseline_aliases()?
+                    .into_iter()
+                    .filter(|a| a["baseline_id"] == id.as_str())
+                    .map(|a| a["alias"].clone())
+                    .collect();
+                json!({"id": id, "aliases": aliases})
+            }
+            None => Value::Null,
+        };
+        let recovery = pick(&[
+            "recovery_required",
+            "materialization_divergence",
+            "identity_conflict",
+        ]);
         Ok(
-            json!({"project":project,"active_baseline":self.active_baseline()?,"packs":packs,
-            "tasks":tasks,"active_executions":active,"uncaptured_changes":uncaptured,
-            "attention_items":attention,"blocked_tasks":blocked_tasks,
-            "extension_problems":unhealthy}),
+            json!({"project": project, "active_baseline": active_baseline,
+            "packs": {"open": count("open"), "sealed": count("sealed"), "qualified": count("qualified"), "items": by_state},
+            "tasks": {"total": tasks.len(), "blocked": tasks.iter().filter(|t| t["state"] == "BLOCKED").count(), "attention": attention_tasks},
+            "active_executions": active, "uncaptured_changes": uncaptured,
+            "blockers": {"verification": pick(&["verification_failed", "evaluation_warning", "promotion_blocked"]),
+                "review": pick(&["stale_review"])},
+            "recovery": recovery, "attention_items": attention,
+            "extension_problems": unhealthy, "provider_problems": providers}),
         )
     }
 }

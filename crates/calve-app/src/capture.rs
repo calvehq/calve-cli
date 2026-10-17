@@ -191,6 +191,14 @@ pub fn incomplete_for_pack(root: &Path, pack: &str) -> Result<Vec<Value>> {
     Ok(out)
 }
 
+/// `(session, header, state)` of every capture session.
+pub(crate) fn sessions_raw(root: &Path) -> Result<Vec<(String, Value, String)>> {
+    Ok(sessions(root)?
+        .into_iter()
+        .map(|(id, h, log)| (id, h, log.state))
+        .collect())
+}
+
 fn sessions(root: &Path) -> Result<Vec<(String, Value, Log)>> {
     let mut out = vec![];
     let Ok(rd) = fs::read_dir(dir(root)) else {

@@ -26,4 +26,4 @@ for b in "$b0" "$b1" "$b2"; do
 done
 calve baseline alias set staging "$b1" >/dev/null
 calve baseline activate staging >/dev/null
-expect "active pointer only" "$(calve status | get '["active_baseline"]')" "$b1"
+expect "active pointer only" "$(calve status | get '["active_baseline"]["id"]')" "$b1"

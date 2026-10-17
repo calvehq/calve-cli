@@ -779,8 +779,10 @@ fn cli_workflow() {
     );
     calve(&["--project", root, "baseline", "activate", baseline_id]);
     let status = calve(&["--project", root, "status"]);
-    assert_eq!(status["active_baseline"], baseline_id);
-    assert_eq!(status["packs"][0]["state"], "PROMOTED");
+    assert_eq!(status["active_baseline"]["id"], baseline_id);
+    // Counts of open/sealed/qualified work; promoted packs are history, not listed.
+    assert!(status["packs"]["open"].is_u64(), "{status}");
+    assert!(status["packs"]["items"].get("promoted").is_none());
     let workspaces = calve(&["workspace", "list"]);
     assert_eq!(workspaces[0]["name"], "default");
     let copy = temp.path().join("copy");

@@ -6,7 +6,7 @@ use std::fs;
 
 use openaevc::crypto::{Signer, SigningKey};
 use openaevc::protocol::{NewPrincipal, PrincipalId, PrincipalKind};
-use openaevc_sdk::{EmbeddedClient, Session, TypedClient};
+use openaevc_sdk::{Session, TypedClient};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -75,7 +75,7 @@ impl Project {
     pub fn acting_as(&self, name: &str) -> Result<Project> {
         let file = self.read_identity(name)?;
         let key = crate::signing_key(&file.seed)?;
-        let client = EmbeddedClient::new(
+        let client = crate::client::Client::new(
             self.runtime.clone(),
             Session::new(key, file.principal, Some(self.identity.namespace_id)),
         );

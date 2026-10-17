@@ -122,6 +122,11 @@ pub fn pending(root: &Path) -> Result<BTreeMap<String, (String, String)>> {
 }
 
 /// Every saga with its state (`supersede list`).
+/// Whether the saga journal at `path` reached `Done`.
+pub(crate) fn finished(path: &Path) -> bool {
+    Journal::open(path).is_ok_and(|o| read_saga(&o.records).state == DONE)
+}
+
 pub fn list(root: &Path) -> Result<Vec<Value>> {
     let mut out = vec![];
     let Ok(rd) = fs::read_dir(dir(root)) else {

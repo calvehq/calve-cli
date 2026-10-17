@@ -5817,7 +5817,7 @@
    }
   ],
   "status": {
-   "active_baseline": "bsl_agqo6fba3f6shn4crvzah4boca",
+   "active_baseline": {"id": "bsl_agqo6fba3f6shn4crvzah4boca", "aliases": []},
    "active_executions": [],
    "attention_items": 2,
    "blocked_tasks": 1,

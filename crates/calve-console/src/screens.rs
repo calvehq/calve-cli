@@ -1759,7 +1759,7 @@ fn baselines(app: &App) -> Screen {
     let aliases = app.value("aliases").cloned().unwrap_or(json!([]));
     let active = app
         .value("status")
-        .and_then(|s| s["active_baseline"].as_str())
+        .and_then(|s| s["active_baseline"]["id"].as_str())
         .map(str::to_owned);
     let rows: Vec<Row> = value
         .as_array()

@@ -412,6 +412,14 @@ pub enum MaintenanceCommand {
         yes: bool,
         #[arg(long, default_value_t = 86_400)]
         grace_secs: u64,
+        /// Also remove conflict artifacts of resolved materializations (never otherwise).
+        #[arg(long)]
+        #[serde(default)]
+        conflicts: bool,
+        /// With `--conflicts`: only artifacts older than this many seconds.
+        #[arg(long, default_value_t = 30 * 86_400)]
+        #[serde(default)]
+        older_than_secs: u64,
     },
     /// Checkpoint and vacuum the product database.
     Compact,
@@ -651,6 +659,9 @@ pub enum InboxCommand {
         #[arg(long)]
         all: bool,
     },
+    /// Attention counts of every Project in the selected Workspace, read from each Project's
+    /// last refreshed Inbox without opening its runtime (Namespaces stay separate, §29.4).
+    Summary,
     /// Show one attention item.
     Show { source_key: String },
     /// Mark an item read.
@@ -1554,6 +1565,9 @@ impl Action {
                 TaskCommand::List | TaskCommand::Show { .. } => OperationKind::Query,
                 _ => OperationKind::Command,
             },
+            Self::Inbox {
+                command: InboxCommand::Summary,
+            } => OperationKind::Query,
             Self::Inbox { .. } => OperationKind::Command,
             Self::Authority { command } => match command {
                 AuthorityCommand::Grant { options } if options.apply => OperationKind::Command,
