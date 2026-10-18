@@ -57,6 +57,43 @@
                     },
                     "state": {
                       "type": "string"
+                    },
+                    "digests": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lease": {
+                      "type": "object",
+                      "properties": {
+                        "execution": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string"
+                        },
+                        "generation": {
+                          "type": "integer"
+                        },
+                        "heartbeat_interval_ms": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "execution",
+                        "expires_at",
+                        "generation",
+                        "heartbeat_interval_ms",
+                        "id",
+                        "provider"
+                      ]
                     }
                   },
                   "required": []

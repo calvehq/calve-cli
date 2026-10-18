@@ -7,6 +7,78 @@
     "properties": {
       "promoted_digest": {
         "type": "string"
+      },
+      "active_baseline": {
+        "type": "null"
+      },
+      "already_promoted": {
+        "type": "boolean"
+      },
+      "follow_up": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "pack": {
+        "type": "string"
+      },
+      "promotion_record": {
+        "type": "object",
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "candidate": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "pack": {
+                "type": "string"
+              },
+              "policy_decision": {
+                "type": "string"
+              },
+              "promoted_at": {
+                "type": "string"
+              },
+              "promoted_by": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "candidate",
+              "generation",
+              "id",
+              "pack",
+              "policy_decision",
+              "promoted_at",
+              "promoted_by",
+              "request_id"
+            ]
+          }
+        },
+        "required": [
+          "digest",
+          "record"
+        ]
+      },
+      "receipt": {
+        "type": "string"
       }
     },
     "required": [

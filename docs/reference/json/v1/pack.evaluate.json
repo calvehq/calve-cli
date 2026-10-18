@@ -11,13 +11,14 @@
       "config": {
         "type": "object",
         "properties": {
+          "warn_after_bytes": {
+            "type": "integer"
+          },
           "warn_after_files": {
             "type": "integer"
           }
         },
-        "required": [
-          "warn_after_files"
-        ]
+        "required": []
       },
       "digest": {
         "type": "string"

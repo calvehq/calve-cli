@@ -2377,6 +2377,30 @@ impl Project {
         Ok(id)
     }
 
+    /// The pack, required OPEN at `generation`: STALE_VIEW when the generation moved,
+    /// OPENAEVC_OPERATION_REJECTED when it is no longer open.
+    pub(crate) async fn open_pack_at(&self, id: &str, generation: u64) -> Result<ChangePack> {
+        let pack = self.pack(id).await?;
+        if pack.generation != generation {
+            return Err(detailed(
+                "STALE_VIEW",
+                format!(
+                    "the pack is at generation {}, not {generation}",
+                    pack.generation
+                ),
+                json!({"expected": generation, "current": pack.generation}),
+            ));
+        }
+        if pack.state != PackState::Open {
+            return Err(detailed(
+                "OPENAEVC_OPERATION_REJECTED",
+                format!("the pack is {}, not OPEN", pack.state.as_str()),
+                json!({"state": pack.state.as_str(), "generation": pack.generation}),
+            ));
+        }
+        Ok(pack)
+    }
+
     pub async fn pack(&self, id: &str) -> Result<ChangePack> {
         if let Some(pack) = self.immutable_packs.borrow().get(id) {
             return Ok(pack.clone());
@@ -3005,12 +3029,7 @@ impl Project {
         plan: resources::CapturePlan,
         retry: Option<(WorkUnitId, ExecutionId)>,
     ) -> Result<Value> {
-        let pack = self.pack(pack_id).await?;
-        if pack.state != PackState::Open || pack.generation != expected_generation {
-            return Err(invalid(format!(
-                "pack must be OPEN at generation {expected_generation}"
-            )));
-        }
+        let pack = self.open_pack_at(pack_id, expected_generation).await?;
         let refused: Vec<Value> = plan
             .refused
             .iter()
@@ -4388,34 +4407,34 @@ impl Project {
         }
         // Interrupted or conflicted operations that need recovery.
         for c in crate::capture::list(&self.root)? {
-            let st = c["state"].as_str().unwrap_or_default();
-            if !crate::capture::TERMINAL.contains(&st) {
-                let session = c["session"].as_str().unwrap_or_default();
+            let st = format!("{:?}", c.state);
+            if !crate::capture::TERMINAL.contains(&st.as_str()) {
+                let session = c.session.as_str();
                 sources.push((
                     format!("capture:{session}"),
                     "recovery_required".into(),
-                    c["pack"].as_str().unwrap_or_default().into(),
+                    c.pack.clone(),
                     format!("Capture session {session} is {st}; run `calve capture resume {session}` or roll it back"),
                     "danger".into(),
                 ));
             }
         }
         for sg in crate::supersede::list(&self.root)? {
-            let st = sg["state"].as_str().unwrap_or_default();
+            let st = format!("{:?}", sg.state);
             if st != crate::supersede::DONE {
-                let saga = sg["saga"].as_str().unwrap_or_default();
+                let saga = sg.saga.as_str();
                 sources.push((
                     format!("supersede:{saga}"),
                     "recovery_required".into(),
-                    sg["pack"].as_str().unwrap_or_default().into(),
+                    sg.pack.clone(),
                     format!("Supersession {saga} is {st}; run `calve supersede resume {saga}` (the original pack is kept)"),
                     "danger".into(),
                 ));
             }
         }
         for m in self.unfinished_materializations()? {
-            let op = m["op"].as_str().unwrap_or_default();
-            let conflicted = m["state"] == "Conflicted";
+            let op = m.op.as_str();
+            let conflicted = m.state == calve_api::responses::MaterializeState::Conflicted;
             sources.push((
                 format!("materialize:{op}"),
                 if conflicted { "materialization_divergence" } else { "recovery_required" }.into(),
@@ -4635,15 +4654,16 @@ impl Project {
             "materialization_divergence",
             "identity_conflict",
         ]);
-        Ok(
-            json!({"project": project, "active_baseline": active_baseline,
+        let status = json!({"project": project, "active_baseline": active_baseline,
             "packs": {"open": count("open"), "sealed": count("sealed"), "qualified": count("qualified"), "items": by_state},
             "tasks": {"total": tasks.len(), "blocked": tasks.iter().filter(|t| t["state"] == "BLOCKED").count(), "attention": attention_tasks},
             "active_executions": active, "uncaptured_changes": uncaptured,
             "blockers": {"verification": pick(&["verification_failed", "evaluation_warning", "promotion_blocked"]),
                 "review": pick(&["stale_review"])},
             "recovery": recovery, "attention_items": attention,
-            "extension_problems": unhealthy, "provider_problems": providers}),
-        )
+            "extension_problems": unhealthy, "provider_problems": providers});
+        // Through the contract type: what `status` prints is exactly what it declares.
+        let typed: calve_api::responses::Status = serde_json::from_value(status)?;
+        Ok(serde_json::to_value(typed)?)
     }
 }

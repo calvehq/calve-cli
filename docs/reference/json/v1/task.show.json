@@ -75,7 +75,9 @@
       },
       "linked_packs": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "string"
+        }
       },
       "linked_work_units": {
         "type": "array",
@@ -83,7 +85,21 @@
       },
       "pack_states": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "state"
+          ]
+        }
       },
       "priority": {
         "type": "string"

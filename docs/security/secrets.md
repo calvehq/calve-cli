@@ -1,6 +1,6 @@
 # Secrets
 
-Status: M3 (2026-10-15). Decision record: ADR 0015. Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
+Status: M3 (2026-10-15); M4 sinks added 2026-10-17. Decision record: ADR 0015. Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
 
 ## Prevention
 
@@ -36,6 +36,14 @@ While a launch lives, its secrets are also registered process-wide (`redact::reg
 | 13 | check output → evidence | `run_command` redacts against the registered secrets; checks get no provider secrets | `checks` e2e |
 | 14 | capture, materialization and recovery journals | record paths, digests and codes; error text passes through `fault` | `secrets` store scan |
 | 15 | inbox and activity | derived from redacted records | same (`inbox list`, `activity`) |
+| 16 | product DB backups (`.calve/backups/`) | the same product data as the database (which never stores secret values); owner-only, SHA-256 sidecar | `secrets` store scan; `continuity` |
+| 17 | operational journals: capture, supersede, materialization, install | records ids, digests, paths, codes and exact signed envelopes; error text passes through `fault` | `secrets::captured_content_stays_in_content_sinks_only` |
+| 18 | new diagnostic surfaces: `materialize list`, `inbox summary`, `status` blockers and recovery, `recover inspect`/`plan`, `maintenance gc --dry-run` (paths and counts), typed error details | ids, paths, digests, counts | same |
+| 19 | diagnostics bundle (M4 parts: status, recovery) | redacted; never journals, spools, backups or conflict artifacts | same (bundle scan) |
+
+### Captured content is not a diagnostic sink
+
+File content the user captures or materializes is the product's data and is kept **verbatim**, never redacted (redaction would corrupt it): capture spools and chunk staging (`.calve/run/capture/`), the exact signed envelopes in capture journals, OpenAEVC effects and blobs, materialization backups (`.calve/run/materialize/<op>/*.backup`) and conflict artifacts (`.calve/conflicts/<op>/<step>/{displaced,ours,current}`). These are owner-only (`.calve` is 0700; backups and artifacts 0600 in 0700 directories) and are never copied into logs, the request log, errors, listings, the GC plan, recovery output or diagnostic bundles. A secret a user puts in a captured file is therefore in the content sinks by the user's choice, and in no diagnostic one (asserted by the test of row 17).
 
 The end-to-end test scans every file under the data, config and Project directories and the bundle, plus every CLI output and error, for every encoded form of the secret.
 

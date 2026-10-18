@@ -107,6 +107,51 @@
             },
             "work_unit": {
               "type": "string"
+            },
+            "candidate": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string"
+            },
+            "effects": {
+              "type": "integer"
+            },
+            "outcome": {
+              "type": [
+                "object",
+                "string"
+              ],
+              "properties": {
+                "digest": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest"
+              ]
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "extension": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "locator": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "extension",
+                "kind",
+                "locator"
+              ]
             }
           },
           "required": []

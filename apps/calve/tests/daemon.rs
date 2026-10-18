@@ -23,6 +23,7 @@ impl Drop for Daemon {
 fn cli(data: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_calve"))
         .env("XDG_DATA_HOME", data)
+        .env_remove("XDG_RUNTIME_DIR")
         .env("XDG_CONFIG_HOME", data.join("config"))
         .args(args)
         .output()
@@ -37,6 +38,7 @@ fn daemon_ipc_and_project_writer() {
     let mut daemon = Daemon(
         Command::new(env!("CARGO_BIN_EXE_calved"))
             .env("XDG_DATA_HOME", &data)
+            .env_remove("XDG_RUNTIME_DIR")
             .arg("--endpoint")
             .arg(&endpoint)
             .stdout(Stdio::null())

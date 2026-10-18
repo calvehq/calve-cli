@@ -79,8 +79,6 @@ fn walk(dir: &Path, prefix: &str, out: &mut Vec<(String, Vec<u8>)>) {
 /// materializing v1 replaces a.txt (f1), deletes c.txt (f2) and creates dir/b.txt (f3).
 fn setup() -> T {
     let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
-    env.vars
-        .push(("CALVE_JSON_RECORD".into(), env.path().join("rec").into()));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);

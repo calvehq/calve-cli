@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve baseline derive --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "derived_from": {
+        "type": "string"
+      },
+      "digest": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "members": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "derived_from",
+      "digest",
+      "id",
+      "members"
+    ]
+  }
+}

@@ -5,12 +5,72 @@
   "schema": {
     "type": "object",
     "properties": {
+      "active_executions": {
+        "type": "array",
+        "items": {}
+      },
+      "blockers": {
+        "type": "array",
+        "items": {}
+      },
+      "can_seal": {
+        "type": "boolean"
+      },
+      "candidate": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "object",
+            "properties": {
+              "snapshot": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "snapshot"
+            ]
+          },
+          "effects": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changes",
+          "effects"
+        ]
+      },
       "candidate_digest": {
         "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "incomplete_captures": {
+        "type": "array",
+        "items": {}
+      },
+      "missing_extensions": {
+        "type": "array",
+        "items": {}
+      },
+      "note": {
+        "type": "string"
+      },
+      "pack": {
+        "type": "string"
+      },
+      "policies": {
+        "type": "array",
+        "items": {}
+      },
+      "state": {
+        "type": "string"
+      },
+      "unresolved_task_dependencies": {
+        "type": "array",
+        "items": {}
       }
     },
-    "required": [
-      "candidate_digest"
-    ]
+    "required": []
   }
 }

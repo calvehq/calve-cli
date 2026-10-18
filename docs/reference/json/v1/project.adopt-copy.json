@@ -46,6 +46,9 @@
       },
       "transferred_objects": {
         "type": "integer"
+      },
+      "refs_documents": {
+        "type": "integer"
       }
     },
     "required": [

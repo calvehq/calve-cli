@@ -33,7 +33,28 @@
       },
       "only_right_edges": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relation": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ]
+        }
       },
       "only_right_members": {
         "type": "array",
@@ -66,6 +87,141 @@
         "items": {
           "type": "string"
         }
+      },
+      "resources": {
+        "type": "object",
+        "properties": {
+          "different": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "left": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "right": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "left",
+                "path",
+                "right"
+              ]
+            }
+          },
+          "only_left": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest",
+                "path"
+              ]
+            }
+          },
+          "only_right": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest",
+                "path"
+              ]
+            }
+          },
+          "same": {
+            "type": "integer"
+          },
+          "unordered_overlaps": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              },
+              "right": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "left",
+              "right"
+            ]
+          }
+        },
+        "required": [
+          "different",
+          "only_left",
+          "only_right",
+          "same",
+          "unordered_overlaps"
+        ]
+      },
+      "revisions": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "array",
+            "items": {}
+          },
+          "right": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "relation": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "target_present": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "relation",
+                "revision",
+                "target",
+                "target_present"
+              ]
+            }
+          }
+        },
+        "required": [
+          "left",
+          "right"
+        ]
       }
     },
     "required": [

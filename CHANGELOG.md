@@ -49,6 +49,27 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
   run; replacing the executable or changing `PATH` asks for approval again (`CHECK_PLAN_CHANGED`
   if it changes mid-run).
 
+- **`capture-tree` asks before recording deletions** of accepted files: `--accept-deletions`
+  (`CONFIRMATION_REQUIRED` otherwise), `--preview` shows the plan. One batch holds up to 10 000
+  files and 512 MiB (`LIMIT_EXCEEDED`); files over the inline 1 MiB are chunked up to 256 MiB
+  when the file domain declares it (`FILE_TOO_LARGE` above).
+- **Materialization is journaled** (`calve materialize list|resume|resolve|rollback`): a
+  concurrent change stops it as a conflict with both versions kept, never reversed
+  automatically. On filesystems without atomic exchange/no-replace (macOS and Windows until M5)
+  replacing or deleting files is refused unless `--allow-unsafe-fs`. Discarded local edits are
+  kept as the step's verified backup instead of `.calve/cache/discarded/`.
+- **`status` is a typed read model**: pack counts by state with their items, the active Baseline
+  as `{id, aliases}`, task totals and attention, verification and review blockers, recovery
+  items, extension and provider problems.
+- **`maintenance gc` reports a plan** per class (owner, count, estimated bytes, reason) and also
+  collects Calve's own expired state; conflict artifacts only with `--conflicts`.
+- **Seal and promote preflight** (`--preflight`), expected candidate (`--candidate`) and an
+  idempotent promotion result with its record and receipt; capture sessions and the supersede
+  saga resume after a crash (`calve capture`, `calve supersede`).
+- **Baselines are OpenAEVC objects** with labels in their metadata: `baseline create --edge`,
+  `baseline derive`, and `compare` with revisions and resource differences.
+- **Pack commands at a moved generation fail with `STALE_VIEW`** (they were `PRODUCT_ERROR`).
+
 ### Security
 
 - **Check plans need approval.** A checks package's own plan (from its CIC module) runs with your
@@ -57,5 +78,8 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
   of that extension artifact. Configured `[integrations."<id>".checks]` commands need none. A plan
   may only name a program on an absolute `PATH` entry, and candidate files are copied for checks
   without following symlinks.
+- **Product database backups carry a SHA-256** checked before any restore; Calve's transient
+  entries in the tree (`.calve-init-*`, `.calve-mat-*`, `.calve-trash-*`, `.calve-tmp-*`,
+  `.calve-adopt-source-*`) are never scanned or captured.
 - **One locator validator.** The contract crate now owns the ADR 0014 locator rules
   (`calve_integration_contract::locator::validate`), shared by the host and extensions.

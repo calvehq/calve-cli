@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve materialize list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Array_of_MaterializeOperation",
+    "type": "array",
+    "items": {
+      "$ref": "#/$defs/MaterializeOperation"
+    },
+    "$defs": {
+      "MaterializeOperation": {
+        "description": "`calve materialize list` item.",
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string"
+          },
+          "label": {
+            "description": "Absent only for a journal interrupted before its plan was recorded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/$defs/MaterializeState"
+          },
+          "conflicts": {
+            "description": "Unresolved conflicts.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/StepRef"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op",
+          "state",
+          "conflicts"
+        ]
+      },
+      "MaterializeState": {
+        "description": "State of a materialization operation (§14).",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "Completed",
+              "RolledBack"
+            ]
+          },
+          {
+            "description": "Steps remain, or provenance is not recorded yet: `calve materialize resume`.",
+            "type": "string",
+            "const": "Interrupted"
+          },
+          {
+            "description": "A step found unexpected content: `calve materialize resolve`.",
+            "type": "string",
+            "const": "Conflicted"
+          }
+        ]
+      },
+      "StepRef": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "step",
+          "path"
+        ]
+      }
+    }
+  }
+}

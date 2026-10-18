@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve capture resume --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "attempts": {
+        "type": "integer"
+      },
+      "captured": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "change": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "change",
+            "digest",
+            "path"
+          ]
+        }
+      },
+      "execution": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "refused": {
+        "type": "array",
+        "items": {}
+      },
+      "relations": {
+        "type": "array",
+        "items": {}
+      },
+      "session": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "unchanged": {
+        "type": "array",
+        "items": {}
+      },
+      "work_unit": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "attempts",
+      "captured",
+      "execution",
+      "generation",
+      "refused",
+      "relations",
+      "session",
+      "state",
+      "unchanged",
+      "work_unit"
+    ]
+  }
+}

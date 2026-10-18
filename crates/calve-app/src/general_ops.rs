@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 
 use calve_integration_contract::metadata::ResourceDecl;
 use openaevc::protocol::{
-    Command, EffectProposal, ExecutionRequest, PackState, ProviderDescriptor, ResourceRef,
-    ResourceSelector, WorkerInfo,
+    Command, EffectProposal, ExecutionRequest, ProviderDescriptor, ResourceRef, ResourceSelector,
+    WorkerInfo,
 };
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde_json::{Value, json};
@@ -89,12 +89,7 @@ impl Project {
         let Some((extension, write_action)) = owner else {
             return Err(invalid("nothing to change; pass --set or --remove"));
         };
-        let pack = self.pack(pack_id).await?;
-        if pack.state != PackState::Open || pack.generation != generation {
-            return Err(invalid(format!(
-                "pack must be OPEN at generation {generation}"
-            )));
-        }
+        let pack = self.open_pack_at(pack_id, generation).await?;
         if !pack.candidate_effects.is_empty() {
             return Err(invalid(
                 "pack already has effects; OpenAEVC promotes one generation's effects, so edit in a new pack",

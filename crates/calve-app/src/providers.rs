@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use openaevc::crypto::sha256;
 use openaevc::protocol::{
-    Command, EffectProposal, ExecutionId, ExecutionRequest, PackState, ProviderDescriptor,
-    ResourceRef, ResourceSelector, WorkUnitId, WorkerInfo, b64,
+    Command, EffectProposal, ExecutionId, ExecutionRequest, ProviderDescriptor, ResourceRef,
+    ResourceSelector, WorkUnitId, WorkerInfo, b64,
 };
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde::Serialize;
@@ -678,12 +678,7 @@ impl Project {
         })?;
         self.provider_allowed(&harness.provider, profile)?;
         let launch = launch_plan(&harness.provider, profile, harness)?;
-        let pack = self.pack(pack_id).await?;
-        if pack.state != PackState::Open || pack.generation != expected_generation {
-            return Err(invalid(format!(
-                "pack must be OPEN at generation {expected_generation}"
-            )));
-        }
+        let pack = self.open_pack_at(pack_id, expected_generation).await?;
         if harness.mode == HarnessMode::Change && !pack.candidate_effects.is_empty() {
             return Err(invalid(
                 "pack already has effects from another execution; OpenAEVC only promotes effects from the current generation, so run change harnesses in a new pack",
@@ -919,7 +914,7 @@ impl Project {
             for path in &changed {
                 if in_scope(&harness.paths, path) && after.contains_key(*path) {
                     let content = crate::workspace_io::Workspace::open(&self.root)
-                        .and_then(|w| w.read(path, crate::resources::MAX_CAPTURE_BYTES))
+                        .and_then(|w| w.read(path, calve_integration_contract::content::INLINE_MAX))
                         .map_err(|e| invalid(e.to_string()))?;
                     proposals.push(((*path).clone(), content));
                 }

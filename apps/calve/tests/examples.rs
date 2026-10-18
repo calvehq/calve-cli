@@ -9,7 +9,12 @@ use std::process::Command;
 
 use calve_testkit::ToyCatalog;
 
+/// The scripts run one at a time: two of them start a real daemon, whose readiness window
+/// (5 s) a debug build can miss when every script competes for the machine.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn run_example(name: &str) {
+    let _one = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let toy = ToyCatalog::new();
     let mut command = Command::new("bash");
     if std::env::var_os("CALVE_CATALOG_ADD").is_none() {

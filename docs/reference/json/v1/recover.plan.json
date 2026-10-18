@@ -16,6 +16,9 @@
             "count": {
               "type": "integer"
             },
+            "owner": {
+              "type": "string"
+            },
             "reason": {
               "type": "string"
             }
@@ -23,6 +26,7 @@
           "required": [
             "action",
             "count",
+            "owner",
             "reason"
           ]
         }

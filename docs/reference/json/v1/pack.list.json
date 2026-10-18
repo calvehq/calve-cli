@@ -16,6 +16,9 @@
         "changed": {
           "type": "integer"
         },
+        "commitment": {
+          "type": "string"
+        },
         "created_at": {
           "type": "string"
         },
@@ -26,7 +29,10 @@
           "type": "string"
         },
         "intent": {
-          "type": "null"
+          "type": [
+            "null",
+            "string"
+          ]
         },
         "promoted_digest": {
           "type": [
@@ -40,6 +46,25 @@
         "state": {
           "type": "string"
         },
+        "superseding": {
+          "type": "object",
+          "properties": {
+            "display": {
+              "type": "string"
+            },
+            "pending_step": {
+              "type": "string"
+            },
+            "saga": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "display",
+            "pending_step",
+            "saga"
+          ]
+        },
         "title": {
           "type": "string"
         },
@@ -50,6 +75,7 @@
       "required": [
         "candidate_digest",
         "changed",
+        "commitment",
         "created_at",
         "generation",
         "id",

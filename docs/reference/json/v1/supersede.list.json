@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve supersede list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Array_of_SupersedeSaga",
+    "type": "array",
+    "items": {
+      "$ref": "#/$defs/SupersedeSaga"
+    },
+    "$defs": {
+      "SupersedeSaga": {
+        "description": "`calve supersede list` item.",
+        "type": "object",
+        "properties": {
+          "saga": {
+            "type": "string"
+          },
+          "pack": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/SupersedeState"
+          },
+          "replacement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "description": "`superseded` once done.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "saga",
+          "pack",
+          "state"
+        ]
+      },
+      "SupersedeState": {
+        "description": "State of a supersede saga (§12).",
+        "type": "string",
+        "enum": [
+          "Planned",
+          "CaptureClosed",
+          "ReplacementCreated",
+          "ReplayStarted",
+          "ReplayCompleted",
+          "Verified",
+          "Revalidated",
+          "ProductRelinked",
+          "OriginalAbandoned",
+          "Done",
+          "Diverged",
+          "Conflict",
+          "Conflicted",
+          "RecoveryRequired"
+        ]
+      }
+    }
+  }
+}

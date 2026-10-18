@@ -16,6 +16,10 @@ use openaevc::protocol::{
 use openaevc_sdk::{OpenAevcClient, TypedClient};
 use serde_json::{Value, json};
 
+use calve_api::responses::{
+    MaterializeCompleted, MaterializeOperation, MaterializeRolledBack, MaterializeState, StepRef,
+};
+
 use crate::journal::Record;
 use crate::wal::{self, Mutation, Outcome, Wal};
 use crate::{Error, Project, Result, event};
@@ -182,16 +186,21 @@ impl Project {
     }
 
     /// Materialization operations that are not `Completed` or `RolledBack`.
-    pub fn unfinished_materializations(&self) -> Result<Vec<Value>> {
+    pub fn unfinished_materializations(&self) -> Result<Vec<MaterializeOperation>> {
         Ok(self
             .list_materializations()?
             .into_iter()
-            .filter(|m| !matches!(m["state"].as_str(), Some("Completed" | "RolledBack")))
+            .filter(|m| {
+                !matches!(
+                    m.state,
+                    MaterializeState::Completed | MaterializeState::RolledBack
+                )
+            })
             .collect())
     }
 
     /// Every journaled materialization: op, label, state, unresolved conflicts.
-    pub fn list_materializations(&self) -> Result<Vec<Value>> {
+    pub fn list_materializations(&self) -> Result<Vec<MaterializeOperation>> {
         let mut out = vec![];
         let Ok(rd) = fs::read_dir(wal::runs(&self.root)) else {
             return Ok(out);
@@ -274,7 +283,8 @@ impl Project {
                 "primitives": prims.name(), "allow_unsafe_fs": allow_unsafe_fs}),
         )
         .map_err(|e| crate::coded("RECOVERY_REQUIRED", e.to_string()))?;
-        self.drive(w, vec![]).await.map(|mut r| {
+        self.drive(w, vec![]).await.map(|r| {
+            let mut r = serde_json::to_value(r).unwrap_or_default();
             if !prims.atomic() && allow_unsafe_fs {
                 r["warning"] = json!("--allow-unsafe-fs: replaced and deleted files were preserved in backups, but a concurrent write in the final window is not detected");
             }
@@ -284,7 +294,7 @@ impl Project {
 
     /// Drives an operation to `Completed`: settles an interrupted step, applies the rest, verifies
     /// the post-state, then records provenance. Stops at the first conflict.
-    async fn drive(&self, mut w: Wal, records: Vec<Record>) -> Result<Value> {
+    async fn drive(&self, mut w: Wal, records: Vec<Record>) -> Result<MaterializeCompleted> {
         let planned = records
             .iter()
             .find(|r| r.kind == "m.planned")
@@ -373,12 +383,17 @@ impl Project {
         {
             self.activate_baseline(b).await?;
         }
-        let written: Vec<&str> = mutations.iter().map(|m| m.path.as_str()).collect();
+        let written: Vec<String> = mutations.iter().map(|m| m.path.clone()).collect();
         event(&self.db, "materialized", &label, &written.len().to_string())?;
-        Ok(
-            json!({"op": w.op, "state": "Completed", "execution": execution,
-            "provenance_pack": pack, "written": written, "primitives": w.prims.name()}),
-        )
+        Ok(MaterializeCompleted {
+            op: w.op.clone(),
+            state: MaterializeState::Completed,
+            execution: execution.as_str().unwrap_or_default().to_owned(),
+            provenance_pack: pack.as_str().unwrap_or_default().to_owned(),
+            written,
+            primitives: w.prims.name().to_owned(),
+            resolved: None,
+        })
     }
 
     fn conflict_error(&self, w: &Wal, m: &Mutation, reason: &str) -> Error {
@@ -596,7 +611,7 @@ impl Project {
     }
 
     /// Continues an interrupted operation (§14 reconciliation, then the remaining steps).
-    pub async fn materialize_resume(&self, op: &str) -> Result<Value> {
+    pub async fn materialize_resume(&self, op: &str) -> Result<MaterializeCompleted> {
         let (w, records) = Wal::open(&self.root, op)?;
         self.drive(w, records).await
     }
@@ -604,7 +619,7 @@ impl Project {
     /// Resolves every unresolved conflict of `op` by keeping `ours` (the planned content) or
     /// `theirs` (the concurrent writer's displaced bytes, or what is there now), through the same
     /// WAL pattern, then continues the operation. Conflict artifacts are kept.
-    pub async fn materialize_resolve(&self, op: &str, keep: &str) -> Result<Value> {
+    pub async fn materialize_resolve(&self, op: &str, keep: &str) -> Result<MaterializeCompleted> {
         if !matches!(keep, "ours" | "theirs") {
             return Err(crate::coded("INVALID_ARGUMENT", "--keep is ours or theirs"));
         }
@@ -657,14 +672,14 @@ impl Project {
         }
         let (w, records) = Wal::open(&self.root, op)?;
         let mut result = self.drive(w, records).await?;
-        result["resolved"] = json!(done);
+        result.resolved = Some(done);
         Ok(result)
     }
 
     /// Reverses every completed step of `op`, newest first, each revalidated (path chain, current
     /// content, backup) and applied with the full WAL pattern. Unsafe reversals become conflicts
     /// with the current bytes kept; the others still run (each step is a distinct path).
-    pub async fn materialize_rollback(&self, op: &str, yes: bool) -> Result<Value> {
+    pub async fn materialize_rollback(&self, op: &str, yes: bool) -> Result<MaterializeRolledBack> {
         if !yes {
             return Err(crate::coded(
                 "CONFIRMATION_REQUIRED",
@@ -707,7 +722,11 @@ impl Project {
                 json!({"reason": "rollback", "op": op, "reverted": ok, "conflicts": conflicts}),
             ));
         }
-        Ok(json!({"op": op, "state": state, "reverted": ok}))
+        Ok(MaterializeRolledBack {
+            op: op.to_owned(),
+            state: MaterializeState::RolledBack,
+            reverted: ok,
+        })
     }
 
     async fn materialize(
@@ -821,36 +840,45 @@ impl Project {
     }
 }
 
-/// `{op, label, state, conflicts}` of one journal.
-fn summary(op: &str, records: &[Record]) -> Value {
+/// The summary of one journal.
+fn summary(op: &str, records: &[Record]) -> MaterializeOperation {
     let label = records
         .iter()
         .find(|r| r.kind == "m.planned")
-        .map(|r| r.body["label"].clone())
-        .unwrap_or(Value::Null);
+        .and_then(|r| r.body["label"].as_str().map(str::to_owned));
     let resolved: BTreeSet<&str> = records
         .iter()
         .filter(|r| r.kind == "m.resolved")
         .filter_map(|r| r.body["step"].as_str())
         .collect();
-    let conflicts: Vec<Value> = wal::mutations(records)
+    let conflicts = wal::mutations(records)
         .into_iter()
         .filter(|(m, end)| *end == Some("conflicted") && !resolved.contains(m.step.as_str()))
-        .map(|(m, _)| json!({"step": m.step, "path": m.path}))
+        .map(|(m, _)| StepRef {
+            step: m.step,
+            path: m.path,
+        })
         .collect();
-    let state = records
+    let state = match records
         .iter()
         .rev()
         .find(|r| r.kind == "m.state")
         .and_then(|r| r.body["state"].as_str())
-        .unwrap_or("Interrupted");
-    // Completed only counts once provenance is recorded.
-    let state = if state == "Completed" && !records.iter().any(|r| r.kind == "p.ack") {
-        "Interrupted"
-    } else {
-        state
+    {
+        // Completed only counts once provenance is recorded.
+        Some("Completed") if records.iter().any(|r| r.kind == "p.ack") => {
+            MaterializeState::Completed
+        }
+        Some("Conflicted") => MaterializeState::Conflicted,
+        Some("RolledBack") => MaterializeState::RolledBack,
+        _ => MaterializeState::Interrupted,
     };
-    json!({"op": op, "label": label, "state": state, "conflicts": conflicts})
+    MaterializeOperation {
+        op: op.to_owned(),
+        label,
+        state,
+        conflicts,
+    }
 }
 
 fn digest_of_file(path: &Path) -> Result<Option<String>> {

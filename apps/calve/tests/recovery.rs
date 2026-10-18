@@ -9,6 +9,7 @@ fn calve_env(env: &Env, args: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_calve"));
     command
         .env("XDG_DATA_HOME", env.path().join("d"))
+        .env_remove("XDG_RUNTIME_DIR")
         .env("XDG_CONFIG_HOME", env.path().join("c"))
         .env("CALVE_EXECUTION_LEASE_MS", "5000")
         .arg("--json")

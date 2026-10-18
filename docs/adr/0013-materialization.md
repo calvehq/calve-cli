@@ -19,3 +19,11 @@ FG11 (Linux; Windows axis); M4 crash at every record boundary × op kind, concur
 
 ## Residuals
 Lost updates by writers outside Calve's control (e.g. a writer that overwrites Calve's new file later) are possible on every platform (honesty register).
+
+## M4 implementation (2026-10-17)
+- `wal.rs` implements the WAL on Linux with `renameat2` EXCHANGE/NOREPLACE (probed in `.calve/tmp`), the post-mutation inode/digest check and displaced-content verification; conflicts keep `displaced`, `ours`, `current` and `meta.json` (0600 in 0700) and are never removed automatically (`maintenance gc --conflicts` only for resolved operations).
+- `calve materialize list|resume|resolve --keep ours|theirs|rollback --yes`; rollback revalidates the parent chain (nofollow), current content and backup per step.
+- Provenance: one OpenAEVC execution per operation (`p.intent`/`p.ack`, interrupted attempts found by `changepack.created` discovery and acked or abandoned).
+- **Platform status:** macOS and Windows use the fallback primitives until M5 (`renamex_np`, `ReplaceFileW`/`MoveFileExW` are not wired yet), so on those platforms replace and delete are **refused by default** and need `--allow-unsafe-fs`. This is a behaviour change from M3 (plain rename) on Windows.
+- **Not yet covered:** ENOSPC injection; symlink, chmod, mkdir and rmdir steps (file domains produce file writes and deletes only; parents are created on demand).
+- Evidence: `wal::tests` (4), `materialize_wal.rs` (14 crash points, concurrent writer before the swap and through the old inode, weak-FS refusal and opt-in residual, exact rollback), §57 D (B0→B1 touches only the necessary paths).

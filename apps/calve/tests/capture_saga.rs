@@ -140,6 +140,68 @@ fn an_interrupted_capture_resumes_without_duplicate_effects() {
     }
 }
 
+/// An attempt whose lease lapsed while Calve was down is LOST. With no effect applied, resume
+/// continues on a new attempt (its own work unit, no `retry_of` across work units) and the pack
+/// promotes; with effects applied, those can never be promoted, so resume stops with
+/// CAPTURE_INCOMPLETE and the capture is rolled back.
+#[test]
+fn a_lost_attempt_resumes_or_requires_rollback() {
+    for (point, applied) in [
+        ("capture.start.1.after_send", false),
+        ("capture.submit.1.0.after_send", true),
+    ] {
+        let mut t = T::new();
+        t.env
+            .vars
+            .push(("CALVE_EXECUTION_LEASE_MS".into(), "5000".into()));
+        let pack = t.pack("P");
+        fs::write(t.root().join("a.toy"), "aaa").unwrap();
+        fs::write(t.root().join("b.toy"), "bbb").unwrap();
+        t.crash(
+            point,
+            false,
+            &[
+                "pack",
+                "capture-tree",
+                "--accept-deletions",
+                &pack,
+                ".",
+                "--generation",
+                "1",
+            ],
+        );
+        std::thread::sleep(std::time::Duration::from_secs(17));
+        t.ok(&["execution", "list", "--pack", &pack]);
+        let session = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
+        if applied {
+            let refused = t.fails(&["capture", "resume", &session]);
+            assert!(refused.contains("CAPTURE_INCOMPLETE"), "{point}: {refused}");
+            assert_eq!(t.session_of(&pack)["state"], "Lost");
+            let rolled = t.ok(&["capture", "rollback", &session, "--yes"]);
+            assert!(
+                rolled.to_string().contains("uperseded"),
+                "{point}: {rolled}"
+            );
+            continue;
+        }
+        let done = t.ok(&["capture", "resume", &session]);
+        assert_eq!(done["state"], "Done", "{point}: {done}");
+        assert!(
+            t.session_of(&pack)["attempts"].as_u64().unwrap() >= 2,
+            "{point}"
+        );
+        assert_eq!(
+            t.effects(&pack).len(),
+            3,
+            "{point}: a, b and toy.toml once each"
+        );
+        let g = t.ok(&["pack", "show", &pack])["generation"].to_string();
+        for step in ["seal", "qualify", "promote"] {
+            t.ok(&["pack", step, &pack, "--generation", &g]);
+        }
+    }
+}
+
 /// Chunk uploads are journaled steps too: a crash around any of them resumes to one chunked
 /// effect whose blobs reconstruct the file byte for byte.
 #[test]

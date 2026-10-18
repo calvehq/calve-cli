@@ -151,6 +151,12 @@
           },
           "version": {
             "type": "string"
+          },
+          "schemas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [

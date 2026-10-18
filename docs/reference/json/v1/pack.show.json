@@ -59,6 +59,28 @@
                 },
                 "text": {
                   "type": "string"
+                },
+                "chunks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "blob_digest": {
+                        "type": "string"
+                      },
+                      "digest": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "blob_digest",
+                      "digest",
+                      "size"
+                    ]
+                  }
                 }
               },
               "required": []
@@ -310,6 +332,23 @@
             },
             "state": {
               "type": "string"
+            },
+            "spec": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "calve.capture": {
+                  "type": "string"
+                },
+                "calve.supersede": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attempt"
+              ]
             }
           },
           "required": [
@@ -317,6 +356,12 @@
             "kind",
             "state"
           ]
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
         }
       }
     },

@@ -205,6 +205,21 @@
             },
             "state": {
               "type": "string"
+            },
+            "spec": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "calve.capture": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attempt",
+                "calve.capture"
+              ]
             }
           },
           "required": [
@@ -212,6 +227,12 @@
             "kind",
             "state"
           ]
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
         }
       }
     },

@@ -26,10 +26,52 @@
             "reason"
           ]
         }
+      },
+      "owner": {
+        "type": "string"
+      },
+      "reconciled": {
+        "type": "object",
+        "properties": {
+          "active_items": {
+            "type": "integer"
+          },
+          "at": {
+            "type": "integer"
+          },
+          "baselines_reindexed": {
+            "type": "integer"
+          },
+          "rebuilt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "active_items",
+          "at",
+          "baselines_reindexed",
+          "rebuilt"
+        ]
+      },
+      "restored": {
+        "type": "object",
+        "properties": {
+          "previous_kept_as": {
+            "type": "string"
+          },
+          "restored": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_kept_as",
+          "restored"
+        ]
       }
     },
-    "required": [
-      "applied"
-    ]
+    "required": []
   }
 }

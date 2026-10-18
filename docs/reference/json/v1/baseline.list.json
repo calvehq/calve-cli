@@ -15,6 +15,28 @@
         },
         "label": {
           "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {}
+        },
+        "derived_from": {
+          "type": "null"
+        },
+        "graph_digest": {
+          "type": "string"
+        },
+        "heads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "members": {
+          "type": "integer"
         }
       },
       "required": [

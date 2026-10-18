@@ -30,6 +30,12 @@
       },
       "updated_at": {
         "type": "string"
+      },
+      "metadata": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
       }
     },
     "required": [

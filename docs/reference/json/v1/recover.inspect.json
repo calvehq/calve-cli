@@ -5,24 +5,293 @@
   "schema": {
     "type": "object",
     "properties": {
-      "disposable_leftovers": {
-        "type": "integer"
+      "backups": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "integer"
+            },
+            "created": {
+              "type": "string"
+            },
+            "digest_ok": {
+              "type": "boolean"
+            },
+            "file": {
+              "type": "string"
+            },
+            "integrity": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bytes",
+            "created",
+            "digest_ok",
+            "file",
+            "integrity",
+            "kind",
+            "schema"
+          ]
+        }
       },
-      "open_error": {
-        "type": "null"
+      "extensions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "artifact": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "problem": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "artifact",
+            "id",
+            "installed",
+            "problem"
+          ]
+        }
       },
-      "opens": {
+      "identity": {
+        "type": "object",
+        "properties": {
+          "namespace_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "namespace_id",
+          "project_id"
+        ]
+      },
+      "interrupted_executions": {
+        "type": "array",
+        "items": {}
+      },
+      "leftovers": {
+        "type": "array",
+        "items": {}
+      },
+      "openaevc": {
+        "type": "object",
+        "properties": {
+          "continuity": {
+            "type": "object",
+            "properties": {
+              "report": {
+                "type": "object",
+                "properties": {
+                  "bound": {
+                    "type": "boolean"
+                  },
+                  "genesis_hash": {
+                    "type": "string"
+                  },
+                  "head": {
+                    "type": "integer"
+                  },
+                  "head_hash": {
+                    "type": "string"
+                  },
+                  "signed_checkpoint": {
+                    "type": "null"
+                  },
+                  "verified_from": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "bound",
+                  "genesis_hash",
+                  "head",
+                  "head_hash",
+                  "signed_checkpoint",
+                  "verified_from"
+                ]
+              },
+              "state": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "report",
+              "state"
+            ]
+          },
+          "events": {
+            "type": "integer"
+          },
+          "integrity_problems": {
+            "type": "array",
+            "items": {}
+          },
+          "journal_head": {
+            "type": "integer"
+          },
+          "objects": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "continuity",
+          "events",
+          "integrity_problems",
+          "journal_head",
+          "objects",
+          "state"
+        ]
+      },
+      "product_db": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "object",
+            "properties": {
+              "checkpoint_seq": {
+                "type": "integer"
+              },
+              "genesis_hash": {
+                "type": "string"
+              },
+              "matches_project": {
+                "type": "boolean"
+              },
+              "namespace_id": {
+                "type": "string"
+              },
+              "project_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "checkpoint_seq",
+              "genesis_hash",
+              "matches_project",
+              "namespace_id",
+              "project_id"
+            ]
+          },
+          "integrity": {
+            "type": "string"
+          },
+          "newer_than_supported": {
+            "type": "boolean"
+          },
+          "pending_migration": {
+            "type": "boolean"
+          },
+          "schema": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          },
+          "supported_schema": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "binding",
+          "integrity",
+          "newer_than_supported",
+          "pending_migration",
+          "schema",
+          "state",
+          "supported_schema"
+        ]
+      },
+      "projection_lag": {
+        "type": "object",
+        "properties": {
+          "packs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "packs"
+        ]
+      },
+      "read_only": {
         "type": "boolean"
       },
       "root": {
         "type": "string"
+      },
+      "writer_lock": {
+        "type": "object",
+        "properties": {
+          "last_owner": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              },
+              "nonce": {
+                "type": "string"
+              },
+              "pid": {
+                "type": "integer"
+              },
+              "session": {
+                "type": "string"
+              },
+              "started": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "host",
+              "nonce",
+              "pid",
+              "session",
+              "started"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_owner",
+          "state"
+        ]
       }
     },
     "required": [
-      "disposable_leftovers",
-      "open_error",
-      "opens",
-      "root"
+      "backups",
+      "extensions",
+      "identity",
+      "interrupted_executions",
+      "leftovers",
+      "openaevc",
+      "product_db",
+      "projection_lag",
+      "read_only",
+      "root",
+      "writer_lock"
     ]
   }
 }

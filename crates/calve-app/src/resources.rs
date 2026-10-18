@@ -14,7 +14,7 @@ use calve_integration_contract::wire::{
     ClassifyEntry, ClassifyOut, DiffOut, Entry, EntryKind, validate_classify,
 };
 use openaevc::crypto::sha256;
-use openaevc::protocol::{AppliedEffect, Digest, PackState, b64};
+use openaevc::protocol::{AppliedEffect, Digest, b64};
 use serde_json::{Value, json};
 
 use crate::domains::{FileDomain, FileOp, cic_error, open_session};
@@ -25,8 +25,6 @@ use crate::{Error, FileChange, Project, Result};
 
 const MAX_SCAN_ENTRIES: usize = 10_000;
 const MAX_SCAN_DEPTH: usize = 32;
-/// Inline content limit per file (the approved over-limit refusal until chunked content, M4).
-pub(crate) const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;
 /// One capture batch (P12). ponytail: the batch is held in memory while it is planned and
 /// spooled; a streaming spool lifts the byte bound if larger single batches matter.
 const MAX_TREE_FILES: usize = 10_000;
@@ -201,24 +199,31 @@ fn classify(
     sources: BTreeMap<String, String>,
     markers: &[String],
 ) -> Result<Vec<(ClassifyEntry, bool, Option<String>)>> {
-    if entries.is_empty() {
-        return Ok(vec![]);
-    }
-    let got: ClassifyOut = serde_json::from_value(
-        s.request(
-            "classify",
-            json!({"entries": entries, "ignore_sources": sources, "markers": markers}),
+    // In batches with the fuel margin of capture tuples: a large directory in one call runs
+    // the guest out of its per-call fuel.
+    let batch = crate::integration::SessionLimits::default().batch;
+    let mut out = Vec::with_capacity(entries.len());
+    let mut rest = entries.into_iter().peekable();
+    while rest.peek().is_some() {
+        let chunk: Vec<ClassifyEntry> = rest.by_ref().take(batch).collect();
+        let got: ClassifyOut = serde_json::from_value(
+            s.request(
+                "classify",
+                json!({"entries": chunk, "ignore_sources": sources, "markers": markers}),
+            )
+            .map_err(cic_error)?,
         )
-        .map_err(cic_error)?,
-    )
-    .map_err(|e| invalid(format!("ABI_VIOLATION: classify: {e}")))?;
-    validate_classify(&entries, &got.decisions)
         .map_err(|e| invalid(format!("ABI_VIOLATION: classify: {e}")))?;
-    Ok(entries
-        .into_iter()
-        .zip(got.decisions)
-        .map(|(e, d)| (e, d.ignored, d.rule))
-        .collect())
+        validate_classify(&chunk, &got.decisions)
+            .map_err(|e| invalid(format!("ABI_VIOLATION: classify: {e}")))?;
+        out.extend(
+            chunk
+                .into_iter()
+                .zip(got.decisions)
+                .map(|(e, d)| (e, d.ignored, d.rule)),
+        );
+    }
+    Ok(out)
 }
 
 /// A classified scan from `start` (`""` = root): directory by directory the extension decides
@@ -258,9 +263,18 @@ pub(crate) fn scan(
                 continue;
             }
             if files.len() + links.len() >= max_entries {
-                return Err(invalid(format!(
-                    "resource scan exceeds {max_entries} entries"
-                )));
+                return Err(crate::detailed(
+                    "LIMIT_EXCEEDED",
+                    format!(
+                        "more than {max_entries} files below {}; capture subdirectories separately",
+                        if start.is_empty() {
+                            "the Project root"
+                        } else {
+                            start
+                        }
+                    ),
+                    json!({"limit": max_entries, "scope": start}),
+                ));
             }
             match e.kind {
                 EntryKind::Dir => stack.push((e.path, depth + 1)),
@@ -551,8 +565,8 @@ impl Project {
             .map(|e| {
                 let size = e.size.unwrap_or(0);
                 json!({"path": e.path, "kind": "file", "size": size,
-                    "digest": (size <= MAX_CAPTURE_BYTES).then(|| format!("sha256:{}", e.digest.as_deref().unwrap_or_default())),
-                    "captureable": size <= MAX_CAPTURE_BYTES})
+                    "digest": (size <= d.capture_limit()).then(|| format!("sha256:{}", e.digest.as_deref().unwrap_or_default())),
+                    "captureable": size <= d.capture_limit()})
             })
             .collect();
         out.extend(links.iter().map(|p| json!({"path": p, "kind": "symlink", "size": null, "digest": null, "captureable": false})));
@@ -584,12 +598,7 @@ impl Project {
                 "capture tree needs an existing directory (no symlinks on the path)",
             ));
         }
-        let pack = self.pack(pack_id).await?;
-        if pack.state != PackState::Open || pack.generation != expected_generation {
-            return Err(invalid(format!(
-                "pack must be OPEN at generation {expected_generation}"
-            )));
-        }
+        self.open_pack_at(pack_id, expected_generation).await?;
         let d = self.file_domain().await?;
         if !scope.is_empty()
             && self
@@ -674,7 +683,7 @@ impl Project {
         let d = self.file_domain().await?;
         let content = self
             .workspace()?
-            .read(&locator, MAX_CAPTURE_BYTES)
+            .read(&locator, calve_integration_contract::content::INLINE_MAX)
             .map_err(io_err)?;
         let text = std::str::from_utf8(&content).ok();
         Ok(
@@ -692,7 +701,10 @@ impl Project {
             .iter()
             .rev()
             .find(|e| d.is_file_effect(e) && e.target.locator == locator);
-        let current = match self.workspace()?.read(&locator, MAX_CAPTURE_BYTES) {
+        let current = match self
+            .workspace()?
+            .read(&locator, calve_integration_contract::content::INLINE_MAX)
+        {
             Ok(b) => Some(b),
             Err(crate::workspace_io::IoError::Io(e))
                 if e.kind() == std::io::ErrorKind::NotFound =>

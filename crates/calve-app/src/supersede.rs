@@ -127,10 +127,11 @@ pub(crate) fn finished(path: &Path) -> bool {
     Journal::open(path).is_ok_and(|o| read_saga(&o.records).state == DONE)
 }
 
-pub fn list(root: &Path) -> Result<Vec<Value>> {
-    let mut out = vec![];
+/// `calve supersede list`, through its contract type (an unknown state is a corrupt journal).
+pub fn list(root: &Path) -> Result<Vec<calve_api::responses::SupersedeSaga>> {
+    let mut out: Vec<Value> = vec![];
     let Ok(rd) = fs::read_dir(dir(root)) else {
-        return Ok(out);
+        return Ok(vec![]);
     };
     for e in rd.flatten() {
         let path = e.path();
@@ -142,7 +143,7 @@ pub fn list(root: &Path) -> Result<Vec<Value>> {
         out.push(json!({"saga": opened.journal.header["journal_id"], "pack": opened.journal.header["binding"]["pack"],
             "state": s.state, "replacement": s.data.get("replacement"), "outcome": s.data.get("outcome")}));
     }
-    Ok(out)
+    serde_json::from_value(Value::Array(out)).map_err(|e| corrupt(format!("supersede saga: {e}")))
 }
 
 /// File state (path → digest) of an effect list, the resource-state manifest (RSE, §12).

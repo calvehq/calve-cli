@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve capture list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Array_of_CaptureSession",
+    "type": "array",
+    "items": {
+      "$ref": "#/$defs/CaptureSession"
+    },
+    "$defs": {
+      "CaptureSession": {
+        "description": "`calve capture list` item.",
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          },
+          "pack": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/CaptureState"
+          },
+          "attempts": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "pending_intent": {
+            "description": "The step of an intent without an outcome (resume settles it).",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session",
+          "pack",
+          "state",
+          "attempts"
+        ]
+      },
+      "CaptureState": {
+        "description": "State of a capture session (§12).",
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "Planned",
+              "Submitting",
+              "Submitted",
+              "FailedSubmit",
+              "Done",
+              "Superseded",
+              "Compensated",
+              "Abandoned"
+            ]
+          },
+          {
+            "description": "The candidate changed under the session; roll it back and capture again.",
+            "type": "string",
+            "const": "Diverged"
+          },
+          {
+            "description": "An attempt ended without success after applying effects; roll it back.",
+            "type": "string",
+            "const": "Lost"
+          }
+        ]
+      }
+    }
+  }
+}

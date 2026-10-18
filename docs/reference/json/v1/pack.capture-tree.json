@@ -33,7 +33,10 @@
         "type": "string"
       },
       "execution": {
-        "type": "string"
+        "type": [
+          "null",
+          "string"
+        ]
       },
       "generation": {
         "type": "integer"
@@ -84,7 +87,10 @@
         "items": {}
       },
       "work_unit": {
-        "type": "string"
+        "type": [
+          "null",
+          "string"
+        ]
       }
     },
     "required": [

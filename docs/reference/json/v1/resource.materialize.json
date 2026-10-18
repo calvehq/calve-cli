@@ -20,6 +20,9 @@
       "note": {
         "type": "string"
       },
+      "op": {
+        "type": "string"
+      },
       "plan": {
         "type": "array",
         "items": {
@@ -29,7 +32,10 @@
               "type": "string"
             },
             "current": {
-              "type": "string"
+              "type": [
+                "null",
+                "string"
+              ]
             },
             "desired": {
               "type": "string"
@@ -46,7 +52,13 @@
           ]
         }
       },
+      "primitives": {
+        "type": "string"
+      },
       "provenance_pack": {
+        "type": "string"
+      },
+      "state": {
         "type": "string"
       },
       "written": {

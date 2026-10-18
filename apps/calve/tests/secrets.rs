@@ -253,3 +253,161 @@ fn secrets_never_reach_any_sink() {
         found.join("\n")
     );
 }
+
+/// M4 sinks (requirement 3). File content the user captures is kept intentionally: it is the
+/// product's data, stored verbatim in capture spools, journals (exact signed envelopes), chunk
+/// staging, OpenAEVC, materialization backups and conflict artifacts, all owner-only. It is
+/// never part of a diagnostic surface: logs, the request log, errors, listings, the GC plan,
+/// recovery inspection and diagnostic bundles stay free of it.
+#[test]
+fn captured_content_stays_in_content_sinks_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path();
+    let root = data.join("project");
+    let p = root.to_str().unwrap();
+    let catalog = calve_testkit::ToyCatalog::new();
+    ok(data, &["init", p]);
+    ok(
+        data,
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    ok(
+        data,
+        &[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat(),
+    );
+    fs::write(root.join("cred.txt"), format!("api_key = {SECRET}\n")).unwrap();
+    let (pack, _) = ok(data, &["--project", p, "pack", "create", "C"]);
+    let pack = pack["id"].as_str().unwrap().to_owned();
+    // An interrupted capture leaves its spool and journal; resume finishes it.
+    let crash = Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", data.join("d"))
+        .env("XDG_CONFIG_HOME", data.join("c"))
+        .env("CALVE_FAULT", "capture.submit.1.0.after_intent")
+        .args([
+            "--json",
+            "--no-daemon-start",
+            "--project",
+            p,
+            "pack",
+            "capture-tree",
+            "--accept-deletions",
+            &pack,
+            ".",
+            "--generation",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(!crash.status.success());
+    let capture = root.join(".calve/run/capture");
+    let mut content_sinks = vec![];
+    scan_tree(&capture, &mut content_sinks);
+    assert!(
+        !content_sinks.is_empty(),
+        "the spool and journal hold the captured bytes (intentional)"
+    );
+    let mut seen = String::new();
+    let (list, out) = ok(data, &["--project", p, "capture", "list"]);
+    seen += &out;
+    let session = list[0]["session"].as_str().unwrap().to_owned();
+    seen += &ok(data, &["--project", p, "capture", "resume", &session]).1;
+    // A materialization conflict keeps both versions as artifacts.
+    let g = ok(data, &["--project", p, "pack", "show", &pack]).0["generation"].to_string();
+    for s in ["seal", "qualify"] {
+        seen += &ok(
+            data,
+            &["--project", p, "pack", s, &pack, "--generation", &g],
+        )
+        .1;
+    }
+    fs::write(root.join("cred.txt"), "local edit\n").unwrap();
+    let conflict = Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", data.join("d"))
+        .env("XDG_CONFIG_HOME", data.join("c"))
+        .env(
+            "CALVE_TEST_WRITE",
+            format!("f1.after_backup={}", root.join("cred.txt").display()),
+        )
+        .args([
+            "--json",
+            "--no-daemon-start",
+            "--project",
+            p,
+            "resource",
+            "materialize",
+            "cred.txt",
+            "--from",
+            &pack,
+            "--apply",
+            "--discard",
+        ])
+        .output()
+        .unwrap();
+    assert!(!conflict.status.success());
+    seen += &String::from_utf8_lossy(&conflict.stderr);
+    for args in [
+        &["--project", p, "materialize", "list"][..],
+        &["--project", p, "inbox", "list"],
+        &["--project", p, "status"],
+        &["--project", p, "recover", "inspect"],
+        &["--project", p, "recover", "plan"],
+        &["--project", p, "maintenance", "gc", "--dry-run"],
+        &["--project", p, "activity"],
+    ] {
+        seen += &ok(data, args).1;
+    }
+    let bundle = data.join("bundle");
+    seen += &ok(
+        data,
+        &[
+            "--project",
+            p,
+            "doctor",
+            "--bundle",
+            bundle.to_str().unwrap(),
+            "--yes",
+        ],
+    )
+    .1;
+    assert!(
+        leaks(seen.as_bytes()).is_empty(),
+        "diagnostic output: {seen}"
+    );
+    let mut diagnostic = vec![];
+    for dir in [
+        bundle.clone(),
+        root.join(".calve/logs"),
+        data.join("d/calve/logs"),
+    ] {
+        scan_tree(&dir, &mut diagnostic);
+    }
+    assert!(diagnostic.is_empty(), "{diagnostic:?}");
+    // The content sinks are owner-only.
+    let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&root.join(".calve")), 0o700);
+    let conflicts = root.join(".calve/conflicts");
+    let op = fs::read_dir(&conflicts)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert_eq!(mode(&op.join("f1")), 0o700);
+    for f in ["displaced", "ours", "meta.json"] {
+        assert_eq!(mode(&op.join("f1").join(f)), 0o600, "{f}");
+    }
+    let run = root
+        .join(".calve/run/materialize")
+        .join(op.file_name().unwrap());
+    assert_eq!(mode(&run), 0o700);
+    assert_eq!(mode(&run.join("f1.backup")), 0o600);
+    let backups = root.join(".calve/backups");
+    if backups.exists() {
+        assert_eq!(mode(&backups), 0o700);
+    }
+}

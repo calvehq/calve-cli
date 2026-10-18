@@ -1,24 +1,135 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "calve maintenance gc --json",
-  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "GcReport",
+    "description": "`calve maintenance gc`: with `--dry-run`, `classes`; otherwise `planned` and `removed`.",
     "type": "object",
     "properties": {
       "dry_run": {
         "type": "boolean"
       },
       "grace_secs": {
-        "type": "integer"
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
       },
-      "plan": {
-        "type": "string"
+      "classes": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "$ref": "#/$defs/GcClass"
+        }
+      },
+      "planned": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "$ref": "#/$defs/GcClass"
+        }
+      },
+      "removed": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "$ref": "#/$defs/GcRemoved"
+        }
       }
     },
+    "additionalProperties": false,
     "required": [
       "dry_run",
-      "grace_secs",
-      "plan"
-    ]
+      "grace_secs"
+    ],
+    "$defs": {
+      "GcClass": {
+        "type": "object",
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/$defs/GcOwner"
+          },
+          "count": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "estimated_bytes": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string"
+          },
+          "items": {
+            "description": "Up to 20 Project-relative paths.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "class",
+          "owner",
+          "count",
+          "estimated_bytes",
+          "reason",
+          "items"
+        ]
+      },
+      "GcOwner": {
+        "description": "Who removes a GC class (§44.3).",
+        "type": "string",
+        "enum": [
+          "OPENAEVC_RUNTIME",
+          "CALVE_PRODUCT",
+          "FILESYSTEM_CACHE"
+        ]
+      },
+      "GcRemoved": {
+        "type": "object",
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/$defs/GcOwner"
+          },
+          "removed": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "scanned": {
+            "description": "OpenAEVC's collector only.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "class",
+          "owner",
+          "removed"
+        ]
+      }
+    }
   }
 }

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 pub mod errors;
 pub mod json;
+pub mod responses;
 
 use clap::Subcommand;
 use openaevc::protocol::Digest;

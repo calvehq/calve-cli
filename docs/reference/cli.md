@@ -99,6 +99,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | Command | Description |
 |---|---|
 | `calve inbox list [--all]` | List attention items |
+| `calve inbox summary` | Attention counts of every Project in the selected Workspace, read from each Project's last refreshed Inbox without opening its runtime (Namespaces stay separate, §29.4) |
 | `calve inbox show <source_key>` | Show one attention item |
 | `calve inbox read <source_key>` | Mark an item read |
 | `calve inbox ack <source_keys>` | Acknowledge items |
@@ -116,7 +117,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve pack show <id>` | Show the authoritative pack record |
 | `calve pack set-intent <id> <intent> --generation <generation>` | Set the pack Intent (advances the generation) |
 | `calve pack edit <id> --title <title>` | Change the pack title |
-| `calve pack capture-tree <id> [<directory>] --generation <generation>` | Capture every discoverable file under a directory |
+| `calve pack capture-tree <id> [<directory>] --generation <generation> [--preview] [--accept-deletions]` | Capture every discoverable file under a directory |
 | `calve pack qualify <id> --generation <generation>` | Ask OpenAEVC to evaluate promotion policy |
 | `calve pack reopen <id> --generation <generation>` | Reopen a sealed pack as a new generation |
 | `calve pack quarantine <id> --reason <reason>` | Quarantine a pack with a reason |
@@ -126,12 +127,12 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve pack diff <id> [<path>]` | Diff captured files against the working copy |
 | `calve pack verify <id> --generation <generation> [--path <path>] [--digest <digest>]` | Run snapshot verification on the sealed candidate |
 | `calve pack evaluate <id> --generation <generation> [--warn-after-bytes <warn_after_bytes>] [--warn-after-files <warn_after_files>]` | Evaluate change size on the sealed candidate |
-| `calve pack seal <id> --generation <generation>` | Seal the candidate |
+| `calve pack seal <id> --generation <generation> [--preflight]` | Seal the candidate (`--preflight` reports what sealing would capture and what blocks it) |
 | `calve pack check <id> --generation <generation> [--language <languages>] [--check <only>] [--approve-plan <approve_plan>]` | Run language checks on the sealed candidate and verify their evidence |
 | `calve pack review <id>` | List reviews recorded against the pack |
 | `calve pack approve <id> --generation <generation> [--reason <reason>]` | Approve the sealed candidate |
 | `calve pack reject <id> --generation <generation> [--reason <reason>]` | Reject the sealed candidate |
-| `calve pack promote <id> --generation <generation>` | Promote a qualified pack into accepted history |
+| `calve pack promote <id> --generation <generation> [--candidate <candidate>] [--preflight]` | Promote a qualified pack into accepted history (`--preflight` reports qualification, policies, reviews and capabilities without promoting) |
 
 ## `calve revision`
 
@@ -144,12 +145,12 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve revision diff <id> [<path>]` | Diff captured files against the working copy |
 | `calve revision verify <id> --generation <generation> [--path <path>] [--digest <digest>]` | Run snapshot verification on the sealed candidate |
 | `calve revision evaluate <id> --generation <generation> [--warn-after-bytes <warn_after_bytes>] [--warn-after-files <warn_after_files>]` | Evaluate change size on the sealed candidate |
-| `calve revision seal <id> --generation <generation>` | Seal the candidate |
+| `calve revision seal <id> --generation <generation> [--preflight]` | Seal the candidate (`--preflight` reports what sealing would capture and what blocks it) |
 | `calve revision check <id> --generation <generation> [--language <languages>] [--check <only>] [--approve-plan <approve_plan>]` | Run language checks on the sealed candidate and verify their evidence |
 | `calve revision review <id>` | List reviews recorded against the pack |
 | `calve revision approve <id> --generation <generation> [--reason <reason>]` | Approve the sealed candidate |
 | `calve revision reject <id> --generation <generation> [--reason <reason>]` | Reject the sealed candidate |
-| `calve revision promote <id> --generation <generation>` | Promote a qualified pack into accepted history |
+| `calve revision promote <id> --generation <generation> [--candidate <candidate>] [--preflight]` | Promote a qualified pack into accepted history (`--preflight` reports qualification, policies, reviews and capabilities without promoting) |
 
 ## `calve evidence`
 
@@ -166,6 +167,31 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve receipt list [--after <after>] [--limit <limit>]` | List command receipts |
 | `calve receipt show <digest>` | Show a receipt |
 | `calve receipt verify <digest>` | Verify a receipt digest, Namespace and journal range |
+
+## `calve capture`
+
+| Command | Description |
+|---|---|
+| `calve capture list` | Capture sessions with their state |
+| `calve capture resume <session>` | Continue an interrupted capture session |
+| `calve capture rollback <session> [--mode <mode>] [--yes]` | Roll a capture session back: `supersede` (default) replaces the pack by one holding its pre-capture effects; `compensate` appends effects restoring the pre-capture files |
+
+## `calve materialize`
+
+| Command | Description |
+|---|---|
+| `calve materialize list` | Journaled materialization operations with their state and unresolved conflicts |
+| `calve materialize resume <op>` | Continue an interrupted operation |
+| `calve materialize resolve <op> --keep <keep>` | Resolve the operation's conflicts by keeping `ours` (the planned content) or `theirs` (the concurrent writer's bytes), then continue it. Conflict artifacts are kept |
+| `calve materialize rollback <op> [--yes]` | Reverse the operation's completed steps, each revalidated first |
+
+## `calve supersede`
+
+| Command | Description |
+|---|---|
+| `calve supersede start <pack> --keep <keep> [--yes]` | Replace an OPEN pack by a new pack holding its first `--keep` effects; the original is abandoned last, after the replacement is verified and relinked |
+| `calve supersede list` | Supersede sagas with their state |
+| `calve supersede resume <saga>` | Continue an interrupted supersede saga |
 
 ## `calve execution`
 
@@ -209,7 +235,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve resource list [--domain <domain>]` | List Project resources |
 | `calve resource show <target>` | A Project file path, or a general resource as kind:name (note:plan) |
 | `calve resource set <pack> --generation <generation> [--set <sets>] [--remove <removes>]` | Record general-project resource changes in one execution |
-| `calve resource materialize <path> --from <pack> [--discard] [--apply]` | Plan (default) or apply writing one captured file from a pack into the working tree |
+| `calve resource materialize <path> --from <pack> [--discard] [--apply] [--allow-unsafe-fs]` | Plan (default) or apply writing one captured file from a pack into the working tree |
 | `calve resource diff <pack> <path>` | Diff one captured file against the working copy |
 | `calve resource scan` | List files changed since their last capture |
 | `calve resource history <path>` | Captured versions of a file across packs |
@@ -236,7 +262,8 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 
 | Command | Description |
 |---|---|
-| `calve baseline create <label> [<members>]` | Compose promoted packs into a Baseline |
+| `calve baseline create <label> [<members>] [--edge <edges>]` | Compose promoted packs into a Baseline |
+| `calve baseline derive <base> <label> [--add <add>] [--remove <remove>] [--replace-with <replace>] [--edge <edges>]` | A new Baseline from an existing one: add or remove promoted packs, or replace with a promoted RevisionPack (a superseding revision replaces its targets) |
 | `calve baseline list` | List Baselines |
 | `calve baseline show <id>` | Show a Baseline |
 | `calve baseline validate <id>` | Validate a Baseline through OpenAEVC |
@@ -246,7 +273,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve baseline alias set <alias> <baseline>` | Point an alias at a Baseline |
 | `calve baseline alias remove <alias>` | Remove an alias |
 | `calve baseline activate <id>` | Point Calve at a Baseline |
-| `calve baseline materialize <id> [--discard <discard>] [--apply] [--activate]` | Plan (default) or apply writing a Baseline's accepted files into the working tree |
+| `calve baseline materialize <id> [--discard <discard>] [--apply] [--activate] [--allow-unsafe-fs]` | Plan (default) or apply writing a Baseline's accepted files into the working tree |
 
 ## `calve activity`
 
@@ -279,7 +306,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | Command | Description |
 |---|---|
 | `calve maintenance check` | Check product database, store integrity and leftovers |
-| `calve maintenance gc [--dry-run] [--yes] [--grace-secs <grace_secs>]` | Collect unreferenced OpenAEVC objects (never accepted history) |
+| `calve maintenance gc [--dry-run] [--yes] [--grace-secs <grace_secs>] [--conflicts] [--older-than-secs <older_than_secs>]` | Collect unreferenced OpenAEVC objects (never accepted history) |
 | `calve maintenance compact` | Checkpoint and vacuum the product database |
 | `calve maintenance rebuild-projections` | Rebuild derived projections such as the inbox |
 | `calve maintenance verify-store` | Verify the OpenAEVC store journal and objects |
@@ -290,7 +317,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 |---|---|
 | `calve recover inspect` | Report whether the Project opens and what was left behind |
 | `calve recover plan` | List the exact recovery actions |
-| `calve recover apply [--yes]` | Perform the planned recovery actions |
+| `calve recover apply [--yes] [--restore-backup <restore_backup>]` | Perform the planned recovery actions |
 
 ## `calve daemon`
 

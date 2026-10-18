@@ -217,6 +217,7 @@ fn project_command(
 /// §29.4: per-Project attention counts of the selected Workspace, from each product DB opened
 /// read-only (the counts are as of that Project's last Inbox refresh).
 fn inbox_summary(registry: &Registry) -> Result<Value> {
+    use calve_api::responses::{InboxCounts, InboxSummary, InboxSummaryProject};
     let now = crate::now()?;
     let mut projects = vec![];
     for p in registry.selected()?.projects {
@@ -228,18 +229,22 @@ fn inbox_summary(registry: &Registry) -> Result<Value> {
                      WHERE resolved_at IS NULL AND acknowledged_at IS NULL
                      AND (snoozed_until IS NULL OR snoozed_until <= ?1)",
                     [now],
-                    |r| Ok(json!({"attention": r.get::<_, u64>(0)?, "danger": r.get::<_, u64>(1)?,
-                        "as_of": r.get::<_, Option<u64>>(2)?})),
+                    |r| Ok(InboxCounts { attention: r.get(0)?, danger: r.get(1)?, as_of: r.get(2)? }),
                 )
             });
-        let mut row = json!({"project_id": p.project_id, "name": p.name, "path": p.path});
-        match counts {
-            Ok(c) => row["inbox"] = c,
-            Err(e) => row["error"] = json!(e.to_string()),
-        }
-        projects.push(row);
+        let (inbox, error) = match counts {
+            Ok(c) => (Some(c), None),
+            Err(e) => (None, Some(e.to_string())),
+        };
+        projects.push(InboxSummaryProject {
+            project_id: p.project_id,
+            name: p.name,
+            path: p.path.display().to_string(),
+            inbox,
+            error,
+        });
     }
-    Ok(json!({"projects": projects}))
+    Ok(json!(InboxSummary { projects }))
 }
 
 pub(crate) fn project_health(registry: &Registry, identifier: &str) -> Result<Value> {
@@ -1347,12 +1352,12 @@ async fn dispatch(request: Request) -> Result<Value> {
         },
         Action::Materialize { command } => match command {
             MaterializeCommand::List => Ok(json!(project.list_materializations()?)),
-            MaterializeCommand::Resume { op } => project.materialize_resume(&op).await,
+            MaterializeCommand::Resume { op } => Ok(json!(project.materialize_resume(&op).await?)),
             MaterializeCommand::Resolve { op, keep } => {
-                project.materialize_resolve(&op, &keep).await
+                Ok(json!(project.materialize_resolve(&op, &keep).await?))
             }
             MaterializeCommand::Rollback { op, yes } => {
-                project.materialize_rollback(&op, yes).await
+                Ok(json!(project.materialize_rollback(&op, yes).await?))
             }
         },
         Action::Supersede { command } => match command {

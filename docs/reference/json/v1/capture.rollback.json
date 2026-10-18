@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve capture rollback --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "cce_holds": {
+        "type": "boolean"
+      },
+      "compensation_session": {
+        "type": "string"
+      },
+      "duplicates_compensated": {
+        "type": "array",
+        "items": {}
+      },
+      "mode": {
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "outcome": {
+        "type": "string"
+      },
+      "pack": {
+        "type": "string"
+      },
+      "replacement": {
+        "type": "string"
+      },
+      "rse_holds": {
+        "type": "boolean"
+      },
+      "saga": {
+        "type": "string"
+      },
+      "session": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": []
+  }
+}

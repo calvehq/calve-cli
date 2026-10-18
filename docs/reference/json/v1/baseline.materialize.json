@@ -63,6 +63,18 @@
         "items": {
           "type": "string"
         }
+      },
+      "op": {
+        "type": "string"
+      },
+      "primitives": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string"
+      },
+      "warning": {
+        "type": "string"
       }
     },
     "required": [

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve inbox summary --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "InboxSummary",
+    "description": "`calve inbox summary`.",
+    "type": "object",
+    "properties": {
+      "projects": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/InboxSummaryProject"
+        }
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "projects"
+    ],
+    "$defs": {
+      "InboxSummaryProject": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "inbox": {
+            "description": "Absent when the Project's database could not be read (then `error` says why).",
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InboxCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "name",
+          "path"
+        ]
+      },
+      "InboxCounts": {
+        "type": "object",
+        "properties": {
+          "attention": {
+            "description": "Unresolved, unacknowledged, unsnoozed items.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "danger": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "as_of": {
+            "description": "Last refresh of that Project's Inbox (Unix seconds); null when it has no items.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "attention",
+          "danger"
+        ]
+      }
+    }
+  }
+}

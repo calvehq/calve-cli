@@ -16,6 +16,8 @@ use std::time::{Duration, SystemTime};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
+use calve_api::responses::{GcClass, GcOwner, GcRemoved, GcReport};
+
 use crate::Result;
 
 /// Retention of finished operational state and resolved attention rows.
@@ -31,7 +33,7 @@ pub struct Options {
 
 struct Class {
     class: &'static str,
-    owner: &'static str,
+    owner: GcOwner,
     reason: String,
     /// Paths to remove (files or directories) with their sizes.
     paths: Vec<(PathBuf, u64)>,
@@ -69,7 +71,7 @@ fn entries(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-fn class(class: &'static str, owner: &'static str, reason: String, paths: Vec<PathBuf>) -> Class {
+fn class(class: &'static str, owner: GcOwner, reason: String, paths: Vec<PathBuf>) -> Class {
     Class {
         class,
         owner,
@@ -118,7 +120,7 @@ fn protocol(root: &Path, grace: Duration) -> Result<Class> {
     }
     Ok(Class {
         class: "openaevc_unreachable_objects",
-        owner: "OPENAEVC_RUNTIME",
+        owner: GcOwner::OpenaevcRuntime,
         reason: format!(
             "indexed in no Namespace, or orphan CAS files older than {}s; indexed history is never removed",
             grace.as_secs()
@@ -145,7 +147,7 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     let old = |p: &Path, d: Duration| age(p) >= d;
     out.push(class(
         "temporary_files",
-        "FILESYSTEM_CACHE",
+        GcOwner::FilesystemCache,
         format!("in .calve/tmp, older than {}s", o.grace.as_secs()),
         entries(&calve.join("tmp"))
             .into_iter()
@@ -154,7 +156,7 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     ));
     out.push(class(
         "logs",
-        "FILESYSTEM_CACHE",
+        GcOwner::FilesystemCache,
         format!("older than {} days", LOG_RETENTION.as_secs() / 86_400),
         entries(&calve.join("logs"))
             .into_iter()
@@ -177,14 +179,14 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     }
     out.push(class(
         "finished_capture_sessions",
-        "FILESYSTEM_CACHE",
+        GcOwner::FilesystemCache,
         "Done, superseded, compensated or abandoned, past retention".into(),
         sessions,
     ));
     let supersede = calve.join("run/supersede");
     out.push(class(
         "finished_supersede_sagas",
-        "FILESYSTEM_CACHE",
+        GcOwner::FilesystemCache,
         "Done, past retention".into(),
         entries(&supersede)
             .into_iter()
@@ -212,7 +214,7 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     }
     out.push(class(
         "finished_materializations",
-        "FILESYSTEM_CACHE",
+        GcOwner::FilesystemCache,
         "Completed or rolled back, past retention (their backups: rollback is no longer possible)"
             .into(),
         finished_runs,
@@ -220,7 +222,7 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     if let Some(min) = o.conflicts {
         out.push(class(
             "resolved_conflict_artifacts",
-            "FILESYSTEM_CACHE",
+            GcOwner::FilesystemCache,
             format!(
                 "--conflicts: of resolved operations, older than {}s",
                 min.as_secs()
@@ -239,7 +241,7 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
         )?;
     out.push(Class {
         class: "resolved_inbox_rows",
-        owner: "CALVE_PRODUCT",
+        owner: GcOwner::CalveProduct,
         reason: format!(
             "resolved more than {} days ago (attention state only; audit history stays)",
             RETENTION.as_secs() / 86_400
@@ -250,25 +252,39 @@ fn plan(root: &Path, o: &Options) -> Result<Vec<Class>> {
     Ok(out)
 }
 
-fn report(classes: &[Class], root: &Path) -> Vec<Value> {
+fn report(classes: &[Class], root: &Path) -> Vec<GcClass> {
     classes
         .iter()
         .map(|c| {
             let (count, bytes) = c
                 .counted
                 .unwrap_or((c.paths.len() as u64, c.paths.iter().map(|p| p.1).sum()));
-            json!({"class": c.class, "owner": c.owner, "count": count, "estimated_bytes": bytes,
-                "reason": c.reason,
-                "items": c.paths.iter().take(20).map(|(p, _)| p.strip_prefix(root).unwrap_or(p).to_path_buf()).collect::<Vec<_>>()})
+            GcClass {
+                class: c.class.to_owned(),
+                owner: c.owner,
+                count,
+                estimated_bytes: bytes,
+                reason: c.reason.clone(),
+                items: c
+                    .paths
+                    .iter()
+                    .take(20)
+                    .map(|(p, _)| p.strip_prefix(root).unwrap_or(p).display().to_string())
+                    .collect(),
+            }
         })
         .collect()
 }
 
 /// `--dry-run`: the plan, nothing removed and nothing opened for writing.
 pub fn dry_run(root: &Path, o: &Options) -> Result<Value> {
-    Ok(
-        json!({"dry_run": true, "grace_secs": o.grace.as_secs(), "classes": report(&plan(root, o)?, root)}),
-    )
+    Ok(json!(GcReport {
+        dry_run: true,
+        grace_secs: o.grace.as_secs(),
+        classes: Some(report(&plan(root, o)?, root)),
+        planned: None,
+        removed: None,
+    }))
 }
 
 /// Executes the plan; the caller holds the Project writer lock (taken for every mutating
@@ -282,10 +298,10 @@ pub fn collect(
     let planned = report(&classes, root);
     let mut removed = vec![];
     for c in &classes {
-        match c.class {
+        let (n, scanned) = match c.class {
             "openaevc_unreachable_objects" => {
                 let r = store()?;
-                removed.push(json!({"class": c.class, "owner": c.owner, "removed": r.removed, "scanned": r.scanned}));
+                (r.removed as u64, Some(r.scanned as u64))
             }
             "resolved_inbox_rows" => {
                 let db = Connection::open(root.join(".calve/product.sqlite3"))?;
@@ -294,7 +310,7 @@ pub fn collect(
                     "DELETE FROM inbox_items WHERE resolved_at IS NOT NULL AND resolved_at < ?1",
                     [cutoff],
                 )?;
-                removed.push(json!({"class": c.class, "owner": c.owner, "removed": n}));
+                (n as u64, None)
             }
             _ => {
                 let mut n = 0;
@@ -308,11 +324,21 @@ pub fn collect(
                         n += 1;
                     }
                 }
-                removed.push(json!({"class": c.class, "owner": c.owner, "removed": n}));
+                (n, None)
             }
-        }
+        };
+        removed.push(GcRemoved {
+            class: c.class.to_owned(),
+            owner: c.owner,
+            removed: n,
+            scanned,
+        });
     }
-    Ok(
-        json!({"dry_run": false, "grace_secs": o.grace.as_secs(), "planned": planned, "removed": removed}),
-    )
+    Ok(json!(GcReport {
+        dry_run: false,
+        grace_secs: o.grace.as_secs(),
+        classes: None,
+        planned: Some(planned),
+        removed: Some(removed),
+    }))
 }

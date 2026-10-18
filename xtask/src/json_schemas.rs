@@ -9,6 +9,11 @@
 //!
 //! Schemas use a small JSON Schema subset: `type`, `properties`, `required`, `items`,
 //! `additionalProperties` (for maps with data-derived keys).
+//!
+//! Typed commands (`calve_api::responses::typed`) are different: their response type is the
+//! contract. Their schema is generated from the type (so optional fields, nullability and every
+//! variant come from it, not from what tests printed), `--check` fails when the file differs
+//! from the type, and every recorded output must deserialize into the type with no unknown field.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -209,18 +214,55 @@ fn samples(dir: &Path) -> Result<BTreeMap<String, Vec<Value>>> {
     Ok(out)
 }
 
-pub fn run(root: &Path, write: bool) -> Result {
+/// `from`: reuse the recordings of an earlier run instead of running the suites again.
+pub fn run(root: &Path, write: bool, from: Option<&Path>) -> Result {
     let schemas = root.join("docs/reference/json/v1");
     fs::create_dir_all(&schemas)?;
-    let tmp = std::env::temp_dir().join(format!("calve-json-record-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&tmp);
-    fs::create_dir_all(&tmp)?;
-    let recorded = record(root, &tmp).and_then(|()| samples(&tmp));
-    let _ = fs::remove_dir_all(&tmp);
-    let recorded = recorded?;
+    let recorded = match from {
+        Some(dir) => samples(dir)?,
+        None => {
+            let tmp =
+                std::env::temp_dir().join(format!("calve-json-record-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&tmp);
+            fs::create_dir_all(&tmp)?;
+            record(root, &tmp)?;
+            // Kept, so a schema correction can be rechecked with `--from` (no rerun).
+            eprintln!("recordings in {}", tmp.display());
+            samples(&tmp)?
+        }
+    };
     let mut problems = vec![];
     let mut missing = vec![];
+    let typed: BTreeMap<&str, (Value, calve_api::responses::Check)> = calve_api::responses::typed()
+        .into_iter()
+        .map(|(c, s, f)| (c, (s, f)))
+        .collect();
+    let typed_doc = |command: &str, schema: &Value| {
+        json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": format!("calve {command} --json"),
+            "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+            "schema": schema,
+        })
+    };
     for (command, values) in &recorded {
+        if let Some((schema, check)) = typed.get(command.as_str()) {
+            for v in values {
+                if let Err(e) = check(v) {
+                    problems.push(format!(
+                        "{command}: output does not match its response type: {e}"
+                    ));
+                }
+            }
+            let file = schemas.join(calve_api::json::schema_file(command));
+            let current = fs::read_to_string(&file)
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+            if !write && current.as_ref() != Some(&typed_doc(command, schema)) {
+                missing.push(format!("{command} (typed schema out of date)"));
+            }
+            continue;
+        }
         let file = schemas.join(calve_api::json::schema_file(command));
         let Ok(text) = fs::read_to_string(&file) else {
             missing.push(command.clone());
@@ -269,7 +311,21 @@ pub fn run(root: &Path, write: bool) -> Result {
         return Ok(());
     }
     let mut all = declared;
-    for (command, values) in &recorded {
+    for (command, (schema, _)) in &typed {
+        let file = schemas.join(calve_api::json::schema_file(command));
+        fs::write(
+            &file,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&typed_doc(command, schema))?
+            ),
+        )?;
+        all.insert((*command).to_owned());
+    }
+    for (command, values) in recorded
+        .iter()
+        .filter(|(c, _)| !typed.contains_key(c.as_str()))
+    {
         let refs: Vec<&Value> = values.iter().collect();
         let inferred = infer(&refs);
         let file = schemas.join(calve_api::json::schema_file(command));

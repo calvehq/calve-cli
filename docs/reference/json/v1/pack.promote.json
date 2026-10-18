@@ -5,12 +5,202 @@
   "schema": {
     "type": "object",
     "properties": {
+      "active_baseline": {
+        "type": "null"
+      },
+      "already_promoted": {
+        "type": "boolean"
+      },
+      "blockers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        }
+      },
+      "candidate": {
+        "type": "string"
+      },
+      "capability": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "allowed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "allowed"
+        ]
+      },
+      "dependencies": {
+        "type": "null"
+      },
+      "extension_bindings": {
+        "type": "array",
+        "items": {}
+      },
+      "follow_up": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "generation": {
+        "type": "integer"
+      },
+      "pack": {
+        "type": "string"
+      },
+      "policies": {
+        "type": "array",
+        "items": {}
+      },
       "promoted_digest": {
+        "type": "string"
+      },
+      "promotion": {
+        "type": "null"
+      },
+      "promotion_record": {
+        "type": "object",
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "candidate": {
+                "type": "string"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "pack": {
+                "type": "string"
+              },
+              "policy_decision": {
+                "type": "string"
+              },
+              "promoted_at": {
+                "type": "string"
+              },
+              "promoted_by": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "candidate",
+              "generation",
+              "id",
+              "pack",
+              "policy_decision",
+              "promoted_at",
+              "promoted_by",
+              "request_id"
+            ]
+          }
+        },
+        "required": [
+          "digest",
+          "record"
+        ]
+      },
+      "qualification": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "candidate": {
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "array",
+            "items": {}
+          }
+        },
+        "required": [
+          "candidate",
+          "current",
+          "decision",
+          "generation",
+          "outcome",
+          "rules"
+        ]
+      },
+      "quarantine": {
+        "type": "null"
+      },
+      "ready": {
+        "type": "boolean"
+      },
+      "receipt": {
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      "reviews": {
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "array",
+            "items": {}
+          },
+          "current_approvals": {
+            "type": "integer"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "all",
+          "current_approvals",
+          "required"
+        ]
+      },
+      "state": {
         "type": "string"
       }
     },
     "required": [
-      "promoted_digest"
+      "generation",
+      "pack"
     ]
   }
 }

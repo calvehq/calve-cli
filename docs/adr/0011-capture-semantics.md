@@ -19,3 +19,10 @@ M4: crash after every S/C step inside and outside the replay window; divergence 
 
 ## Residuals
 No atomicity across OpenAEVC commands. Raw OpenAEVC clients can seal a pack Calve considers incomplete (asserted residual).
+
+## M4 implementation (2026-10-17)
+- Sessions: spool `.calve/run/capture/<id>.spool.json` (+ `<id>.chunks/`) and journal `<id>.journal`; states Planned → Submitting → Submitted → Done, FailedSubmit, Diverged, Superseded, Compensated, Abandoned (typed in `calve-api::responses::CaptureState`).
+- Exact-envelope journaling (`envelope.rs`): the signed envelope is the intent, the receipt the ack; replay within 300 s − 30 s, discovery afterwards; never a blind retry.
+- **CAPTURE_DIVERGED:** the Planned record fixes the pack's effect ids; each attempt requires the effects not produced by the session to be unchanged, otherwise state Diverged and nothing more is submitted.
+- **Delta:** extra effects on P during a supersession are caught at S6b as `SUPERSEDE_CONFLICT`, not `SUPERSEDE_DIVERGED` (divergence is reserved for a replay that does not reproduce RSE/CCE).
+- Evidence: `capture_saga.rs` (38 crash scenarios, window and discovery, compensate, CAS conflict, C1/C2, C1 refusal → RecoveryRequired; chunk-upload crashes), `errors.rs` (CAPTURE_INCOMPLETE, CAPTURE_DIVERGED, SUPERSEDE_CONFLICT in JSON and human form).

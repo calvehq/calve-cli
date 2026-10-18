@@ -43,6 +43,16 @@ pub fn dir(root: &Path) -> PathBuf {
     root.join(".calve/run/capture")
 }
 
+/// The attempt's execution can no longer accept work (lease lost, or it ended): a new attempt
+/// may continue. Any other refusal is an error, never a silent new attempt.
+fn attempt_over(e: &openaevc::protocol::ProtocolError) -> bool {
+    use openaevc::protocol::ErrorCode;
+    matches!(
+        e.code,
+        ErrorCode::ExecutionLost | ErrorCode::InvalidTransition
+    )
+}
+
 fn corrupt(e: impl std::fmt::Display) -> Error {
     crate::detailed(
         "RECOVERY_REQUIRED",
@@ -220,12 +230,14 @@ fn sessions(root: &Path) -> Result<Vec<(String, Value, Log)>> {
 }
 
 /// Every capture session with its state (`capture list`).
-pub fn list(root: &Path) -> Result<Vec<Value>> {
-    Ok(sessions(root)?
+/// `calve capture list`, through its contract type (an unknown state is a corrupt journal).
+pub fn list(root: &Path) -> Result<Vec<calve_api::responses::CaptureSession>> {
+    let rows: Vec<Value> = sessions(root)?
         .into_iter()
         .map(|(id, h, log)| json!({"session": id, "pack": h["binding"]["pack"], "state": log.state,
             "attempts": log.attempts.len(), "pending_intent": log.pending.as_ref().map(|i| i["step"].clone())}))
-        .collect())
+        .collect();
+    serde_json::from_value(Value::Array(rows)).map_err(|e| corrupt(format!("capture session: {e}")))
 }
 
 impl Project {
@@ -294,7 +306,8 @@ impl Project {
             json!({"state": "Planned", "spool_sha256": crate::journal::sha256_hex(&bytes),
                 "generation": spool.generation, "n": spool.proposals.len(),
                 "m": pack.candidate_effects.len(), "input_digest": spool.input_digest,
-                "output_digest": spool.output_digest}),
+                "output_digest": spool.output_digest,
+                "base_effects": pack.candidate_effects.iter().map(|e| e.id.to_string()).collect::<Vec<_>>()}),
         )
         .map_err(corrupt)?;
         crate::journal::fault("capture.planned");
@@ -487,6 +500,35 @@ impl Project {
             .await?;
         'attempts: loop {
             let pack = self.pack(&spool.pack.to_string()).await?;
+            // The candidate changed under the session (effects it did not produce appeared or
+            // went away since the plan): nothing more is submitted (CAPTURE_DIVERGED).
+            if let Some(base) = planned["base_effects"].as_array() {
+                let own: BTreeSet<WorkUnitId> = log.attempts.iter().filter_map(|a| a.1).collect();
+                let foreign: Vec<&AppliedEffect> = pack
+                    .candidate_effects
+                    .iter()
+                    .filter(|e| !own.contains(&e.work_unit))
+                    .collect();
+                let base: Vec<&str> = base.iter().filter_map(Value::as_str).collect();
+                let now: Vec<String> = foreign.iter().map(|e| e.id.to_string()).collect();
+                if now.iter().map(String::as_str).ne(base.iter().copied()) {
+                    let paths: BTreeSet<&str> = foreign
+                        .iter()
+                        .filter(|e| !base.contains(&e.id.to_string().as_str()))
+                        .map(|e| e.target.locator.as_str())
+                        .collect();
+                    j.append("state", json!({"state": "Diverged", "paths": paths}))
+                        .map_err(corrupt)?;
+                    return Err(crate::detailed(
+                        "CAPTURE_DIVERGED",
+                        format!(
+                            "the pack changed under capture {id} (other effects on {} path(s)); roll it back with `calve capture rollback {id}` and capture again",
+                            paths.len()
+                        ),
+                        json!({"session": id, "pack": spool.pack, "paths": paths}),
+                    ));
+                }
+            }
             // The live attempt, if its execution can still accept effects.
             let mut live = None;
             if let Some((n, Some(wu), Some(exe), Some(lease))) = log.attempts.last().cloned() {
@@ -497,6 +539,22 @@ impl Project {
                 match state.as_str() {
                     "SUCCEEDED" => break 'attempts,
                     "RUNNING" | "STARTING" | "PENDING" => live = Some((n, wu, exe, lease)),
+                    // Effects of an execution that did not succeed can never be promoted, so a
+                    // new attempt would only add to an unpromotable candidate.
+                    _ if !self.effects_of(&pack, &[wu]).await.is_empty() => {
+                        j.append(
+                            "state",
+                            json!({"state": "Lost", "attempt": n, "execution": exe, "execution_state": state}),
+                        )
+                        .map_err(corrupt)?;
+                        return Err(crate::detailed(
+                            "CAPTURE_INCOMPLETE",
+                            format!(
+                                "attempt {n} of capture {id} ended {state} after applying effects, which cannot be promoted; roll the capture back with `calve capture rollback {id}`"
+                            ),
+                            json!({"session": id, "attempt": n, "execution": exe, "execution_state": state}),
+                        ));
+                    }
                     _ => {}
                 }
             }
@@ -521,14 +579,20 @@ impl Project {
                             json!({"session": id}),
                         ));
                     }
-                    let previous = log
-                        .attempts
-                        .iter()
-                        .rev()
-                        .find(|a| a.0 < n)
-                        .and_then(|a| a.2);
+                    // OpenAEVC's `retry_of` names an earlier execution of the *same* work unit; a
+                    // new attempt has its own work unit and starts fresh.
+                    let previous_of = |wu: WorkUnitId| {
+                        log.attempts
+                            .iter()
+                            .rev()
+                            .find(|a| a.0 < n && a.1 == Some(wu))
+                            .and_then(|a| a.2)
+                    };
                     let (wu, retry_of) = match (resume, n, spool.retry) {
-                        (Some((_, wu)), _, _) => (wu, previous.or(spool.retry.map(|r| r.1))),
+                        (Some((_, wu)), _, _) => (
+                            wu,
+                            previous_of(wu).or(spool.retry.filter(|r| r.0 == wu).map(|r| r.1)),
+                        ),
                         (None, 1, Some((wu, exe))) => (wu, Some(exe)),
                         _ => {
                             let step = format!("work_unit.{n}");
@@ -554,7 +618,7 @@ impl Project {
                                 .ok_or_else(|| {
                                     crate::coded("INTERNAL", "AddWorkUnit returned no id")
                                 })?;
-                            (wu, previous)
+                            (wu, None)
                         }
                     };
                     if resume.is_none() && n == 1 && spool.retry.is_some() {
@@ -634,7 +698,10 @@ impl Project {
                         generation: lease.generation,
                     })
                     .await;
-                if alive.is_err() {
+                if let Err(e) = alive {
+                    if !attempt_over(&e) {
+                        return Err(e.into());
+                    }
                     log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
                     continue 'attempts;
                 }
@@ -672,11 +739,13 @@ impl Project {
                             json!({"session": id, "path": proposal.target.locator}),
                         ));
                     }
-                    Err(_) => {
-                        // Lease lost or execution no longer running: a new attempt continues.
+                    Err(e) if attempt_over(&e) => {
+                        // Lease lost or execution no longer running: the loop decides whether a
+                        // new attempt may continue.
                         log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
                         continue 'attempts;
                     }
+                    Err(e) => return Err(e.into()),
                 }
             }
             // Observations (relations reference this session's effects by path).
@@ -712,7 +781,10 @@ impl Project {
                         related_effects,
                     },
                 )?;
-                if out.is_err() {
+                if let Err(e) = out {
+                    if !attempt_over(&e) {
+                        return Err(e.into());
+                    }
                     log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
                     continue 'attempts;
                 }
@@ -726,7 +798,10 @@ impl Project {
                     lease: lease.id,
                 },
             )?;
-            if out.is_err() {
+            if let Err(e) = out {
+                if !attempt_over(&e) {
+                    return Err(e.into());
+                }
                 log = read_log(&Journal::open(&journal_path).map_err(corrupt)?.records);
                 continue 'attempts;
             }
@@ -934,6 +1009,22 @@ impl Project {
                 if log.applied.contains(&step) {
                     continue;
                 }
+                // Renew the lease before each upload: a large file is many chunks.
+                use openaevc_sdk::OpenAevcClient as _;
+                if let Err(e) = self
+                    .client
+                    .command(Command::HeartbeatExecution {
+                        execution: exe,
+                        lease: lease.id,
+                        generation: lease.generation,
+                    })
+                    .await
+                {
+                    if attempt_over(&e) {
+                        return Ok(true);
+                    }
+                    return Err(e.into());
+                }
                 let out = self.send_journaled(j, "capture", &step, Command::AppendObservation {
                     execution: exe,
                     lease: lease.id,
@@ -946,8 +1037,10 @@ impl Project {
                     related_resources: vec![],
                     related_effects: vec![],
                 })?;
-                if out.is_err() {
-                    return Ok(true);
+                match out {
+                    Err(e) if attempt_over(&e) => return Ok(true),
+                    Err(e) => return Err(e.into()),
+                    Ok(_) => {}
                 }
             }
         }
