@@ -542,6 +542,7 @@ impl Project {
                     // Effects of an execution that did not succeed can never be promoted, so a
                     // new attempt would only add to an unpromotable candidate.
                     _ if !self.effects_of(&pack, &[wu]).await.is_empty() => {
+                        let shown = self.execution(&exe.to_string()).await?;
                         j.append(
                             "state",
                             json!({"state": "Lost", "attempt": n, "execution": exe, "execution_state": state}),
@@ -552,7 +553,9 @@ impl Project {
                             format!(
                                 "attempt {n} of capture {id} ended {state} after applying effects, which cannot be promoted; roll the capture back with `calve capture rollback {id}`"
                             ),
-                            json!({"session": id, "attempt": n, "execution": exe, "execution_state": state}),
+                            json!({"session": id, "attempt": n, "execution": exe, "execution_state": state,
+                                "failure": shown["failure"], "lease": shown["lease"],
+                                "observed_at": jiff::Timestamp::now().to_string()}),
                         ));
                     }
                     _ => {}

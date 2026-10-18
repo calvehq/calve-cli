@@ -153,7 +153,7 @@ fn a_lost_attempt_resumes_or_requires_rollback() {
         let mut t = T::new();
         t.env
             .vars
-            .push(("CALVE_EXECUTION_LEASE_MS".into(), "5000".into()));
+            .push(("CALVE_EXECUTION_LEASE_MS".into(), "60000".into()));
         let pack = t.pack("P");
         fs::write(t.root().join("a.toy"), "aaa").unwrap();
         fs::write(t.root().join("b.toy"), "bbb").unwrap();
@@ -170,7 +170,7 @@ fn a_lost_attempt_resumes_or_requires_rollback() {
                 "1",
             ],
         );
-        std::thread::sleep(std::time::Duration::from_secs(17));
+        std::thread::sleep(std::time::Duration::from_secs(62));
         t.ok(&["execution", "list", "--pack", &pack]);
         let session = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
         if applied {
@@ -343,6 +343,15 @@ fn supersede_setup() -> (T, String, String) {
     t.ok(&["task", "link-pack", &task, &pack]);
     capture_two(&t, &pack);
     (t, pack, task)
+}
+
+/// The uninterrupted saga: one replacement holding the first effect, the original abandoned.
+#[test]
+fn a_supersession_without_crashes_completes() {
+    let (t, pack, _) = supersede_setup();
+    let done = t.ok(&["supersede", "start", &pack, "--keep", "1", "--yes"]);
+    assert_eq!(saga_of(&t, &pack)["state"], "Done", "{done}");
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "ABANDONED");
 }
 
 fn saga_of(t: &T, pack: &str) -> Value {

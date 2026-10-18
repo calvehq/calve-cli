@@ -165,6 +165,7 @@ pub const COMMANDS: &[&str] = &[
     "status",
     "supersede list",
     "supersede resume",
+    "supersede start",
     "task assign",
     "task block",
     "task complete",
