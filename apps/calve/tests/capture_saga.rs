@@ -153,7 +153,7 @@ fn a_lost_attempt_resumes_or_requires_rollback() {
         let mut t = T::new();
         t.env
             .vars
-            .push(("CALVE_EXECUTION_LEASE_MS".into(), "60000".into()));
+            .push(("CALVE_EXECUTION_LEASE_MS".into(), "5000".into()));
         let pack = t.pack("P");
         fs::write(t.root().join("a.toy"), "aaa").unwrap();
         fs::write(t.root().join("b.toy"), "bbb").unwrap();
@@ -170,7 +170,10 @@ fn a_lost_attempt_resumes_or_requires_rollback() {
                 "1",
             ],
         );
-        std::thread::sleep(std::time::Duration::from_secs(62));
+        // Only the crashed attempt has the short lease; the resume starts its attempt with the
+        // normal one, however slow the machine is.
+        t.env.vars.retain(|(k, _)| k != "CALVE_EXECUTION_LEASE_MS");
+        std::thread::sleep(std::time::Duration::from_secs(7));
         t.ok(&["execution", "list", "--pack", &pack]);
         let session = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
         if applied {

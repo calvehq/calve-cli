@@ -74,7 +74,8 @@ fn hard_deadline_kills_a_guest_that_evades_fuel_slicing() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bulk.wasm");
     std::fs::write(&path, &wasm).unwrap();
-    let hard = Duration::from_secs(1);
+    // Above the sandbox start-up time on a loaded machine (the open is under the same deadline).
+    let hard = Duration::from_secs(5);
     let cfg = HostConfig {
         fuel_slice: 1_000_000_000,
         fuel_per_call: u64::MAX,
