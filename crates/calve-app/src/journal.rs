@@ -87,7 +87,10 @@ fn now_ns() -> u64 {
 /// Flushes a file Calve wrote. Opened writable: Windows' FlushFileBuffers refuses a read-only
 /// handle ("Access is denied").
 pub fn sync_file(path: &Path) -> io::Result<()> {
-    std::fs::OpenOptions::new().write(true).open(path)?.sync_all()
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)?
+        .sync_all()
 }
 
 fn fsync_dir(dir: &Path) -> io::Result<()> {
