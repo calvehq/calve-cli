@@ -19,13 +19,15 @@
             "owner": {
               "type": "string"
             },
+            "path": {
+              "type": "string"
+            },
             "reason": {
               "type": "string"
             }
           },
           "required": [
             "action",
-            "count",
             "owner",
             "reason"
           ]

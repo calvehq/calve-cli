@@ -83,12 +83,12 @@ pub fn take(db: &Connection, db_path: &Path, kind: &str, schema: u32) -> Result<
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
     }
-    fs::File::open(&tmp)?.sync_all()?;
+    crate::journal::sync_file(&tmp)?;
     let path = dir.join(&name);
     // The digest first: a backup file never exists without one.
     let side = sidecar(&path);
     fs::write(&side, crate::journal::sha256_hex(&fs::read(&tmp)?))?;
-    fs::File::open(&side)?.sync_all()?;
+    crate::journal::sync_file(&side)?;
     fs::rename(&tmp, &path)?;
     if let Ok(d) = fs::File::open(&dir) {
         let _ = d.sync_all();
@@ -215,7 +215,7 @@ pub fn restore(db_path: &Path, backup: &str) -> Result<Value> {
     }
     let tmp = db_path.with_extension("sqlite3.restore");
     fs::copy(&source, &tmp)?;
-    fs::File::open(&tmp)?.sync_all()?;
+    crate::journal::sync_file(&tmp)?;
     crate::journal::fault("restore.before_swap");
     for suffix in ["-wal", "-shm"] {
         let _ = fs::remove_file(format!("{}{suffix}", db_path.display()));

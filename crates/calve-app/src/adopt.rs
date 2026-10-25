@@ -185,7 +185,7 @@ pub async fn adopt_copy(path: &Path, name: Option<&str>) -> Result<(Project, Val
             }
             let marker = backup.join(COMPLETE_MARKER);
             fs::write(&marker, source_id.as_bytes())?;
-            fs::File::open(&marker)?.sync_all()?;
+            crate::journal::sync_file(&marker)?;
             crate::journal::fault("adopt.after_complete");
             fs::remove_dir_all(&backup)?;
             let project = Project::open(&root)?;

@@ -16,13 +16,15 @@
             "count": {
               "type": "integer"
             },
+            "path": {
+              "type": "string"
+            },
             "reason": {
               "type": "string"
             }
           },
           "required": [
             "action",
-            "count",
             "reason"
           ]
         }

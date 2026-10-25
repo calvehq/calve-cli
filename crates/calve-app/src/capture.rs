@@ -283,13 +283,13 @@ impl Project {
             for (digest, content) in &chunk_data {
                 let f = cdir.join(digest.trim_start_matches("sha256:"));
                 fs::write(&f, content)?;
-                fs::File::open(&f)?.sync_all()?;
+                crate::journal::sync_file(&f)?;
             }
         }
         let bytes = serde_json::to_vec(&spool)?;
         let tmp = spool_path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
-        fs::File::open(&tmp)?.sync_all()?;
+        crate::journal::sync_file(&tmp)?;
         fs::rename(&tmp, &spool_path)?;
         let pack = self.pack(&spool.pack.to_string()).await?;
         let binding = crate::continuity::binding(&self.db)?;

@@ -318,7 +318,7 @@ impl Project {
         let bytes = serde_json::to_vec(&spool)?;
         let tmp = sp.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
-        fs::File::open(&tmp)?.sync_all()?;
+        crate::journal::sync_file(&tmp)?;
         fs::rename(&tmp, &sp)?;
         let (_, version) = self.commitment(pack)?;
         let mut j = Journal::create(

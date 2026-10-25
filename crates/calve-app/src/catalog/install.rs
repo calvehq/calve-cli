@@ -1251,7 +1251,7 @@ pub fn refs_put(paths: &Paths, bytes: &[u8]) -> Result<String> {
     }
     let tmp = dir.join(format!(".{hex}.tmp"));
     fs::write(&tmp, bytes).map_err(io)?;
-    fs::File::open(&tmp).map_err(io)?.sync_all().map_err(io)?;
+    crate::journal::sync_file(&tmp).map_err(io)?;
     fs::rename(&tmp, &path).map_err(io)?;
     Ok(hex)
 }

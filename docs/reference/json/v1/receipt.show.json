@@ -41,19 +41,20 @@
               "result": {
                 "type": "object",
                 "properties": {
+                  "generation": {
+                    "type": "integer"
+                  },
                   "id": {
                     "type": "string"
                   },
-                  "ids": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
+                  "state": {
+                    "type": "string"
                   }
                 },
                 "required": [
+                  "generation",
                   "id",
-                  "ids"
+                  "state"
                 ]
               },
               "runtime_instance": {

@@ -4,6 +4,79 @@
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
   "schema": {
     "type": "array",
-    "items": {}
+    "items": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "type": "string"
+        },
+        "grant": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "object",
+              "properties": {
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "delegation_depth": {
+                  "type": "integer"
+                },
+                "expires_at": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "nonce": {
+                  "type": "string"
+                },
+                "not_before": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actions",
+                "delegation_depth",
+                "expires_at",
+                "id",
+                "issuer",
+                "namespace",
+                "nonce",
+                "not_before",
+                "subject"
+              ]
+            },
+            "signature": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "body",
+            "signature"
+          ]
+        },
+        "revoked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "digest",
+        "grant",
+        "revoked"
+      ]
+    }
   }
 }
