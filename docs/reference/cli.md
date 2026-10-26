@@ -66,7 +66,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | Command | Description |
 |---|---|
 | `calve intent create <title> [--description <description>] [--tag <tags>] [--actor <actors>] [--graph-node <graph_node>]` | Create an Intent |
-| `calve intent list` | List Intents |
+| `calve intent list [--after <after>] [--limit <limit>]` | List Intents (oldest first; `--after`/`--limit` page through them) |
 | `calve intent show <id>` | Show an Intent with its packs |
 | `calve intent edit <id> [--title <title>] [--description <description>] [--tag <tags>] [--clear-tags] [--actor <actors>] [--clear-actors] [--graph-node <graph_node>] [--clear-graph-node]` | Edit Intent metadata |
 | `calve intent close <id> [--cancelled]` | Complete or cancel an Intent |
@@ -113,7 +113,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | Command | Description |
 |---|---|
 | `calve pack create <title> [--intent <intent>] [--require-snapshot-verification] [--require-review] [--require-check <require_checks>] [--forbid-self-review]` | Create a ChangePack |
-| `calve pack list` | List ChangePacks |
+| `calve pack list [--after <after>] [--limit <limit>]` | List ChangePacks (oldest first; `--after`/`--limit` page through them) |
 | `calve pack show <id>` | Show the authoritative pack record |
 | `calve pack set-intent <id> <intent> --generation <generation>` | Set the pack Intent (advances the generation) |
 | `calve pack edit <id> --title <title>` | Change the pack title |

@@ -1488,10 +1488,34 @@ impl Project {
     }
 
     pub fn list_intents(&self) -> Result<Vec<Value>> {
-        let mut stmt = self
-            .db
-            .prepare("SELECT id,title,description,tags,state,created_at,updated_at,actors,graph_node FROM intents ORDER BY created_at,id")?;
-        let rows = stmt.query_map([], |r| {
+        self.list_intents_page(None, None)
+    }
+
+    /// Intents in `(created_at, id)` order, after the Intent `after` (keyset paging, R15), at
+    /// most `limit`. No `limit`: all of them.
+    pub fn list_intents_page(&self, after: Option<&str>, limit: Option<u32>) -> Result<Vec<Value>> {
+        if let Some(after) = after {
+            let known: bool = self.db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM intents WHERE id=?1)",
+                [after],
+                |r| r.get(0),
+            )?;
+            if !known {
+                return Err(crate::coded("NOT_FOUND", format!("unknown intent {after}")));
+            }
+        }
+        self.intent_rows(
+            "WHERE ?1 IS NULL OR (created_at,id) > (SELECT created_at,id FROM intents WHERE id=?1)
+             ORDER BY created_at,id LIMIT ?2",
+            rusqlite::params![after, limit.map_or(-1, i64::from)],
+        )
+    }
+
+    fn intent_rows(&self, tail: &str, params: impl rusqlite::Params) -> Result<Vec<Value>> {
+        let mut stmt = self.db.prepare(&format!(
+            "SELECT id,title,description,tags,state,created_at,updated_at,actors,graph_node FROM intents {tail}"
+        ))?;
+        let rows = stmt.query_map(params, |r| {
             let tags: String = r.get(3)?;
             let tags: Vec<String> = serde_json::from_str(&tags).map_err(|error| rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(error)))?;
             let actors: String = r.get(7)?;
@@ -1507,9 +1531,9 @@ impl Project {
     }
 
     pub fn intent(&self, id: &str) -> Result<Value> {
-        self.list_intents()?
+        self.intent_rows("WHERE id=?1", [id])?
             .into_iter()
-            .find(|intent| intent["id"] == id)
+            .next()
             .ok_or_else(|| crate::coded("NOT_FOUND", format!("unknown intent {id}")))
     }
 
@@ -2850,18 +2874,40 @@ impl Project {
     }
 
     pub async fn list_packs(&self) -> Result<Vec<Value>> {
+        self.list_packs_page(None, None).await
+    }
+
+    /// Packs in `(created_at, id)` order after the pack `after` (keyset paging, R15), at most
+    /// `limit`. No `limit`: all of them.
+    pub async fn list_packs_page(
+        &self,
+        after: Option<&str>,
+        limit: Option<u32>,
+    ) -> Result<Vec<Value>> {
         self.refresh_pack_index().await?;
+        if let Some(after) = after {
+            let known: bool = self.db.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pack_metadata WHERE id=?1)",
+                [after],
+                |r| r.get(0),
+            )?;
+            if !known {
+                return Err(crate::coded("NOT_FOUND", format!("unknown pack {after}")));
+            }
+        }
         let mut stmt = self.db.prepare(
             "SELECT m.id,m.title,m.intent_id,s.state,s.generation,s.candidate_digest,s.promoted_digest,
                     s.created_at,s.updated_at,s.changed,s.revision,c.state
              FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id
              LEFT JOIN pack_commitments c ON c.pack_id=m.id
-             WHERE c.state IS NULL OR c.state != 'replacement_pending'
-             ORDER BY m.created_at,m.id",
+             WHERE (c.state IS NULL OR c.state != 'replacement_pending')
+               AND (?1 IS NULL
+                    OR (m.created_at,m.id) > (SELECT created_at,id FROM pack_metadata WHERE id=?1))
+             ORDER BY m.created_at,m.id LIMIT ?2",
         )?;
         // A pending supersession is shown on the pack it replaces, never as success (§12).
         let superseding = crate::supersede::pending(&self.root)?;
-        let rows = stmt.query_map([], |r| {
+        let rows = stmt.query_map(rusqlite::params![after, limit.map_or(-1, i64::from)], |r| {
             Ok(
                 json!({"id":r.get::<_,String>(0)?,"title":r.get::<_,String>(1)?,
                 "intent":r.get::<_,Option<String>>(2)?,"state":r.get::<_,String>(3)?,

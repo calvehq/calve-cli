@@ -176,7 +176,8 @@ async fn event_loop(
     calve_client::share_embedded_projects();
     let _guard = TerminalGuard::enter(mouse)?;
     // Change feed: one long-poll at a time; a change triggers a refresh of the visible route.
-    let (change_tx, mut changes) = tokio::sync::mpsc::unbounded_channel::<()>();
+    // Bounded queues (R16). Changes coalesce: one pending refresh is enough.
+    let (change_tx, mut changes) = tokio::sync::mpsc::channel::<()>(1);
     {
         let client = client.clone();
         let scope = scope.clone();
@@ -199,7 +200,8 @@ async fn event_loop(
                         );
                         if cursor.is_some()
                             && value["changed"] == true
-                            && change_tx.send(()).is_err()
+                            && let Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) =
+                                change_tx.try_send(())
                         {
                             break;
                         }
@@ -211,15 +213,15 @@ async fn event_loop(
         });
     }
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let (keys_tx, mut keys) = tokio::sync::mpsc::unbounded_channel::<Event>();
+    let (keys_tx, mut keys) = tokio::sync::mpsc::channel::<Event>(256);
     std::thread::spawn(move || {
         while let Ok(event) = event::read() {
-            if keys_tx.send(event).is_err() {
+            if keys_tx.blocking_send(event).is_err() {
                 break;
             }
         }
     });
-    let (reply_tx, mut replies) = tokio::sync::mpsc::unbounded_channel::<Reply>();
+    let (reply_tx, mut replies) = tokio::sync::mpsc::channel::<Reply>(64);
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     let size = terminal.size()?;
     app.size = (size.width, size.height);
@@ -231,7 +233,7 @@ async fn event_loop(
             let reply = reply_tx.clone();
             tokio::task::spawn_local(async move {
                 let (result, backend) = call(&client, &scope, request.action).await;
-                let _ = reply.send((request.key, result, backend));
+                let _ = reply.send((request.key, result, backend)).await;
             });
         }
         if let Some(text) = app.clipboard.take() {

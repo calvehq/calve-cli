@@ -1068,7 +1068,9 @@ async fn dispatch(request: Request) -> Result<Value> {
             } => Ok(
                 json!({"id":project.create_intent_with_references(&title,description.as_deref(),&tags,&actors,graph_node.as_deref()).await?}),
             ),
-            IntentCommand::List => Ok(json!(project.list_intents()?)),
+            IntentCommand::List { after, limit } => {
+                Ok(json!(project.list_intents_page(after.as_deref(), limit)?))
+            }
             IntentCommand::Show { id } => project.intent_with_packs(&id).await,
             IntentCommand::Edit {
                 id,
@@ -1263,7 +1265,9 @@ async fn dispatch(request: Request) -> Result<Value> {
                 }
                 Ok(json!({"id":id,"generation":1}))
             }
-            PackCommand::List => Ok(json!(project.list_packs().await?)),
+            PackCommand::List { after, limit } => Ok(json!(
+                project.list_packs_page(after.as_deref(), limit).await?
+            )),
             PackCommand::Show { id } => Ok(serde_json::to_value(project.pack(&id).await?)?),
             PackCommand::SetIntent {
                 id,

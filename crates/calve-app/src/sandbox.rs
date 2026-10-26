@@ -7,7 +7,7 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, sync_channel};
 use std::time::{Duration, Instant};
 
 use calve_integration_contract::abi;
@@ -444,7 +444,8 @@ impl SandboxDriver {
         let stdin = child.stdin.take().expect("piped");
         let mut stdout = child.stdout.take().expect("piped");
         let max = cfg.max_response.max(4096);
-        let (tx, replies) = channel();
+        // Bounded (R16): frames are capped at `max`, at most a few wait unread.
+        let (tx, replies) = sync_channel(8);
         std::thread::spawn(move || {
             loop {
                 let r = frame::read(&mut stdout, max);

@@ -555,8 +555,15 @@ pub enum IntentCommand {
         #[arg(long)]
         graph_node: Option<String>,
     },
-    /// List Intents.
-    List,
+    /// List Intents (oldest first; `--after`/`--limit` page through them).
+    List {
+        /// Start after this Intent id.
+        #[arg(long)]
+        after: Option<String>,
+        /// At most this many (default: all).
+        #[arg(long)]
+        limit: Option<u32>,
+    },
     /// Show an Intent with its packs.
     Show { id: String },
     /// Edit Intent metadata.
@@ -770,8 +777,15 @@ pub enum PackCommand {
         #[arg(long)]
         forbid_self_review: bool,
     },
-    /// List ChangePacks.
-    List,
+    /// List ChangePacks (oldest first; `--after`/`--limit` page through them).
+    List {
+        /// Start after this pack id.
+        #[arg(long)]
+        after: Option<String>,
+        /// At most this many (default: all).
+        #[arg(long)]
+        limit: Option<u32>,
+    },
     /// Show the authoritative pack record.
     Show { id: String },
     /// Set the pack Intent (advances the generation).
@@ -1559,7 +1573,7 @@ impl Action {
                 _ => OperationKind::Query,
             },
             Self::Intent { command } => match command {
-                IntentCommand::List | IntentCommand::Show { .. } => OperationKind::Query,
+                IntentCommand::List { .. } | IntentCommand::Show { .. } => OperationKind::Query,
                 _ => OperationKind::Command,
             },
             Self::Task { command } => match command {
@@ -1578,7 +1592,7 @@ impl Action {
                 _ => OperationKind::Query,
             },
             Self::Pack { command } => match command {
-                PackCommand::List | PackCommand::Show { .. } => OperationKind::Query,
+                PackCommand::List { .. } | PackCommand::Show { .. } => OperationKind::Query,
                 PackCommand::Lifecycle(command) => command.kind(),
                 _ => OperationKind::Command,
             },

@@ -316,11 +316,21 @@ fn finished(t: crate::supervise::Termination) -> std::result::Result<Option<i32>
 
 /// Reads one stream through its own redaction state (stdout and stderr never share one), then
 /// splits the redacted bytes into lines.
+/// Lines in flight per stream (R16): the pump blocks when the reader is behind.
+const PUMP_DEPTH: usize = 64;
+
+/// The longest line a pump holds: the output budget, within 64 KiB..16 MiB. A longer line is
+/// passed on in pieces of this size (output is kept, memory stays bounded).
+fn max_line(max_output: u64) -> usize {
+    max_output.clamp(64 * 1024, 16 * 1024 * 1024) as usize
+}
+
 fn pump(
     mut stream: impl Read + Send + 'static,
-    tx: mpsc::Sender<Line>,
+    tx: mpsc::SyncSender<Line>,
     err: bool,
     redactor: &crate::redact::Redactor,
+    max_line: usize,
 ) {
     let mut redact = redactor.stream();
     std::thread::spawn(move || {
@@ -341,6 +351,18 @@ fn pump(
                     }
                 } else {
                     line.push(b);
+                    if line.len() >= max_line {
+                        let text = String::from_utf8_lossy(line).into_owned();
+                        line.clear();
+                        let msg = if err {
+                            Line::Err(text)
+                        } else {
+                            Line::Out(text)
+                        };
+                        if tx.send(msg).is_err() {
+                            return false;
+                        }
+                    }
                 }
             }
             true
@@ -394,18 +416,20 @@ fn run_worker(
     } else {
         drop(stdin.take());
     }
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(PUMP_DEPTH);
     pump(
         sup.child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
         &launch.redactor,
+        max_line(launch.max_output),
     );
     pump(
         sup.child.stderr.take().expect("piped stderr"),
         tx,
         true,
         &launch.redactor,
+        max_line(launch.max_output),
     );
     let deadline = Instant::now() + launch.timeout;
     let mut outcome = Outcome {
@@ -573,18 +597,20 @@ pub fn run_command(
     let started = Instant::now();
     let mut sup = spawn(&launch, cwd, &BTreeMap::new())?;
     drop(sup.child.stdin.take());
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(PUMP_DEPTH);
     pump(
         sup.child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
         &launch.redactor,
+        max_line(launch.max_output),
     );
     pump(
         sup.child.stderr.take().expect("piped stderr"),
         tx,
         true,
         &launch.redactor,
+        max_line(launch.max_output),
     );
     let mut tail = std::collections::VecDeque::new();
     let mut size = 0usize;
@@ -1235,6 +1261,29 @@ mod tests {
         assert_eq!(value.unwrap(), "from-credman");
         let missing = super::keyring_lookup(&name).unwrap_err().to_string();
         assert!(missing.contains("cmdkey /generic:calve:"), "{missing}");
+    }
+
+    /// R16: a line without a newline reaches the reader in bounded pieces; nothing is lost.
+    #[test]
+    fn a_pump_bounds_an_endless_line() {
+        let data = vec![b'x'; 200 * 1024];
+        let (tx, rx) = std::sync::mpsc::sync_channel(super::PUMP_DEPTH);
+        let none: [&[u8]; 0] = [];
+        super::pump(
+            std::io::Cursor::new(data),
+            tx,
+            false,
+            &crate::redact::Redactor::new(none),
+            super::max_line(0),
+        );
+        let pieces: Vec<usize> = rx
+            .iter()
+            .map(|l| match l {
+                super::Line::Out(t) | super::Line::Err(t) => t.len(),
+            })
+            .collect();
+        assert_eq!(pieces, [65536, 65536, 65536, 8192]);
+        assert_eq!(super::max_line(u64::MAX), 16 * 1024 * 1024);
     }
 
     #[test]
