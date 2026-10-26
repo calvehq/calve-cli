@@ -166,11 +166,22 @@ fn dist(args: &[String]) -> DynResult {
         .map(PathBuf::from)
         .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".cargo")))
         .unwrap_or_default();
-    let remap = format!(
+    // The toolchain sysroot too: standard-library panic locations embed it.
+    let sysroot = std::process::Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default();
+    let mut remap = format!(
         "--remap-path-prefix={}=/src --remap-path-prefix={}=/cargo",
         root.display(),
         home.display()
     );
+    if !sysroot.is_empty() {
+        remap.push_str(&format!(" --remap-path-prefix={sysroot}=/rustc"));
+    }
     let rustflags = match std::env::var("RUSTFLAGS") {
         Ok(f) if !f.is_empty() => format!("{f} {remap}"),
         _ => remap,
