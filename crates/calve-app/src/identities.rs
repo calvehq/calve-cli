@@ -117,12 +117,7 @@ impl Project {
             })
             .await?;
         let dir = path.parent().expect("identity dir");
-        fs::create_dir_all(dir)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
-        }
+        crate::journal::private_dir(dir)?;
         let file = IdentityFile {
             name: name.to_owned(),
             principal,

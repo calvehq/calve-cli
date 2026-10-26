@@ -620,12 +620,7 @@ fn write_file(path: &Path, file: &ConfigFile) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| invalid("config path has no parent"))?;
-    fs::create_dir_all(parent)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
-    }
+    crate::journal::private_dir(parent)?;
     let temp = parent.join(format!(".config-{}.tmp", uuid::Uuid::now_v7()));
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);

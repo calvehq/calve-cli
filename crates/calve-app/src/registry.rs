@@ -128,12 +128,7 @@ impl Registry {
     }
 
     pub fn open_at(root: &Path) -> Result<Self> {
-        fs::create_dir_all(root)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(root, fs::Permissions::from_mode(0o700))?;
-        }
+        crate::journal::private_dir(root)?;
         let root = fs::canonicalize(root)?;
         let mut db = Connection::open(root.join("workspace.sqlite3"))?;
         db.busy_timeout(Duration::from_secs(5))?;

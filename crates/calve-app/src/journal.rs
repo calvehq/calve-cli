@@ -58,6 +58,23 @@ pub fn jcs(v: &Value) -> Vec<u8> {
     calve_integration_contract::jcs::to_vec(v).expect("journal values are integer-only")
 }
 
+/// Creates `path` (and parents) as a private directory: 0700 on Unix; on Windows a protected
+/// DACL for the user and SYSTEM applied at creation (R18, `calve_win_sec::create_private_dir`).
+pub fn private_dir(path: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    return calve_win_sec::create_private_dir(path);
+    #[cfg(not(windows))]
+    {
+        std::fs::create_dir_all(path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        }
+        Ok(())
+    }
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     crate::workspace_io::sha256_hex(bytes)
 }

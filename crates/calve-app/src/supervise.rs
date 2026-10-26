@@ -54,17 +54,17 @@ pub fn spawn_dir() -> Result<PathBuf> {
     let dir = crate::registry::runtime_dir()?.join("spawn");
     // Every directory created here is private: the runtime directory also holds the daemon
     // socket, which refuses a directory others can read.
-    let mut builder = std::fs::DirBuilder::new();
-    builder.recursive(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        builder.mode(0o700);
-        builder.create(&dir)?;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&dir)?;
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
     }
     #[cfg(not(unix))]
-    builder.create(&dir)?;
+    crate::journal::private_dir(&dir)?;
     Ok(dir)
 }
 

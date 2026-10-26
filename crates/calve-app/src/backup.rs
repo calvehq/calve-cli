@@ -60,12 +60,7 @@ fn digest_ok(path: &Path) -> Result<bool> {
 /// Writes a verified backup of `db` and applies retention.
 pub fn take(db: &Connection, db_path: &Path, kind: &str, schema: u32) -> Result<PathBuf> {
     let dir = dir(db_path);
-    fs::create_dir_all(&dir)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
-    }
+    crate::journal::private_dir(&dir)?;
     let name = format!("product-{}-v{schema}-{kind}.db", stamp());
     let tmp = dir.join(format!(".{name}.tmp"));
     let _ = fs::remove_file(&tmp);

@@ -51,19 +51,27 @@ fn builtin_harnesses() -> Value {
         "mode":"change","description":"Capture the files named on the command line through the file extension"}])
 }
 
-/// Resolves an executable name against PATH, or checks an explicit path.
+/// Resolves an executable name against PATH, or checks an explicit path. On Windows a name
+/// without an extension is tried with each `PATHEXT` extension in order (R4).
 pub fn resolve_executable(name: &str) -> Result<PathBuf> {
     let candidate = Path::new(name);
+    let pathext = cfg!(windows)
+        .then(|| std::env::var("PATHEXT").ok())
+        .flatten();
+    let first = |base: PathBuf| {
+        with_pathext(base, cfg!(windows), pathext.as_deref())
+            .into_iter()
+            .find(|path| path.is_file())
+    };
     let found = if candidate.components().count() > 1 || candidate.is_absolute() {
-        candidate.is_file().then(|| candidate.to_path_buf())
+        first(candidate.to_path_buf())
     } else {
         // Only absolute PATH entries: an empty or relative entry would resolve against the
         // working directory, which may hold candidate content.
         std::env::var_os("PATH").and_then(|paths| {
             std::env::split_paths(&paths)
                 .filter(|dir| dir.is_absolute())
-                .map(|dir| dir.join(name))
-                .find(|path| path.is_file())
+                .find_map(|dir| first(dir.join(name)))
         })
     };
     let path = found.ok_or_else(|| invalid(format!("executable {name:?} not found")))?;
@@ -75,6 +83,29 @@ pub fn resolve_executable(name: &str) -> Result<PathBuf> {
         }
     }
     Ok(std::fs::canonicalize(path)?)
+}
+
+/// The paths tried for `base`: itself, or (Windows, no extension) `base` + each `PATHEXT`
+/// extension. Only extensions CreateProcess can start are kept (`.com .exe .bat .cmd`;
+/// script-host types such as `.js` are not programs).
+fn with_pathext(base: PathBuf, windows: bool, pathext: Option<&str>) -> Vec<PathBuf> {
+    if !windows || base.extension().is_some() {
+        return vec![base];
+    }
+    pathext
+        .unwrap_or(".COM;.EXE;.BAT;.CMD")
+        .split(';')
+        .filter(|ext| {
+            [".com", ".exe", ".bat", ".cmd"]
+                .iter()
+                .any(|ok| ext.eq_ignore_ascii_case(ok))
+        })
+        .map(|ext| {
+            let mut path = base.clone().into_os_string();
+            path.push(ext);
+            PathBuf::from(path)
+        })
+        .collect()
 }
 
 /// Resolves a secret reference at launch time. The value never leaves the child environment.
@@ -96,9 +127,23 @@ fn resolve_secret(reference: &str) -> Result<String> {
     ))
 }
 
-/// Reads `name` (service `calve`) from the OS credential store through the platform tool,
-/// or through `CALVE_KEYRING_COMMAND <name>` when set.
+/// Reads `name` (service `calve`) from the OS credential store: the Windows Credential Manager
+/// generic credential `calve:<name>`, the platform tool elsewhere, or
+/// `CALVE_KEYRING_COMMAND <name>` when set.
 fn keyring_lookup(name: &str) -> Result<String> {
+    #[cfg(windows)]
+    if std::env::var_os("CALVE_KEYRING_COMMAND").is_none() {
+        return match calve_win_sec::read_credential(name) {
+            Ok(Some(value)) if !value.is_empty() => Ok(value),
+            Ok(_) => Err(crate::coded(
+                "SECRET_UNAVAILABLE",
+                format!(
+                    "keyring:{name} was not found; store it with: cmdkey /generic:calve:{name} /user:calve /pass"
+                ),
+            )),
+            Err(error) => Err(invalid(format!("credential store unavailable: {error}"))),
+        };
+    }
     let (program, args, hint): (String, Vec<String>, String) = match std::env::var(
         "CALVE_KEYRING_COMMAND",
     ) {
@@ -1158,7 +1203,54 @@ pub fn put_provider(
 
 #[cfg(test)]
 mod tests {
-    use super::in_scope;
+    use super::{in_scope, with_pathext};
+    use std::path::PathBuf;
+
+    #[cfg(windows)]
+    #[test]
+    fn pathext_resolves_a_bare_name() {
+        let cmd = super::resolve_executable("cmd").unwrap();
+        assert!(
+            cmd.to_string_lossy().to_lowercase().ends_with("\\cmd.exe"),
+            "{}",
+            cmd.display()
+        );
+    }
+
+    /// A secret stored with the stock `cmdkey` tool resolves (same blob encoding).
+    #[cfg(windows)]
+    #[test]
+    fn keyring_reads_what_cmdkey_stored() {
+        let name = format!("m5-test-{}", std::process::id());
+        let target = format!("/generic:calve:{name}");
+        let stored = std::process::Command::new("cmdkey")
+            .args([target.as_str(), "/user:calve", "/pass:from-credman"])
+            .output()
+            .unwrap();
+        assert!(stored.status.success(), "{stored:?}");
+        let value = super::keyring_lookup(&name);
+        let _ = std::process::Command::new("cmdkey")
+            .arg(format!("/delete:calve:{name}"))
+            .output();
+        assert_eq!(value.unwrap(), "from-credman");
+        let missing = super::keyring_lookup(&name).unwrap_err().to_string();
+        assert!(missing.contains("cmdkey /generic:calve:"), "{missing}");
+    }
+
+    #[test]
+    fn pathext_candidates() {
+        let p = |s: &str| PathBuf::from(s);
+        assert_eq!(with_pathext(p("git"), false, Some(".EXE")), [p("git")]);
+        assert_eq!(with_pathext(p("git.exe"), true, None), [p("git.exe")]);
+        assert_eq!(
+            with_pathext(p("git"), true, None),
+            [p("git.COM"), p("git.EXE"), p("git.BAT"), p("git.CMD")]
+        );
+        assert_eq!(
+            with_pathext(p("git"), true, Some(".JS;.cmd;;.VBS;.Exe")),
+            [p("git.cmd"), p("git.Exe")]
+        );
+    }
 
     #[test]
     fn scope_matches_whole_path_segments() {

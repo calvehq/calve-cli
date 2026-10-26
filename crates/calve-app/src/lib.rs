@@ -418,12 +418,7 @@ fn ensure_layout(state: &Path) -> Result<()> {
     for dir in ["cache", "run", "logs", "tmp"] {
         let d = state.join(dir);
         if !d.is_dir() {
-            fs::create_dir_all(&d)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&d, fs::Permissions::from_mode(0o700))?;
-            }
+            crate::journal::private_dir(&d)?;
         }
     }
     Ok(())
@@ -1079,12 +1074,10 @@ impl Project {
             return Err(invalid("project is already initialized"));
         }
         let staging = root.join(format!(".calve-init-{}", uuid::Uuid::now_v7()));
+        // Exclusive creation, as before; then private (on Windows created private outright).
+        #[cfg(not(windows))]
         fs::create_dir(&staging)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))?;
-        }
+        crate::journal::private_dir(&staging)?;
         fs::create_dir(staging.join("extensions"))?;
         ensure_layout(&staging)?;
         let result = async {

@@ -198,13 +198,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 fn private_dir(path: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(())
+    crate::journal::private_dir(path)
 }
 
 /// Debug builds only: a stand-in concurrent writer. `CALVE_TEST_WRITE=<point>=<target>` appends

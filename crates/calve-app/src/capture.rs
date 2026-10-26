@@ -270,12 +270,7 @@ impl Project {
     ) -> Result<Value> {
         let id = format!("cap_{}", uuid::Uuid::now_v7());
         let d = dir(&self.root);
-        fs::create_dir_all(&d)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&d, fs::Permissions::from_mode(0o700))?;
-        }
+        crate::journal::private_dir(&d)?;
         let (journal_path, spool_path) = self.session_paths(&id);
         if !chunk_data.is_empty() {
             let cdir = d.join(format!("{id}.chunks"));
