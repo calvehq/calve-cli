@@ -37,6 +37,7 @@ pub mod registry;
 pub mod resources;
 pub mod sandbox;
 pub mod supersede;
+pub mod supervise;
 pub mod views;
 pub(crate) mod wal;
 pub mod workspace_io;

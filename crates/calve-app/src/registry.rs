@@ -52,6 +52,20 @@ fn name_ok(name: &str) -> bool {
 }
 
 /// The default registry location follows platform data-directory conventions.
+/// Per-data-root runtime state (daemon socket and pid, spawn records): in the platform runtime
+/// directory when there is one (`$XDG_RUNTIME_DIR/calve/<data root digest>/`, so each data root
+/// has its own), otherwise the data directory itself. Contents do not outlive a reboot.
+pub fn runtime_dir() -> Result<PathBuf> {
+    let data = default_data_root()?;
+    match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+        Some(run) if cfg!(unix) && run.is_absolute() && run.is_dir() => {
+            let key = crate::journal::sha256_hex(data.to_string_lossy().as_bytes());
+            Ok(run.join("calve").join(&key[..16]))
+        }
+        _ => Ok(data),
+    }
+}
+
 pub fn default_data_root() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {

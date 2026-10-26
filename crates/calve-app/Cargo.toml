@@ -53,6 +53,7 @@ landlock.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
+signal-hook.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 calve-win-sec.workspace = true

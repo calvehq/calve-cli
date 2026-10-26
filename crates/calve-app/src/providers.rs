@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command as Process, Stdio};
+use std::process::{Command as Process, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -239,36 +239,34 @@ enum Line {
     Err(String),
 }
 
-fn spawn(launch: &Launch, cwd: &Path, context: &BTreeMap<String, String>) -> Result<Child> {
-    let mut command = Process::new(&launch.argv[0]);
-    command
-        .args(&launch.argv[1..])
-        .current_dir(cwd)
-        .env_clear()
-        .envs(launch.env.iter().map(|(k, v)| (k, v.as_str())))
-        .envs(context)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    Ok(command.spawn()?)
+/// The worker under supervision (§16.3): one process group behind `__exec-confined` on Unix,
+/// a parent-owned Job Object on Windows.
+fn spawn(
+    launch: &Launch,
+    cwd: &Path,
+    context: &BTreeMap<String, String>,
+) -> Result<crate::supervise::Supervised> {
+    let env: Vec<(&str, &str)> = launch
+        .env
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .chain(context.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .collect();
+    // Stale records of dead parents first (cheap: one small directory).
+    let _ = crate::supervise::reap();
+    crate::supervise::Supervised::spawn(&launch.argv, &env, cwd)
 }
 
-/// Kills the worker's whole process group so grandchildren do not outlive the execution.
-fn terminate(child: &mut Child) {
-    #[cfg(unix)]
-    {
-        // ponytail: kill(1) instead of libc because unsafe code is forbidden.
-        let _ = Process::new("kill")
-            .args(["-KILL", "--", &format!("-{}", child.id())])
-            .status();
+/// Exit status of a supervised run; a lost supervisor is a failure with its reason.
+fn finished(t: crate::supervise::Termination) -> std::result::Result<Option<i32>, String> {
+    use crate::supervise::Termination;
+    match t {
+        Termination::Finished { exit_code, .. } => Ok(exit_code),
+        Termination::Cancelled => Err("cancelled".into()),
+        Termination::HelperLost => {
+            Err("HELPER_LOST: the worker's supervisor died before reporting".into())
+        }
     }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// Reads one stream through its own redaction state (stdout and stderr never share one), then
@@ -341,8 +339,8 @@ fn run_worker(
     context: &WorkerContext,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<Outcome> {
-    let mut child = spawn(launch, cwd, env)?;
-    let mut stdin = child.stdin.take();
+    let mut sup = spawn(launch, cwd, env)?;
+    let mut stdin = sup.child.stdin.take();
     if kind == ProviderKind::StdioAgent {
         if let Some(input) = stdin.as_mut() {
             writeln!(input, "{}", serde_json::to_string(context)?)?;
@@ -353,13 +351,13 @@ fn run_worker(
     }
     let (tx, rx) = mpsc::channel();
     pump(
-        child.stdout.take().expect("piped stdout"),
+        sup.child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
         &launch.redactor,
     );
     pump(
-        child.stderr.take().expect("piped stderr"),
+        sup.child.stderr.take().expect("piped stderr"),
         tx,
         true,
         &launch.redactor,
@@ -441,28 +439,30 @@ fn run_worker(
                     .as_ref()
                     .is_some_and(|(status, _)| *status == "failed")
                 {
-                    terminate(&mut child);
+                    let _ = sup.cancel();
                     break;
                 }
             }
             Ok(Line::Out(text)) => record("stdout", text, &mut outcome),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                // Both pipes closed; wait for the exit status below.
-                let status = child.wait()?;
-                outcome.exit_code = status.code();
+                // Both pipes closed; the supervised end below.
+                match finished(sup.wait()?) {
+                    Ok(code) => outcome.exit_code = code,
+                    Err(reason) => outcome.reason = Some(reason),
+                }
                 break;
             }
         }
         if Instant::now() > deadline {
-            terminate(&mut child);
+            let _ = sup.cancel();
             outcome.reason = Some(format!("timed out after {} ms", launch.timeout.as_millis()));
             return Ok(outcome);
         }
         if last_poll.elapsed() > Duration::from_millis(500) {
             last_poll = Instant::now();
             if cancelled() {
-                terminate(&mut child);
+                let _ = sup.cancel();
                 outcome.status = "cancelled";
                 outcome.reason = Some("execution was cancelled".into());
                 return Ok(outcome);
@@ -470,9 +470,10 @@ fn run_worker(
         }
     }
     if outcome.exit_code.is_none()
-        && let Ok(Some(status)) = child.try_wait()
+        && outcome.reason.is_none()
+        && let Ok(Ok(code)) = sup.wait().map(finished)
     {
-        outcome.exit_code = status.code();
+        outcome.exit_code = code;
     }
     match kind {
         ProviderKind::LocalProcess => {
@@ -525,17 +526,17 @@ pub fn run_command(
         _registered: crate::redact::register(Vec::<Vec<u8>>::new()),
     };
     let started = Instant::now();
-    let mut child = spawn(&launch, cwd, &BTreeMap::new())?;
-    drop(child.stdin.take());
+    let mut sup = spawn(&launch, cwd, &BTreeMap::new())?;
+    drop(sup.child.stdin.take());
     let (tx, rx) = mpsc::channel();
     pump(
-        child.stdout.take().expect("piped stdout"),
+        sup.child.stdout.take().expect("piped stdout"),
         tx.clone(),
         false,
         &launch.redactor,
     );
     pump(
-        child.stderr.take().expect("piped stderr"),
+        sup.child.stderr.take().expect("piped stderr"),
         tx,
         true,
         &launch.redactor,
@@ -556,7 +557,7 @@ pub fn run_command(
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
         if Instant::now() > deadline {
-            terminate(&mut child);
+            let _ = sup.cancel();
             return Ok(CommandRun {
                 exit_code: None,
                 output_tail: Vec::from(tail).join("\n"),
@@ -565,9 +566,10 @@ pub fn run_command(
             });
         }
     }
-    let status = child.wait()?;
+    let exit_code =
+        finished(sup.wait()?).map_err(|r| crate::coded("CONTAINMENT_UNAVAILABLE", r))?;
     Ok(CommandRun {
-        exit_code: status.code(),
+        exit_code,
         output_tail: Vec::from(tail).join("\n"),
         timed_out: false,
         duration_ms: started.elapsed().as_millis(),

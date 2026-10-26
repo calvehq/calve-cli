@@ -530,6 +530,8 @@ pub fn hidden_mode() -> Option<i32> {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some(SANDBOX_MODE) => Some(serve_child(&args[2..])),
+        #[cfg(unix)]
+        Some(crate::supervise::HELPER_MODE) => Some(crate::supervise::helper(&args[2..])),
         _ => None,
     }
 }

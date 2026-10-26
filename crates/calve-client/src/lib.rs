@@ -33,14 +33,7 @@ pub struct Client {
 /// (`$XDG_RUNTIME_DIR/calve/<data root digest>/daemon.sock`, so each data root has its own
 /// daemon), otherwise in the data directory. The pid file sits beside the socket.
 pub fn default_endpoint() -> Result<PathBuf> {
-    let data = calve_app::registry::default_data_root()?;
-    match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
-        Some(run) if cfg!(unix) && run.is_absolute() && run.is_dir() => {
-            let key = calve_app::journal::sha256_hex(data.to_string_lossy().as_bytes());
-            Ok(run.join("calve").join(&key[..16]).join("daemon.sock"))
-        }
-        _ => Ok(data.join("daemon.sock")),
-    }
+    Ok(calve_app::registry::runtime_dir()?.join("daemon.sock"))
 }
 
 /// The daemon pid file beside the socket it serves.
@@ -73,6 +66,8 @@ pub fn share_embedded_projects() {
 pub async fn serve(endpoint: &Path) -> Result<()> {
     // Requests run on this thread's local task set; share one runtime per Project here.
     calve_app::app::enable_project_cache();
+    // Groups left by a daemon that died (macOS has no parent-death signal): reap them first.
+    let _ = calve_app::supervise::reap();
     calve_ipc::serve(
         endpoint,
         calve_ipc::ServerInfo {
