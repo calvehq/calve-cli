@@ -244,3 +244,50 @@ fn daemon_rejects_public_socket_directory_without_changing_it() {
         0o755
     );
 }
+
+/// `daemon stop` asks over the authenticated IPC (no signal, no kill(1)): the daemon acks with
+/// its pid, finishes, and removes its socket.
+#[test]
+fn daemon_stop_uses_the_ipc_shutdown_frame() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    let endpoint = data.join("calve/daemon.sock");
+    let mut daemon = Daemon(
+        Command::new(env!("CARGO_BIN_EXE_calved"))
+            .env("XDG_DATA_HOME", &data)
+            .env_remove("XDG_RUNTIME_DIR")
+            .arg("--endpoint")
+            .arg(&endpoint)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    for _ in 0..300 {
+        if endpoint.exists() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let stopped = cli(
+        &data,
+        &[
+            "--endpoint",
+            endpoint.to_str().unwrap(),
+            "--json",
+            "daemon",
+            "stop",
+        ],
+    );
+    assert!(
+        stopped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stopped.stderr)
+    );
+    let stopped = calve_testkit::json_data(&stopped.stdout);
+    assert_eq!(stopped["running"], false);
+    assert_eq!(stopped["stopped_pid"], daemon.0.id().to_string());
+    let status = daemon.0.wait().unwrap();
+    assert!(status.success(), "{status}");
+    assert!(!endpoint.exists());
+}

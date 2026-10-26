@@ -32,13 +32,26 @@ pub struct Client {
 /// The daemon socket (§12.2): in the platform runtime directory when there is one
 /// (`$XDG_RUNTIME_DIR/calve/<data root digest>/daemon.sock`, so each data root has its own
 /// daemon), otherwise in the data directory. The pid file sits beside the socket.
+///
+/// On Windows it is a named pipe per user and data root (§16.2): `\\.\pipe\calve-<digest>`.
+#[cfg(not(windows))]
 pub fn default_endpoint() -> Result<PathBuf> {
     Ok(calve_app::registry::runtime_dir()?.join("daemon.sock"))
 }
 
-/// The daemon pid file beside the socket it serves.
-fn daemon_file(endpoint: &Path, name: &str) -> PathBuf {
-    endpoint.with_file_name(name)
+#[cfg(windows)]
+pub fn default_endpoint() -> Result<PathBuf> {
+    let data = calve_app::registry::default_data_root()?;
+    Ok(calve_win_sec::pipe_name(
+        &data,
+        calve_app::journal::sha256_hex,
+    )?)
+}
+
+/// Whether a daemon endpoint may be there. A pipe is never probed with a metadata call (that
+/// opens it and takes an instance); connecting reports `NotFound` instead.
+fn endpoint_present(endpoint: &Path) -> bool {
+    cfg!(windows) || endpoint.exists()
 }
 
 /// The daemon log: `<data>/logs/daemon.log` (runtime directories are not for logs).
@@ -134,7 +147,7 @@ impl Client {
         {
             eprintln!("calve: could not start calved ({error}); running in this process");
         }
-        if endpoint.exists() || self.options.endpoint.is_some() {
+        if endpoint_present(&endpoint) || self.options.endpoint.is_some() {
             match calve_ipc::request(&endpoint, request.clone()).await {
                 Ok(response) => return Ok((response, Backend::Daemon)),
                 Err(calve_ipc::Error::Io(error))
@@ -216,18 +229,12 @@ impl Client {
                 if daemon_alive(&endpoint).await.is_none() {
                     return Ok(json!({"running":false}));
                 }
-                let pid = std::fs::read_to_string(daemon_file(&endpoint, "daemon.pid"))?;
-                let pid = pid.trim();
-                // ponytail: shells out to kill(1) because unsafe (libc) is forbidden; unix only.
-                let status = std::process::Command::new("kill")
-                    .args(["-TERM", pid])
-                    .status()?;
-                if !status.success() {
-                    return Err(Error::Message(format!("could not signal calved pid {pid}")));
-                }
+                let pid = calve_ipc::shutdown(&endpoint).await.map_err(ipc_error)?;
                 for _ in 0..200 {
-                    if !endpoint.exists() {
-                        return Ok(json!({"running":false,"stopped_pid":pid}));
+                    if daemon_alive(&endpoint).await.is_none()
+                        && (cfg!(windows) || !endpoint.exists())
+                    {
+                        return Ok(json!({"running":false,"stopped_pid":pid.to_string()}));
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }

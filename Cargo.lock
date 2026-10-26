@@ -340,6 +340,7 @@ dependencies = [
  "calve-api",
  "calve-app",
  "calve-ipc",
+ "calve-win-sec",
  "serde_json",
  "tokio",
 ]
@@ -375,6 +376,7 @@ name = "calve-ipc"
 version = "0.1.0"
 dependencies = [
  "calve-api",
+ "calve-win-sec",
  "serde",
  "serde_json",
  "thiserror",

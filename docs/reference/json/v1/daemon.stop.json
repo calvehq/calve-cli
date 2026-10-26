@@ -13,8 +13,7 @@
       }
     },
     "required": [
-      "running",
-      "stopped_pid"
+      "running"
     ]
   }
 }

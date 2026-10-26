@@ -17,3 +17,6 @@ calve-app.workspace = true
 calve-ipc.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+calve-win-sec.workspace = true

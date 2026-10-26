@@ -264,6 +264,284 @@ mod job {
 #[cfg(windows)]
 pub use job::{Job, Limits};
 
+/// The daemon's named pipe (rev 10 §16.2, ADR 0016). The boundary is the OS user: other users,
+/// remote clients and pipe squatting by another user are refused; same-user processes are
+/// trusted (as for ssh-agent).
+#[cfg(windows)]
+mod pipe {
+    #![allow(unsafe_code)]
+
+    use std::ffi::OsStr;
+    use std::io;
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::{AsRawHandle, RawHandle};
+    use std::path::{Path, PathBuf};
+
+    use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, NamedPipeServer};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
+        SDDL_REVISION_1,
+    };
+    use windows_sys::Win32::Security::{
+        EqualSid, GetTokenInformation, RevertToSelf, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
+        TokenUser,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, PIPE_ACCESS_DUPLEX,
+    };
+    use windows_sys::Win32::System::Pipes::{
+        CreateNamedPipeW, GetNamedPipeServerProcessId, ImpersonateNamedPipeClient,
+        PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+        PIPE_WAIT,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, OpenProcess, OpenProcessToken, OpenThreadToken,
+        PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    };
+
+    /// SECURITY_IDENTIFICATION in the client's security QoS: the server may identify, never
+    /// impersonate beyond that.
+    const SECURITY_IDENTIFICATION: u32 = 1 << 16;
+
+    fn wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(Some(0)).collect()
+    }
+
+    struct Owned(HANDLE);
+
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            // SAFETY: we own the handle and close it once.
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    /// The user SID (as bytes) of a token handle.
+    fn token_sid(token: HANDLE) -> io::Result<Vec<u8>> {
+        let mut len = 0u32;
+        // SAFETY: a size query with a null buffer is allowed; `len` receives the size.
+        unsafe { GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut len) };
+        let mut buf = vec![0u8; len as usize];
+        // SAFETY: `buf` is writable for `len` bytes for the call.
+        if unsafe { GetTokenInformation(token, TokenUser, buf.as_mut_ptr().cast(), len, &mut len) }
+            == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: on success the buffer starts with a TOKEN_USER whose SID points into it.
+        let user = unsafe { &*(buf.as_ptr().cast::<TOKEN_USER>()) };
+        let sid = user.User.Sid;
+        // The SID bytes copied out, so the comparison never depends on `buf`'s lifetime.
+        let sid_len = unsafe { windows_sys::Win32::Security::GetLengthSid(sid) } as usize;
+        // SAFETY: `sid` points to `sid_len` valid bytes inside `buf`.
+        Ok(unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), sid_len) }.to_vec())
+    }
+
+    fn own_sid() -> io::Result<Vec<u8>> {
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: the pseudo-handle of the current process; `token` receives a new handle.
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Owned(token);
+        token_sid(token.0)
+    }
+
+    fn sid_string(sid: &[u8]) -> io::Result<String> {
+        let mut out: *mut u16 = std::ptr::null_mut();
+        // SAFETY: `sid` is a valid SID; `out` receives a LocalAlloc'ed string we free below.
+        if unsafe { ConvertSidToStringSidW(sid.as_ptr() as *mut _, &mut out) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `out` is NUL-terminated UTF-16.
+        let mut n = 0;
+        while unsafe { *out.add(n) } != 0 {
+            n += 1;
+        }
+        let s = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(out, n) });
+        // SAFETY: allocated by the API with LocalAlloc.
+        unsafe { LocalFree(out.cast()) };
+        Ok(s)
+    }
+
+    /// `\\.\pipe\calve-<hex(sha256(user SID ‖ data root))>` (the name is not a secret).
+    pub fn pipe_name(
+        data_root: &Path,
+        sha256_hex: impl Fn(&[u8]) -> String,
+    ) -> io::Result<PathBuf> {
+        let mut key = sid_string(&own_sid()?)?.into_bytes();
+        key.extend_from_slice(data_root.to_string_lossy().as_bytes());
+        Ok(PathBuf::from(format!(
+            r"\\.\pipe\calve-{}",
+            &sha256_hex(&key)[..32]
+        )))
+    }
+
+    /// A server instance: owner = the user, DACL = one ACE (read/write) for the user's SID, no
+    /// inheritance; `first` adds FILE_FLAG_FIRST_PIPE_INSTANCE (a second daemon or a squatter
+    /// makes creation fail); remote clients are rejected.
+    pub fn create_server(name: &Path, first: bool) -> io::Result<NamedPipeServer> {
+        let sid = sid_string(&own_sid()?)?;
+        let sddl = wide(&format!("O:{sid}D:P(A;;GRGW;;;{sid})"));
+        let mut sd: *mut core::ffi::c_void = std::ptr::null_mut();
+        // SAFETY: `sddl` is NUL-terminated; `sd` receives a LocalAlloc'ed descriptor.
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut sd,
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd,
+            bInheritHandle: 0,
+        };
+        let name = wide(&name.to_string_lossy());
+        let open = PIPE_ACCESS_DUPLEX
+            | FILE_FLAG_OVERLAPPED
+            | if first {
+                FILE_FLAG_FIRST_PIPE_INSTANCE
+            } else {
+                0
+            };
+        // SAFETY: valid NUL-terminated name and security attributes living through the call.
+        let h = unsafe {
+            CreateNamedPipeW(
+                name.as_ptr(),
+                open,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                PIPE_UNLIMITED_INSTANCES,
+                65536,
+                65536,
+                0,
+                &sa,
+            )
+        };
+        let err = io::Error::last_os_error();
+        // SAFETY: the descriptor was allocated by the conversion API.
+        unsafe { LocalFree(sd) };
+        if h == INVALID_HANDLE_VALUE {
+            return Err(err);
+        }
+        // SAFETY: `h` is a new, owned, overlapped named-pipe handle; tokio takes ownership.
+        unsafe { NamedPipeServer::from_raw_handle(h as RawHandle) }
+    }
+
+    /// Per connection: the client's token user must be our own user. This enforces the
+    /// other-user boundary; it is not authentication between same-user processes.
+    pub fn verify_client(server: &NamedPipeServer) -> io::Result<()> {
+        let pipe = server.as_raw_handle() as HANDLE;
+        // SAFETY: live pipe handle with a connected client.
+        if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: the current thread now impersonates; open its token as ourselves.
+        let ok = unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) };
+        let sid = if ok == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            let t = Owned(token);
+            token_sid(t.0)
+        };
+        // SAFETY: always revert before anything else runs on this thread.
+        unsafe { RevertToSelf() };
+        let (client, own) = (sid?, own_sid()?);
+        // SAFETY: both are valid SIDs.
+        if unsafe { EqualSid(client.as_ptr() as *mut _, own.as_ptr() as *mut _) } == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "pipe client is another user",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Opens the daemon pipe with SECURITY_IDENTIFICATION QoS.
+    pub fn connect(name: &Path) -> io::Result<NamedPipeClient> {
+        ClientOptions::new()
+            .security_qos_flags(SECURITY_IDENTIFICATION)
+            .open(name)
+    }
+
+    /// Client-side integrity check: the server process runs as our user and from
+    /// `expected_exe`, re-checked while its handle is held (a stale binary or another user's
+    /// squatter is refused; a same-user process is trusted).
+    pub fn verify_server(client: &NamedPipeClient, expected_exe: &Path) -> io::Result<()> {
+        let pipe = client.as_raw_handle() as HANDLE;
+        let mut pid = 0u32;
+        // SAFETY: live pipe handle; `pid` is a valid out-parameter.
+        if unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: query-only access; result checked.
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if process.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let process = Owned(process);
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: live process handle.
+        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut token) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let token = Owned(token);
+        let (server, own) = (token_sid(token.0)?, own_sid()?);
+        // SAFETY: valid SIDs.
+        if unsafe { EqualSid(server.as_ptr() as *mut _, own.as_ptr() as *mut _) } == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the daemon pipe belongs to another user",
+            ));
+        }
+        let mut buf = vec![0u16; 32768];
+        let mut len = buf.len() as u32;
+        // SAFETY: `buf` is writable for `len` UTF-16 units.
+        if unsafe { QueryFullProcessImageNameW(process.0, 0, buf.as_mut_ptr(), &mut len) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let exe = PathBuf::from(String::from_utf16_lossy(&buf[..len as usize]));
+        let same = |a: &Path, b: &Path| {
+            std::fs::canonicalize(a)
+                .ok()
+                .zip(std::fs::canonicalize(b).ok())
+                .is_some_and(|(a, b)| a == b)
+        };
+        if !same(&exe, expected_exe) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "the daemon runs {} instead of {}",
+                    exe.display(),
+                    expected_exe.display()
+                ),
+            ));
+        }
+        // The PID still names the same server (no swap while we checked).
+        let mut again = 0u32;
+        // SAFETY: as above.
+        if unsafe { GetNamedPipeServerProcessId(pipe, &mut again) } == 0 || again != pid {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "the daemon changed during the check",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+pub use pipe::{
+    connect as pipe_connect, create_server as pipe_server, pipe_name,
+    verify_client as verify_pipe_client, verify_server as verify_pipe_server,
+};
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -343,6 +621,8 @@ mod tests {
     fn a_killed_parent_takes_the_tree_with_it() {
         if let Some(out) = std::env::var_os("CALVE_JOB_PARENT") {
             let job = Job::new(Limits::default()).unwrap();
+            // Never waited on: this parent is killed and the job ends the child.
+            #[allow(clippy::zombie_processes)]
             let child = job.spawn_suspended_in_job(&mut tree()).unwrap();
             std::fs::write(out, child.id().to_string()).unwrap();
             std::thread::sleep(Duration::from_secs(120));

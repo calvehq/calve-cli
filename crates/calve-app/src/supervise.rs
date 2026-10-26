@@ -52,12 +52,19 @@ fn coded(code: &'static str, m: impl Into<String>) -> Error {
 /// `<runtime dir>/spawn`, owner-only.
 pub fn spawn_dir() -> Result<PathBuf> {
     let dir = crate::registry::runtime_dir()?.join("spawn");
-    std::fs::create_dir_all(&dir)?;
+    // Every directory created here is private: the runtime directory also holds the daemon
+    // socket, which refuses a directory others can read.
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        builder.mode(0o700);
+        builder.create(&dir)?;
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
     }
+    #[cfg(not(unix))]
+    builder.create(&dir)?;
     Ok(dir)
 }
 

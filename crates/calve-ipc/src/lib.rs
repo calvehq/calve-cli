@@ -7,6 +7,7 @@ use std::future::Future;
 use std::path::Path;
 #[cfg(unix)]
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use calve_api::{self as app, Request, Response};
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,6 @@ pub struct ServerInfo {
 
 const MAX_FRAME: usize = 8 * 1024 * 1024;
 
-#[cfg(unix)]
 #[derive(Default)]
 struct ReplayCache {
     entries: std::collections::HashMap<uuid::Uuid, (Vec<u8>, Response)>,
@@ -43,7 +43,6 @@ struct ReplayCache {
     in_flight: std::collections::HashSet<uuid::Uuid>,
 }
 
-#[cfg(unix)]
 impl ReplayCache {
     fn insert(&mut self, id: uuid::Uuid, body: Vec<u8>, response: Response) {
         self.entries.insert(id, (body, response));
@@ -63,6 +62,12 @@ enum Frame {
     HelloAck(HelloAck),
     Request(Box<Request>),
     Response(Box<Response>),
+    /// Asks the daemon to stop; it acks, finishes in-flight requests, then exits. The peer is
+    /// checked like any other client (same user only).
+    Shutdown,
+    ShutdownAck {
+        pid: u32,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,20 +106,44 @@ async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, frame: &Frame) -> Re
     Ok(())
 }
 
+/// Opens the local transport to the daemon: the Unix socket, or on Windows the daemon's named
+/// pipe after checking the server runs as this user from the installed `calved.exe`.
 #[cfg(unix)]
-pub async fn request(endpoint: &Path, payload: Request) -> Result<Response> {
-    use tokio::net::UnixStream;
+async fn connect(endpoint: &Path) -> Result<tokio::net::UnixStream> {
+    Ok(tokio::net::UnixStream::connect(endpoint).await?)
+}
 
-    let mut stream = UnixStream::connect(endpoint).await?;
+#[cfg(windows)]
+async fn connect(endpoint: &Path) -> Result<tokio::net::windows::named_pipe::NamedPipeClient> {
+    const ERROR_PIPE_BUSY: i32 = 231;
+    let client = loop {
+        match calve_win_sec::pipe_connect(endpoint) {
+            Ok(c) => break c,
+            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            Err(e) => return Err(e.into()),
+        }
+    };
+    let daemon = std::env::current_exe()?.with_file_name("calved.exe");
+    calve_win_sec::verify_pipe_server(&client, &daemon).map_err(|e| {
+        Error::Message(format!(
+            "DAEMON_INCOMPATIBLE: refusing the daemon pipe: {e}"
+        ))
+    })?;
+    Ok(client)
+}
+
+async fn hello<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Result<()> {
     write_frame(
-        &mut stream,
+        stream,
         &Frame::Hello(Hello {
             api_version: app::API_VERSION,
             product_version: env!("CARGO_PKG_VERSION").into(),
         }),
     )
     .await?;
-    let ack = match read_frame(&mut stream).await? {
+    let ack = match read_frame(stream).await? {
         Frame::HelloAck(ack) => ack,
         _ => {
             return Err(Error::Message(
@@ -129,11 +158,30 @@ pub async fn request(endpoint: &Path, payload: Request) -> Result<Response> {
                 .unwrap_or_else(|| "incompatible daemon API".into())
         )));
     }
+    Ok(())
+}
+
+pub async fn request(endpoint: &Path, payload: Request) -> Result<Response> {
+    let mut stream = connect(endpoint).await?;
+    hello(&mut stream).await?;
     write_frame(&mut stream, &Frame::Request(Box::new(payload))).await?;
     match read_frame(&mut stream).await? {
         Frame::Response(response) => Ok(*response),
         _ => Err(Error::Message(
             "DAEMON_INCOMPATIBLE: invalid daemon response".into(),
+        )),
+    }
+}
+
+/// Asks the daemon to stop (every platform; no signal or `kill`); returns its pid.
+pub async fn shutdown(endpoint: &Path) -> Result<u32> {
+    let mut stream = connect(endpoint).await?;
+    hello(&mut stream).await?;
+    write_frame(&mut stream, &Frame::Shutdown).await?;
+    match read_frame(&mut stream).await? {
+        Frame::ShutdownAck { pid } => Ok(pid),
+        _ => Err(Error::Message(
+            "DAEMON_INCOMPATIBLE: invalid shutdown reply".into(),
         )),
     }
 }
@@ -198,6 +246,7 @@ where
         .run_until(async move {
             let writer = Arc::new(Mutex::new(ReplayCache::default()));
             let slots = Arc::new(Semaphore::new(64));
+            let stop = Rc::new(tokio::sync::Notify::new());
             let mut tasks = tokio::task::JoinSet::new();
             let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
             loop {
@@ -205,6 +254,7 @@ where
                     result = slots.clone().acquire_owned() => result.map_err(|_| Error::Message("daemon shutting down".into()))?,
                     result = tokio::signal::ctrl_c() => { result?; break; }
                     _ = terminate.recv() => break,
+                    _ = stop.notified() => break,
                 };
                 tokio::select! {
                     result = listener.accept() => {
@@ -212,9 +262,15 @@ where
                         let writer = writer.clone();
                         let handler = handler.clone();
                         let info = info.clone();
+                        let stop = stop.clone();
                         tasks.spawn_local(async move {
                             let _permit = permit;
-                            if let Err(error) = handle_client(stream, owner, writer, &info, handler).await {
+                            let peer = stream.peer_cred().map(|c| c.uid());
+                            if peer.ok() != Some(owner) {
+                                eprintln!("calved: client: IPC peer is not the daemon owner");
+                                return;
+                            }
+                            if let Err(error) = handle_client(stream, writer, &info, handler, stop).await {
                                 eprintln!("calved: client: {error}");
                             }
                         });
@@ -224,6 +280,7 @@ where
                         break;
                     }
                     _ = terminate.recv() => break,
+                    _ = stop.notified() => break,
                 }
             }
             drop(listener);
@@ -251,21 +308,19 @@ impl Drop for EndpointGuard {
     }
 }
 
-#[cfg(unix)]
-async fn handle_client<H, F>(
-    mut stream: tokio::net::UnixStream,
-    owner: u32,
+/// One authenticated connection (the transport checked the peer is our user).
+async fn handle_client<S, H, F>(
+    mut stream: S,
     writer: std::sync::Arc<tokio::sync::Mutex<ReplayCache>>,
     info: &ServerInfo,
     handler: H,
+    stop: Rc<tokio::sync::Notify>,
 ) -> Result<()>
 where
+    S: AsyncRead + AsyncWrite + Unpin,
     H: Fn(Request) -> F,
     F: Future<Output = Response>,
 {
-    if stream.peer_cred()?.uid() != owner {
-        return Err(Error::Message("IPC peer is not the daemon owner".into()));
-    }
     let hello = match read_frame(&mut stream).await? {
         Frame::Hello(hello) => hello,
         _ => return Err(Error::Message("expected IPC hello".into())),
@@ -288,6 +343,17 @@ where
     loop {
         let request = match read_frame(&mut stream).await {
             Ok(Frame::Request(request)) => *request,
+            Ok(Frame::Shutdown) => {
+                write_frame(
+                    &mut stream,
+                    &Frame::ShutdownAck {
+                        pid: std::process::id(),
+                    },
+                )
+                .await?;
+                stop.notify_one();
+                return Ok(());
+            }
             Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Ok(());
             }
@@ -347,20 +413,62 @@ where
     }
 }
 
-#[cfg(not(unix))]
-pub async fn request(_endpoint: &Path, _payload: Request) -> Result<Response> {
-    Err(Error::Message(
-        "local IPC is not yet supported on this platform".into(),
-    ))
-}
-
-#[cfg(not(unix))]
-pub async fn serve<H, F>(_endpoint: &Path, _info: ServerInfo, _handler: H) -> Result<()>
+#[cfg(windows)]
+pub async fn serve<H, F>(endpoint: &Path, info: ServerInfo, handler: H) -> Result<()>
 where
     H: Fn(Request) -> F + Clone + 'static,
     F: Future<Output = Response> + 'static,
 {
-    Err(Error::Message(
-        "local IPC is not yet supported on this platform".into(),
-    ))
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    // FILE_FLAG_FIRST_PIPE_INSTANCE: a second daemon (or another user's squatter) cannot
+    // create the first instance.
+    let mut server = calve_win_sec::pipe_server(endpoint, true).map_err(|e| {
+        if matches!(e.raw_os_error(), Some(5) | Some(231)) {
+            Error::Busy("daemon is already running".into())
+        } else {
+            Error::Io(e)
+        }
+    })?;
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move {
+            let writer = Arc::new(Mutex::new(ReplayCache::default()));
+            let stop = Rc::new(tokio::sync::Notify::new());
+            let mut tasks = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    result = server.connect() => {
+                        result?;
+                        let connected = server;
+                        server = calve_win_sec::pipe_server(endpoint, false)?;
+                        if let Err(e) = calve_win_sec::verify_pipe_client(&connected) {
+                            eprintln!("calved: client refused: {e}");
+                            continue;
+                        }
+                        let (writer, handler, info, stop) = (writer.clone(), handler.clone(), info.clone(), stop.clone());
+                        tasks.spawn_local(async move {
+                            if let Err(error) = handle_client(connected, writer, &info, handler, stop).await {
+                                eprintln!("calved: client: {error}");
+                            }
+                        });
+                    }
+                    result = tokio::signal::ctrl_c() => {
+                        result?;
+                        break;
+                    }
+                    _ = stop.notified() => break,
+                }
+            }
+            while tokio::time::timeout(std::time::Duration::from_secs(5), tasks.join_next())
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+            {}
+            tasks.abort_all();
+            Ok::<(), Error>(())
+        })
+        .await
 }
