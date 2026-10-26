@@ -667,6 +667,7 @@ impl Project {
                     (n, wu, exe, lease)
                 }
             };
+            let _keeper = crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
             // Chunks first (they outlive a lost attempt: the blobs stay indexed).
             if self
                 .upload_chunks(&mut j, &spool, exe, &lease, &log)

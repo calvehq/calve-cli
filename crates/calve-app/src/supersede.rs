@@ -730,6 +730,8 @@ impl Project {
                             (exe, lease)
                         }
                     };
+                    let _keeper =
+                        crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
                     // S4: replay each proposal not yet in P'.
                     let present: Vec<String> = self
                         .pack(&replacement)

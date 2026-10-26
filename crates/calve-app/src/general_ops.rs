@@ -152,6 +152,7 @@ impl Project {
                 retry_of: None,
             })
             .await?;
+        let _keeper = crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
         let mut applied = Vec::new();
         for effect in effects {
             let label = format!(

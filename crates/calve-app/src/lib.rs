@@ -25,6 +25,7 @@ pub mod general_ops;
 pub mod identities;
 pub mod integration;
 pub mod journal;
+mod lease;
 pub mod manifests;
 pub mod materialize;
 pub mod observe;

@@ -98,6 +98,14 @@ fn an_interrupted_capture_resumes_without_duplicate_effects() {
             "capture.complete.1.after_send",
         ] {
             let mut t = T::new();
+            // This test is about resuming WITHIN the crashed attempt's lease. Under load the
+            // crash-to-resume time exceeded the 120 s default (M5 lease investigation: resume
+            // ran 50 s after expiry) and the attempt was correctly LOST; that lapsed case is
+            // covered by `a_lost_attempt_resumes_or_requires_rollback` with a 5 s lease. Test
+            // accommodation only; production defaults are unchanged.
+            t.env
+                .vars
+                .push(("CALVE_EXECUTION_LEASE_MS".into(), "3600000".into()));
             let pack = t.pack("P");
             fs::write(t.root().join("a.toy"), "aaa").unwrap();
             fs::write(t.root().join("b.toy"), "bbb").unwrap();

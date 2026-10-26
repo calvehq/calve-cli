@@ -564,6 +564,7 @@ impl Project {
                 retry_of: None,
             })
             .await?;
+        let _keeper = crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
         for m in mutations {
             let mut observation = json!({"op": w.op, "step": m.step, "path": m.path,
                 "digest": m.after.clone().unwrap_or_else(|| "deleted".into())});

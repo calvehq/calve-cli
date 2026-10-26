@@ -875,10 +875,7 @@ impl Project {
         // From here the execution holds a lease: it is renewed for the whole run (not only while
         // the worker runs), and any error records a failure instead of leaving the execution
         // RUNNING until its lease expires and OpenAEVC reports it LOST (M5 lease experiments).
-        // Debug builds: `CALVE_TEST_NO_LEASE_KEEPER=1` turns it off (the control experiment).
-        let _keeper = (!(cfg!(debug_assertions)
-            && std::env::var("CALVE_TEST_NO_LEASE_KEEPER").is_ok_and(|v| v == "1")))
-        .then(|| LeaseKeeper::start(self.client.clone(), lease.clone()));
+        let _keeper = crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
         let granted: Result<Value> = async {
             if let Some(task) = task {
                 // Linking is product metadata; the execution record stays authoritative.
@@ -1106,56 +1103,6 @@ impl Project {
                 .await;
         }
         granted
-    }
-}
-
-/// Renews a lease every heartbeat interval from its own thread until dropped, so a slow step
-/// (a whole-Project digest on a loaded machine, a stalled disk write) never outlives it. The
-/// embedded runtime is called directly, so renewal does not wait for this task to be scheduled.
-struct LeaseKeeper {
-    stop: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
-    thread: Option<std::thread::JoinHandle<()>>,
-}
-
-impl LeaseKeeper {
-    fn start(client: crate::client::Client, lease: openaevc::protocol::Lease) -> Self {
-        let stop = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
-        let every = Duration::from_millis(lease.heartbeat_interval_ms.max(100));
-        let handle = tokio::runtime::Handle::current();
-        let flag = stop.clone();
-        let thread = std::thread::spawn(move || {
-            let (lock, cv) = &*flag;
-            let mut stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
-            loop {
-                let (s, timeout) = cv
-                    .wait_timeout(stopped, every)
-                    .unwrap_or_else(|e| e.into_inner());
-                stopped = s;
-                if *stopped {
-                    return;
-                }
-                if timeout.timed_out() {
-                    drop(stopped);
-                    let _ = handle.block_on(client.heartbeat(&lease));
-                    stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
-                }
-            }
-        });
-        LeaseKeeper {
-            stop,
-            thread: Some(thread),
-        }
-    }
-}
-
-impl Drop for LeaseKeeper {
-    fn drop(&mut self) {
-        let (lock, cv) = &*self.stop;
-        *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
-        cv.notify_all();
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
     }
 }
 
