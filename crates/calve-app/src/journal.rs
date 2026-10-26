@@ -25,6 +25,21 @@ pub fn fault(point: &str) {
     }
 }
 
+/// Debug builds: `CALVE_TEST_PAUSE=<point>=<ms>` blocks the calling thread at `point` for that
+/// long (stands in for a slow step that renews nothing; lease experiments).
+pub fn pause(point: &str) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    if let Some(ms) = std::env::var("CALVE_TEST_PAUSE").ok().and_then(|v| {
+        v.split_once('=')
+            .filter(|(p, _)| *p == point)
+            .and_then(|(_, ms)| ms.parse().ok())
+    }) {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),

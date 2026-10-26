@@ -872,218 +872,290 @@ impl Project {
                 retry_of: retry.map(|(_, previous)| previous),
             })
             .await?;
-        if let Some(task) = task {
-            // Linking is product metadata; the execution record stays authoritative.
-            self.db.execute(
-                "INSERT OR IGNORE INTO task_links(task_id,kind,object_id,created_at) VALUES (?1,'execution',?2,?3)",
-                rusqlite::params![task, execution.to_string(), crate::now()?],
-            )?;
-        }
-        let context = WorkerContext {
-            kind: "context",
-            version: 1,
-            project_id: self.identity.project_id.clone(),
-            namespace_id: self.identity.namespace_id.to_string(),
-            pack: pack.id.to_string(),
-            generation,
-            execution: execution.to_string(),
-            work_unit: work_unit.to_string(),
-            harness: harness_id.into(),
-            mode: harness.mode,
-            paths: harness.paths.clone(),
-            task: task.map(str::to_owned),
-            intent,
-            active_baseline,
-            context_digest: context_digest.to_string(),
-        };
-        let mut env = BTreeMap::from([
-            (
-                "CALVE_PROJECT_ROOT".to_owned(),
-                self.root.display().to_string(),
-            ),
-            ("CALVE_PACK".to_owned(), context.pack.clone()),
-            ("CALVE_GENERATION".to_owned(), generation.to_string()),
-            ("CALVE_EXECUTION".to_owned(), context.execution.clone()),
-            ("CALVE_HARNESS".to_owned(), harness_id.to_owned()),
-        ]);
-        if let Some(task) = task {
-            env.insert("CALVE_TASK".into(), task.into());
-        }
-        self.client.heartbeat(&lease).await?;
-        // Whole-Project snapshot so writes outside the harness scope are detected, not ignored.
-        let before = self.file_digests(&[]).await?;
-        // The worker runs on a blocking thread; cancellation is checked from its own runtime.
-        let client = self.client.clone();
-        let handle = tokio::runtime::Handle::current();
-        let execution_id = execution;
-        // Polled every 500 ms: renews the lease at the runtime's heartbeat interval so a worker is never
-        // mistaken for a lost one, and notices cancellation.
-        let worker_lease = lease.clone();
-        let every = u32::try_from(lease.heartbeat_interval_ms / 500)
-            .unwrap_or(u32::MAX)
-            .max(1);
-        let polls = std::cell::Cell::new(0u32);
-        let cancelled = move || {
-            polls.set(polls.get() + 1);
-            if polls.get().is_multiple_of(every) {
-                let _ = handle.block_on(client.heartbeat(&worker_lease));
+        // From here the execution holds a lease: it is renewed for the whole run (not only while
+        // the worker runs), and any error records a failure instead of leaving the execution
+        // RUNNING until its lease expires and OpenAEVC reports it LOST (M5 lease experiments).
+        // Debug builds: `CALVE_TEST_NO_LEASE_KEEPER=1` turns it off (the control experiment).
+        let _keeper = (!(cfg!(debug_assertions)
+            && std::env::var("CALVE_TEST_NO_LEASE_KEEPER").is_ok_and(|v| v == "1")))
+        .then(|| LeaseKeeper::start(self.client.clone(), lease.clone()));
+        let granted: Result<Value> = async {
+            if let Some(task) = task {
+                // Linking is product metadata; the execution record stays authoritative.
+                self.db.execute(
+                    "INSERT OR IGNORE INTO task_links(task_id,kind,object_id,created_at) VALUES (?1,'execution',?2,?3)",
+                    rusqlite::params![task, execution.to_string(), crate::now()?],
+                )?;
             }
-            handle
-                .block_on(client.query(openaevc::protocol::Query::GetExecution {
-                    execution: execution_id,
-                }))
-                .is_ok_and(|value| value["state"] == "CANCELLED")
-        };
-        let root = self.root.clone();
-        let kind = profile.kind;
-        let outcome = tokio::task::spawn_blocking(move || {
-            run_worker(&launch, kind, &root, &env, &context, &cancelled)
-        })
-        .await
-        .map_err(|error| invalid(format!("worker supervisor failed: {error}")))??;
-        for chunk in outcome.logs.chunks(64) {
-            let text: Vec<Value> = chunk
-                .iter()
-                .map(|(stream, line)| json!({"stream":stream,"text":crate::truncate(line, LOG_CHUNK)}))
-                .collect();
-            self.client.heartbeat(&lease).await.ok();
-            self.client
-                .command(Command::AppendObservation {
-                    execution,
-                    lease: lease.id,
-                    kind: "org.calve.harness.log".into(),
-                    payload: Some(json!({"lines":text})),
-                    blob: None,
-                    related_resources: vec![],
-                    related_effects: vec![],
-                })
-                .await?;
-        }
-        if outcome.status == "cancelled" {
-            event(
-                &self.db,
-                "execution.cancelled",
-                &execution.to_string(),
-                harness_id,
-            )?;
-            return Ok(json!({"execution":execution,"state":"CANCELLED","reason":outcome.reason}));
-        }
-        let mut proposals = outcome.proposals;
-        let after = self.file_digests(&[]).await?;
-        let mut changed: Vec<&String> = after
-            .iter()
-            .filter(|(path, digest)| before.get(*path) != Some(*digest))
-            .map(|(path, _)| path)
-            .collect();
-        changed.extend(before.keys().filter(|path| !after.contains_key(*path)));
-        let stray: Vec<&&String> = changed
-            .iter()
-            .filter(|path| harness.mode == HarnessMode::Check || !in_scope(&harness.paths, path))
-            .collect();
-        if outcome.status == "succeeded"
-            && harness.mode == HarnessMode::Change
-            && profile.kind == ProviderKind::LocalProcess
-        {
-            for path in &changed {
-                if in_scope(&harness.paths, path) && after.contains_key(*path) {
-                    let content = crate::workspace_io::Workspace::open(&self.root)
-                        .and_then(|w| w.read(path, calve_integration_contract::content::INLINE_MAX))
-                        .map_err(|e| invalid(e.to_string()))?;
-                    proposals.push(((*path).clone(), content));
-                }
+            let context = WorkerContext {
+                kind: "context",
+                version: 1,
+                project_id: self.identity.project_id.clone(),
+                namespace_id: self.identity.namespace_id.to_string(),
+                pack: pack.id.to_string(),
+                generation,
+                execution: execution.to_string(),
+                work_unit: work_unit.to_string(),
+                harness: harness_id.into(),
+                mode: harness.mode,
+                paths: harness.paths.clone(),
+                task: task.map(str::to_owned),
+                intent,
+                active_baseline,
+                context_digest: context_digest.to_string(),
+            };
+            let mut env = BTreeMap::from([
+                (
+                    "CALVE_PROJECT_ROOT".to_owned(),
+                    self.root.display().to_string(),
+                ),
+                ("CALVE_PACK".to_owned(), context.pack.clone()),
+                ("CALVE_GENERATION".to_owned(), generation.to_string()),
+                ("CALVE_EXECUTION".to_owned(), context.execution.clone()),
+                ("CALVE_HARNESS".to_owned(), harness_id.to_owned()),
+            ]);
+            if let Some(task) = task {
+                env.insert("CALVE_TASK".into(), task.into());
             }
-        }
-        let mut failure = (outcome.status != "succeeded").then(|| {
-            outcome
-                .reason
-                .clone()
-                .unwrap_or_else(|| "worker failed".into())
-        });
-        if outcome.truncated {
-            failure.get_or_insert_with(|| "worker output exceeded the configured limit".into());
-        }
-        if harness.mode == HarnessMode::Check && !proposals.is_empty() {
-            failure = Some("check harness proposed changes".into());
-        }
-        if let Some(path) = stray.first() {
-            failure = Some(format!(
-                "worker changed {path} outside the harness scope; the change was not recorded"
-            ));
-        }
-        let mut effects = Vec::new();
-        if failure.is_none() {
-            for (path, content) in &proposals {
-                if !in_scope(&harness.paths, path) {
-                    failure = Some(format!("worker proposed {path} outside the harness scope"));
-                    break;
+            self.client.heartbeat(&lease).await?;
+            // Whole-Project snapshot so writes outside the harness scope are detected, not ignored.
+            let before = self.file_digests(&[]).await?;
+            // The worker runs on a blocking thread; cancellation is checked from its own runtime.
+            let client = self.client.clone();
+            let handle = tokio::runtime::Handle::current();
+            let execution_id = execution;
+            // Polled every 500 ms: renews the lease at the runtime's heartbeat interval so a worker is never
+            // mistaken for a lost one, and notices cancellation.
+            let worker_lease = lease.clone();
+            let every = u32::try_from(lease.heartbeat_interval_ms / 500)
+                .unwrap_or(u32::MAX)
+                .max(1);
+            let polls = std::cell::Cell::new(0u32);
+            let cancelled = move || {
+                polls.set(polls.get() + 1);
+                if polls.get().is_multiple_of(every) {
+                    let _ = handle.block_on(client.heartbeat(&worker_lease));
                 }
-                // Same path rules as capture; agent proposals are validated before submission.
-                let check = crate::validate_locator(path);
-                if let Err(error) = check {
-                    failure = Some(error.to_string());
-                    break;
-                }
-                let digest = sha256(content);
-                let Some(d) = &domain else { break };
-                let effect = EffectProposal {
-                    kind: d.decl.put.clone(),
-                    target: ResourceRef {
-                        kind: d.decl.resource_kind.clone(),
-                        locator: path.clone(),
-                        version: None,
-                        extension: d.extension.clone(),
-                    },
-                    payload: json!({"digest":digest,"size":content.len(),"content":b64::encode(content)}),
-                    preconditions: vec![],
-                    outputs: vec![],
-                };
-                self.client.heartbeat(&lease).await?;
-                match self.client.submit_effect(&lease, effect).await {
-                    Ok(true) => effects.push(json!({"path":path,"digest":digest})),
-                    Ok(false) => {
-                        failure = Some(format!("the file extension rejected {path}"));
-                        break;
-                    }
-                    Err(error) => {
-                        failure = Some(error.message.clone());
-                        break;
-                    }
-                }
-            }
-        }
-        let state = match &failure {
-            None => {
-                self.client.heartbeat(&lease).await?;
-                self.client.complete_execution(&lease).await?;
-                "SUCCEEDED"
-            }
-            Some(reason) => {
+                handle
+                    .block_on(client.query(openaevc::protocol::Query::GetExecution {
+                        execution: execution_id,
+                    }))
+                    .is_ok_and(|value| value["state"] == "CANCELLED")
+            };
+            let root = self.root.clone();
+            let kind = profile.kind;
+            let outcome = tokio::task::spawn_blocking(move || {
+                run_worker(&launch, kind, &root, &env, &context, &cancelled)
+            })
+            .await
+            .map_err(|error| invalid(format!("worker supervisor failed: {error}")))??;
+            for chunk in outcome.logs.chunks(64) {
+                let text: Vec<Value> = chunk
+                    .iter()
+                    .map(|(stream, line)| json!({"stream":stream,"text":crate::truncate(line, LOG_CHUNK)}))
+                    .collect();
+                self.client.heartbeat(&lease).await.ok();
                 self.client
-                    .command(Command::FailExecution {
+                    .command(Command::AppendObservation {
                         execution,
                         lease: lease.id,
-                        reason: reason.clone(),
+                        kind: "org.calve.harness.log".into(),
+                        payload: Some(json!({"lines":text})),
+                        blob: None,
+                        related_resources: vec![],
+                        related_effects: vec![],
                     })
                     .await?;
-                "FAILED"
             }
-        };
-        event(
-            &self.db,
-            "execution.finished",
-            &execution.to_string(),
-            state,
-        )?;
-        crate::observe::record(
-            "execution",
-            json!({"execution":execution,"harness":harness_id,"provider":provider,"state":state,
-                "exit_code":outcome.exit_code,"effects":effects.len(),"reason":failure}),
-        );
-        Ok(
-            json!({"execution":execution,"work_unit":work_unit,"context":context_digest,"state":state,"harness":harness_id,
-            "provider":provider,"exit_code":outcome.exit_code,"reason":failure,"effects":effects,
-            "log_lines":outcome.logs.len(),"output_truncated":outcome.truncated}),
-        )
+            if outcome.status == "cancelled" {
+                event(
+                    &self.db,
+                    "execution.cancelled",
+                    &execution.to_string(),
+                    harness_id,
+                )?;
+                return Ok(json!({"execution":execution,"state":"CANCELLED","reason":outcome.reason}));
+            }
+            let mut proposals = outcome.proposals;
+            crate::journal::pause("execution.after_worker");
+            let after = self.file_digests(&[]).await?;
+            let mut changed: Vec<&String> = after
+                .iter()
+                .filter(|(path, digest)| before.get(*path) != Some(*digest))
+                .map(|(path, _)| path)
+                .collect();
+            changed.extend(before.keys().filter(|path| !after.contains_key(*path)));
+            let stray: Vec<&&String> = changed
+                .iter()
+                .filter(|path| harness.mode == HarnessMode::Check || !in_scope(&harness.paths, path))
+                .collect();
+            if outcome.status == "succeeded"
+                && harness.mode == HarnessMode::Change
+                && profile.kind == ProviderKind::LocalProcess
+            {
+                for path in &changed {
+                    if in_scope(&harness.paths, path) && after.contains_key(*path) {
+                        let content = crate::workspace_io::Workspace::open(&self.root)
+                            .and_then(|w| w.read(path, calve_integration_contract::content::INLINE_MAX))
+                            .map_err(|e| invalid(e.to_string()))?;
+                        proposals.push(((*path).clone(), content));
+                    }
+                }
+            }
+            let mut failure = (outcome.status != "succeeded").then(|| {
+                outcome
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "worker failed".into())
+            });
+            if outcome.truncated {
+                failure.get_or_insert_with(|| "worker output exceeded the configured limit".into());
+            }
+            if harness.mode == HarnessMode::Check && !proposals.is_empty() {
+                failure = Some("check harness proposed changes".into());
+            }
+            if let Some(path) = stray.first() {
+                failure = Some(format!(
+                    "worker changed {path} outside the harness scope; the change was not recorded"
+                ));
+            }
+            let mut effects = Vec::new();
+            if failure.is_none() {
+                for (path, content) in &proposals {
+                    if !in_scope(&harness.paths, path) {
+                        failure = Some(format!("worker proposed {path} outside the harness scope"));
+                        break;
+                    }
+                    // Same path rules as capture; agent proposals are validated before submission.
+                    let check = crate::validate_locator(path);
+                    if let Err(error) = check {
+                        failure = Some(error.to_string());
+                        break;
+                    }
+                    let digest = sha256(content);
+                    let Some(d) = &domain else { break };
+                    let effect = EffectProposal {
+                        kind: d.decl.put.clone(),
+                        target: ResourceRef {
+                            kind: d.decl.resource_kind.clone(),
+                            locator: path.clone(),
+                            version: None,
+                            extension: d.extension.clone(),
+                        },
+                        payload: json!({"digest":digest,"size":content.len(),"content":b64::encode(content)}),
+                        preconditions: vec![],
+                        outputs: vec![],
+                    };
+                    self.client.heartbeat(&lease).await?;
+                    match self.client.submit_effect(&lease, effect).await {
+                        Ok(true) => effects.push(json!({"path":path,"digest":digest})),
+                        Ok(false) => {
+                            failure = Some(format!("the file extension rejected {path}"));
+                            break;
+                        }
+                        Err(error) => {
+                            failure = Some(error.message.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+            let state = match &failure {
+                None => {
+                    self.client.heartbeat(&lease).await?;
+                    self.client.complete_execution(&lease).await?;
+                    "SUCCEEDED"
+                }
+                Some(reason) => {
+                    self.client
+                        .command(Command::FailExecution {
+                            execution,
+                            lease: lease.id,
+                            reason: reason.clone(),
+                        })
+                        .await?;
+                    "FAILED"
+                }
+            };
+            event(
+                &self.db,
+                "execution.finished",
+                &execution.to_string(),
+                state,
+            )?;
+            crate::observe::record(
+                "execution",
+                json!({"execution":execution,"harness":harness_id,"provider":provider,"state":state,
+                    "exit_code":outcome.exit_code,"effects":effects.len(),"reason":failure}),
+            );
+            Ok(
+                json!({"execution":execution,"work_unit":work_unit,"context":context_digest,"state":state,"harness":harness_id,
+                "provider":provider,"exit_code":outcome.exit_code,"reason":failure,"effects":effects,
+                "log_lines":outcome.logs.len(),"output_truncated":outcome.truncated}),
+            )
+        }
+        .await;
+        if let Err(error) = &granted {
+            let _ = self
+                .client
+                .command(Command::FailExecution {
+                    execution,
+                    lease: lease.id,
+                    reason: crate::truncate(&error.to_string(), 1024),
+                })
+                .await;
+        }
+        granted
+    }
+}
+
+/// Renews a lease every heartbeat interval from its own thread until dropped, so a slow step
+/// (a whole-Project digest on a loaded machine, a stalled disk write) never outlives it. The
+/// embedded runtime is called directly, so renewal does not wait for this task to be scheduled.
+struct LeaseKeeper {
+    stop: std::sync::Arc<(std::sync::Mutex<bool>, std::sync::Condvar)>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl LeaseKeeper {
+    fn start(client: crate::client::Client, lease: openaevc::protocol::Lease) -> Self {
+        let stop = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let every = Duration::from_millis(lease.heartbeat_interval_ms.max(100));
+        let handle = tokio::runtime::Handle::current();
+        let flag = stop.clone();
+        let thread = std::thread::spawn(move || {
+            let (lock, cv) = &*flag;
+            let mut stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
+            loop {
+                let (s, timeout) = cv
+                    .wait_timeout(stopped, every)
+                    .unwrap_or_else(|e| e.into_inner());
+                stopped = s;
+                if *stopped {
+                    return;
+                }
+                if timeout.timed_out() {
+                    drop(stopped);
+                    let _ = handle.block_on(client.heartbeat(&lease));
+                    stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
+                }
+            }
+        });
+        LeaseKeeper {
+            stop,
+            thread: Some(thread),
+        }
+    }
+}
+
+impl Drop for LeaseKeeper {
+    fn drop(&mut self) {
+        let (lock, cv) = &*self.stop;
+        *lock.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        cv.notify_all();
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
     }
 }
 

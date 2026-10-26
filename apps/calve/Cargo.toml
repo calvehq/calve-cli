@@ -34,6 +34,7 @@ tokio.workspace = true
 calve-integration-contract.workspace = true
 wat.workspace = true
 calve-testkit.workspace = true
+jiff.workspace = true
 openaevc.workspace = true
 openaevc-sdk.workspace = true
 rusqlite.workspace = true
