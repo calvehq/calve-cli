@@ -151,25 +151,32 @@ mod unix {
                 .map(|(_, v)| (*v).to_owned())
         };
         cfg!(target_os = "linux")
-            && !rw_roots(cwd, var("TMPDIR"), var("HOME"))
+            && !rw_roots(Some(cwd), var("TMPDIR"), var("HOME"))
                 .iter()
                 .any(|r| dir.starts_with(r))
     }
 
     /// The worker's read-write roots, from its own environment (the helper runs with exactly
     /// that environment, so the parent's `result_hidden` and the helper's Landlock rules agree).
+    /// The worker's read-write roots. Fails closed: an unknown cwd, an empty or relative path,
+    /// or `/` itself is left out rather than widening the rule.
     pub(super) fn rw_roots(
-        cwd: &Path,
+        cwd: Option<&Path>,
         tmpdir: Option<String>,
         home: Option<String>,
     ) -> Vec<PathBuf> {
         let tmp = tmpdir
             .filter(|t| !t.is_empty())
             .map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
-        [Some(tmp), Some(cwd.to_path_buf()), home.map(PathBuf::from)]
-            .into_iter()
-            .flatten()
-            .collect()
+        [
+            Some(tmp),
+            cwd.map(Path::to_path_buf),
+            home.map(PathBuf::from),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|p| p.is_absolute() && p.parent().is_some())
+        .collect()
     }
 
     fn kill_group(pgid: i32) {
@@ -527,7 +534,7 @@ mod unix {
         let abi = ABI::V2;
         let read = AccessFs::from_read(abi);
         let all = AccessFs::from_all(abi);
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+        let cwd = std::env::current_dir().ok();
         let mut rw: Vec<PathBuf> = [
             "/dev/null",
             "/dev/zero",
@@ -539,7 +546,7 @@ mod unix {
         .map(PathBuf::from)
         .collect();
         rw.extend(rw_roots(
-            &cwd,
+            cwd.as_deref(),
             std::env::var("TMPDIR").ok(),
             std::env::var("HOME").ok(),
         ));
@@ -648,4 +655,24 @@ mod windows {
 pub fn reap() -> Result<Vec<Value>> {
     // The parent-owned job dies with its parent (KILL_ON_JOB_CLOSE): nothing outlives it.
     Ok(vec![])
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::unix::rw_roots;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn read_write_roots_fail_closed() {
+        let roots = rw_roots(None, Some(String::new()), Some("/".into()));
+        assert_eq!(roots, vec![PathBuf::from("/tmp")]);
+        let roots = rw_roots(
+            Some(Path::new("rel")),
+            Some("/".into()),
+            Some(String::new()),
+        );
+        assert!(roots.is_empty(), "{roots:?}");
+        let roots = rw_roots(Some(Path::new("/w")), Some("/t".into()), Some("/h".into()));
+        assert_eq!(roots, ["/t", "/w", "/h"].map(PathBuf::from));
+    }
 }
