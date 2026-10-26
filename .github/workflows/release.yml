@@ -51,15 +51,21 @@ jobs:
         with:
           path: target/dist
           merge-multiple: true
-      - name: Combined SHA256SUMS and release-key attestations
+      # Build first, without the secret: compiling runs every dependency's build script, and
+      # none of them may see the release key.
+      - name: Build xtask (no secrets)
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          cargo build --locked -q -p xtask
+          ./target/debug/xtask sums --dist target/dist
+      - name: Release-key attestations (compiled binary only)
         env:
           CALVE_RELEASE_KEY: ${{ secrets.CALVE_RELEASE_KEY }}
         run: |
-          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
-          cargo run --locked -q -p xtask -- sums --dist target/dist
-          umask 077; printf '%s' "$CALVE_RELEASE_KEY" > "$RUNNER_TEMP/release.key"
-          cargo run --locked -q -p xtask -- attest --dist target/dist --key "$RUNNER_TEMP/release.key"
-          rm -f "$RUNNER_TEMP/release.key"
+          key="$RUNNER_TEMP/release.key"
+          trap 'rm -f "$key"' EXIT
+          umask 077; printf '%s' "$CALVE_RELEASE_KEY" > "$key"
+          ./target/debug/xtask attest --dist target/dist --key "$key"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: signed
