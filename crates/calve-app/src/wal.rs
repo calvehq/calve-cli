@@ -3,8 +3,9 @@
 //! Every working-tree mutation is one journaled step in `.calve/run/materialize/<op>/journal`:
 //! `m.intent` → preserve the verified original (`m.backup`, streamed from the same nofollow
 //! handle that was hashed) → mutate through a temp file with the strongest primitive the
-//! platform offers (exchange / no-replace) → post-mutation identity check (the destination is
-//! Calve's temp inode with the expected digest) → verify the displaced bytes → `m.done`.
+//! platform offers (exchange, or displace-then-place with two no-replace renames; creates and
+//! deletes are no-replace renames) → post-mutation identity check (the destination is Calve's
+//! temp inode with the expected digest) → verify the displaced bytes → `m.done`.
 //! Anything unexpected is `m.conflicted`: the displaced and Calve's bytes are kept under
 //! `.calve/conflicts/<op>/<step>/` and nothing is reversed automatically. These are check-then-act
 //! steps, not compare-and-swap: a concurrent writer is detected after the fact, never prevented.
@@ -26,23 +27,34 @@ use crate::{Error, Result};
 /// Platform mutation primitives (§14 table).
 pub(crate) trait Primitives {
     fn name(&self) -> &'static str;
-    /// Atomic exchange and no-replace rename are available.
+    /// Replace and delete never overwrite a file and always keep the displaced one: no-replace
+    /// rename is available (with exchange or displace-then-place for replacement).
     fn atomic(&self) -> bool;
-    fn exchange(&self, dir: &Dir, a: &str, b: &str) -> io::Result<()>;
     fn rename_noreplace(&self, dir: &Dir, from: &str, to: &str) -> io::Result<()>;
+    /// Puts `temp` at `name` and returns where the displaced `name` now is. The default
+    /// displaces then places, both no-replace: the original moves to `spare` (never copied,
+    /// never overwritten), then `temp` moves to `name`. Readers can see `name` absent between
+    /// the two; a file created there in that gap makes the second fail with `AlreadyExists`
+    /// and is kept. Platforms with an atomic exchange override this.
+    fn replace<'a>(
+        &self,
+        dir: &Dir,
+        temp: &'a str,
+        name: &str,
+        spare: &'a str,
+    ) -> io::Result<&'a str> {
+        self.rename_noreplace(dir, name, spare)?;
+        fault("materialize.replace.after_displace");
+        self.rename_noreplace(dir, temp, name)?;
+        Ok(spare)
+    }
 }
 
 #[cfg(target_os = "linux")]
 struct Linux;
 
 #[cfg(target_os = "linux")]
-impl Primitives for Linux {
-    fn name(&self) -> &'static str {
-        "linux-renameat2"
-    }
-    fn atomic(&self) -> bool {
-        true
-    }
+impl Linux {
     fn exchange(&self, dir: &Dir, a: &str, b: &str) -> io::Result<()> {
         Ok(rustix::fs::renameat_with(
             dir,
@@ -52,21 +64,92 @@ impl Primitives for Linux {
             rustix::fs::RenameFlags::EXCHANGE,
         )?)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn renameat2_noreplace(dir: &Dir, from: &str, to: &str) -> io::Result<()> {
+    Ok(rustix::fs::renameat_with(
+        dir,
+        from,
+        dir,
+        to,
+        rustix::fs::RenameFlags::NOREPLACE,
+    )?)
+}
+
+#[cfg(target_os = "linux")]
+impl Primitives for Linux {
+    fn name(&self) -> &'static str {
+        "linux-renameat2"
+    }
+    fn atomic(&self) -> bool {
+        true
+    }
     fn rename_noreplace(&self, dir: &Dir, from: &str, to: &str) -> io::Result<()> {
-        Ok(rustix::fs::renameat_with(
-            dir,
-            from,
-            dir,
-            to,
-            rustix::fs::RenameFlags::NOREPLACE,
-        )?)
+        renameat2_noreplace(dir, from, to)
+    }
+    fn replace<'a>(
+        &self,
+        dir: &Dir,
+        temp: &'a str,
+        name: &str,
+        _spare: &'a str,
+    ) -> io::Result<&'a str> {
+        self.exchange(dir, temp, name)?;
+        Ok(temp)
     }
 }
 
-/// A filesystem without exchange / no-replace (and the debug-build stand-in for one): creates go
+/// Debug builds: Linux no-replace renames with the default displace-then-place replacement,
+/// so the Windows algorithm runs under the Linux suites (`CALVE_FS_PRIMITIVES=displace`).
+#[cfg(target_os = "linux")]
+struct LinuxDisplace;
+
+#[cfg(target_os = "linux")]
+impl Primitives for LinuxDisplace {
+    fn name(&self) -> &'static str {
+        "linux-displace"
+    }
+    fn atomic(&self) -> bool {
+        true
+    }
+    fn rename_noreplace(&self, dir: &Dir, from: &str, to: &str) -> io::Result<()> {
+        renameat2_noreplace(dir, from, to)
+    }
+}
+
+/// Windows: handle-relative no-replace renames (NtSetInformationFile with the directory as
+/// RootDirectory, `calve_win_sec::rename_by_handle`) and displace-then-place replacement.
+#[cfg(windows)]
+struct Windows;
+
+#[cfg(windows)]
+impl Primitives for Windows {
+    fn name(&self) -> &'static str {
+        "windows-handle-rename"
+    }
+    fn atomic(&self) -> bool {
+        true
+    }
+    fn rename_noreplace(&self, dir: &Dir, from: &str, to: &str) -> io::Result<()> {
+        use cap_std::fs::OpenOptionsExt;
+        // DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE; full sharing so Calve never blocks
+        // another reader or writer (a holder without FILE_SHARE_DELETE fails this open).
+        let file = dir.open_with(
+            from,
+            OpenOptions::new()
+                .read(true)
+                .access_mode(0x0001_0000 | 0x80 | 0x0010_0000)
+                .share_mode(7)
+                .follow(FollowSymlinks::No),
+        )?;
+        calve_win_sec::rename_by_handle(&file, dir, to, false)
+    }
+}
+
+/// A filesystem without no-replace rename (and the debug-build stand-in for one): creates go
 /// through a no-replace hard link; replace and delete are refused unless `--allow-unsafe-fs`.
-/// ponytail: macOS `renamex_np` and Windows `ReplaceFileW` land with M5's platform work; until
-/// then those platforms use this path.
+/// macOS (`renameatx_np` swap/excl) is not wired yet and uses this path (PENDING, no host).
 struct Fallback;
 
 impl Primitives for Fallback {
@@ -76,44 +159,66 @@ impl Primitives for Fallback {
     fn atomic(&self) -> bool {
         false
     }
-    fn exchange(&self, _: &Dir, _: &str, _: &str) -> io::Result<()> {
-        Err(io::ErrorKind::Unsupported.into())
-    }
     fn rename_noreplace(&self, dir: &Dir, from: &str, to: &str) -> io::Result<()> {
         dir.hard_link(from, dir, to)?;
         dir.remove_file(from)
     }
+    fn replace<'a>(&self, _: &Dir, _: &'a str, _: &str, _: &'a str) -> io::Result<&'a str> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
 }
 
 /// The primitives for the Project's filesystem, probed in `.calve/tmp` (same filesystem as the
-/// tree). `CALVE_FS_PRIMITIVES=fallback` (debug builds) simulates a weak filesystem.
+/// tree). Debug builds: `CALVE_FS_PRIMITIVES=fallback` simulates a weak filesystem and
+/// `=displace` (Linux) uses displace-then-place replacement.
 pub(crate) fn primitives(root: &Path) -> Box<dyn Primitives> {
-    if cfg!(debug_assertions) && std::env::var("CALVE_FS_PRIMITIVES").is_ok_and(|v| v == "fallback")
-    {
+    let forced = std::env::var("CALVE_FS_PRIMITIVES").ok();
+    let forced = forced.as_deref().filter(|_| cfg!(debug_assertions));
+    if forced == Some("fallback") {
         return Box::new(Fallback);
     }
+    // Two probe files in `.calve/tmp`: the probe `f(dir, a, b)` runs with both present.
+    let probe = |f: &dyn Fn(&Dir, &str, &str) -> io::Result<()>| -> io::Result<()> {
+        let tmp = root.join(".calve/tmp");
+        std::fs::create_dir_all(&tmp)?;
+        let dir = Dir::open_ambient_dir(&tmp, cap_std::ambient_authority())?;
+        let (a, b) = (
+            format!(".probe-{}-a", uuid::Uuid::now_v7().simple()),
+            format!(".probe-{}-b", uuid::Uuid::now_v7().simple()),
+        );
+        dir.write(&a, b"a")?;
+        dir.write(&b, b"b")?;
+        let r = f(&dir, &a, &b);
+        let _ = dir.remove_file(&a);
+        let _ = dir.remove_file(&b);
+        let _ = dir.remove_file(format!("{a}-moved"));
+        r
+    };
+    // No-replace must refuse an existing target and move to a free one.
+    let noreplace = |p: &dyn Primitives| {
+        probe(&|dir, a, b| match p.rename_noreplace(dir, a, b) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                p.rename_noreplace(dir, a, &format!("{a}-moved"))
+            }
+            Ok(()) => Err(io::Error::other("no-replace rename replaced")),
+            Err(e) => Err(e),
+        })
+        .is_ok()
+    };
     #[cfg(target_os = "linux")]
     {
-        let probe = || -> io::Result<()> {
-            let tmp = root.join(".calve/tmp");
-            std::fs::create_dir_all(&tmp)?;
-            let dir = Dir::open_ambient_dir(&tmp, cap_std::ambient_authority())?;
-            let (a, b) = (
-                format!(".probe-{}-a", uuid::Uuid::now_v7().simple()),
-                format!(".probe-{}-b", uuid::Uuid::now_v7().simple()),
-            );
-            dir.write(&a, b"a")?;
-            dir.write(&b, b"b")?;
-            let r = Linux.exchange(&dir, &a, &b);
-            let _ = dir.remove_file(&a);
-            let _ = dir.remove_file(&b);
-            r
-        };
-        if probe().is_ok() {
+        if forced == Some("displace") && noreplace(&LinuxDisplace) {
+            return Box::new(LinuxDisplace);
+        }
+        if probe(&|dir, a, b| Linux.exchange(dir, a, b)).is_ok() {
             return Box::new(Linux);
         }
     }
-    let _ = root;
+    #[cfg(windows)]
+    if noreplace(&Windows) {
+        return Box::new(Windows);
+    }
+    let _ = noreplace;
     Box::new(Fallback)
 }
 
@@ -182,8 +287,54 @@ fn read_at(dir: &Dir, name: &str) -> io::Result<Vec<u8>> {
 fn sync_dir(dir: &Dir) -> io::Result<()> {
     #[cfg(unix)]
     dir.open(".")?.sync_all()?;
+    #[cfg(windows)]
+    calve_win_sec::flush_dir_handle(dir)?;
     let _ = dir;
     Ok(())
+}
+
+/// Debug builds: `CALVE_TEST_ENOSPC=<step>.temp|<step>.backup` makes that write fail with the
+/// platform's disk-full error (ENOSPC / ERROR_DISK_FULL).
+fn disk_full(point: &str) -> io::Result<()> {
+    if cfg!(debug_assertions) && std::env::var("CALVE_TEST_ENOSPC").is_ok_and(|p| p == point) {
+        return Err(io::Error::from_raw_os_error(if cfg!(windows) {
+            112
+        } else {
+            28
+        }));
+    }
+    Ok(())
+}
+
+/// Removes `name` from `dir`; on Windows a read-only file is made writable first (DeleteFile
+/// refuses read-only files; Calve only removes its own displaced, trash and temp copies).
+fn remove(dir: &Dir, name: &str) -> io::Result<()> {
+    match dir.remove_file(name) {
+        #[cfg(windows)]
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+            let md = dir.symlink_metadata(name)?;
+            if !md.is_file() || !md.permissions().readonly() {
+                return Err(e);
+            }
+            let mut perm = md.permissions();
+            perm.set_readonly(false);
+            dir.set_permissions(name, perm)?;
+            dir.remove_file(name)
+        }
+        r => r,
+    }
+}
+
+/// The permissions a replacement carries over from the file it displaces: the rwx bits on
+/// Unix (never setuid, setgid or sticky), the read-only flag on Windows.
+fn carried(original: cap_std::fs::Permissions) -> cap_std::fs::Permissions {
+    #[cfg(unix)]
+    {
+        use cap_std::fs::PermissionsExt;
+        cap_std::fs::Permissions::from_mode(original.mode() & 0o777)
+    }
+    #[cfg(not(unix))]
+    original
 }
 
 /// Owner-only file (0600) written and synced.
@@ -368,6 +519,7 @@ impl Wal {
                     f.read_to_end(&mut content)?;
                     let d = digest_of(&content);
                     if d == *before {
+                        disk_full(&format!("{}.backup", m.step))?;
                         write_private(&backup, &content)?;
                     }
                     Some(d)
@@ -387,12 +539,30 @@ impl Wal {
             Some(content) => {
                 // 3. Mutate through a synced temp file in the same directory.
                 let _ = dir.remove_file(&temp);
-                let mut f =
-                    dir.open_with(&temp, OpenOptions::new().write(true).create_new(true))?;
-                f.write_all(content)?;
-                f.sync_all()?;
-                let ino = f.metadata()?.ino();
-                drop(f);
+                let written = (|| -> io::Result<u64> {
+                    let mut f =
+                        dir.open_with(&temp, OpenOptions::new().write(true).create_new(true))?;
+                    disk_full(&format!("{}.temp", m.step))?;
+                    f.write_all(content)?;
+                    // A replacement keeps the displaced file's mode (an executable stays one).
+                    if m.before.is_some()
+                        && let Ok(md) = dir.symlink_metadata(name)
+                        && md.is_file()
+                    {
+                        f.set_permissions(carried(md.permissions()))?;
+                    }
+                    f.sync_all()?;
+                    f.metadata().map(|md| md.ino())
+                })();
+                // A failed write (ENOSPC, EIO) leaves no partial temp behind: the tree is
+                // untouched and a resume starts the step again.
+                let ino = match written {
+                    Ok(ino) => ino,
+                    Err(e) => {
+                        let _ = remove(dir, &temp);
+                        return Err(e.into());
+                    }
+                };
                 fault(&format!("materialize.{}.after_temp", m.step));
                 if m.before.is_none() {
                     match self.prims.rename_noreplace(dir, &temp, name) {
@@ -411,21 +581,49 @@ impl Wal {
                             return Err(e.into());
                         }
                     }
+                }
+                let trash = self.trash(&m.step);
+                if m.before.is_some() && dir.symlink_metadata(&trash).is_ok() {
+                    return self.conflict(
+                        m,
+                        "unexpected_trash",
+                        Some((dir, name)),
+                        &[(&trash, "trash"), (&temp, "ours")],
+                        &[],
+                    );
+                }
+                // Where the displaced original is after the mutation (replacement only).
+                let displaced: &str = if m.before.is_none() {
+                    &temp
                 } else if self.prims.atomic() {
-                    self.prims.exchange(dir, &temp, name)?;
+                    match self.prims.replace(dir, &temp, name, &trash) {
+                        Ok(at) => at,
+                        // Displaced, then someone created the path in the gap: keep all three.
+                        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                            return self.conflict(
+                                m,
+                                "created_concurrently",
+                                Some((dir, name)),
+                                &[(&trash, "displaced"), (&temp, "ours")],
+                                &[],
+                            );
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
                 } else {
                     // `--allow-unsafe-fs` only (checked before the run): the original is in the
                     // backup, but a write in the window before this rename is lost.
                     dir.rename(&temp, dir, name)?;
-                }
+                    &temp
+                };
                 sync_dir(dir)?;
                 fault(&format!("materialize.{}.after_mutate", m.step));
-                interleave(&format!("{}.after_mutate", m.step), dir, &temp);
+                interleave(&format!("{}.after_mutate", m.step), dir, displaced);
                 // Post-mutation identity: Calve's inode, with the expected digest.
                 let now = state(dir, name)?;
                 if now.as_ref().map(|(d, i)| (Some(d), *i)) != Some((m.after.as_ref(), ino)) {
-                    let displaced: &[(&str, &str)] = if m.before.is_some() && self.prims.atomic() {
-                        &[(&temp, "displaced")]
+                    let moves: &[(&str, &str)] = if m.before.is_some() && self.prims.atomic() {
+                        &[(displaced, "displaced")]
                     } else {
                         &[]
                     };
@@ -433,22 +631,22 @@ impl Wal {
                         m,
                         "post_mutation_identity",
                         Some((dir, name)),
-                        displaced,
+                        moves,
                         &[("ours", content)],
                     );
                 }
                 // 4. The displaced original must be what was preserved.
                 if m.before.is_some() && self.prims.atomic() {
-                    if digest_at(dir, &temp)? != m.before {
+                    if digest_at(dir, displaced)? != m.before {
                         return self.conflict(
                             m,
                             "displaced_changed",
                             Some((dir, name)),
-                            &[(&temp, "displaced")],
+                            &[(displaced, "displaced")],
                             &[("ours", content)],
                         );
                     }
-                    dir.remove_file(&temp)?;
+                    remove(dir, displaced)?;
                 }
             }
             None if m.before.is_some() => {
@@ -469,14 +667,15 @@ impl Wal {
                         &[],
                     );
                 }
-                dir.remove_file(&trash)?;
+                remove(dir, &trash)?;
             }
             None => {}
         }
         sync_dir(dir)?;
         self.append(
             "m.done",
-            json!({"step": m.step, "observed_after": m.after, "atomic": self.prims.atomic()}),
+            json!({"step": m.step, "observed_after": m.after, "atomic": self.prims.atomic(),
+                "primitives": self.prims.name()}),
         )?;
         fault(&format!("materialize.{}.after_done", m.step));
         Ok(Outcome::Done)
@@ -499,7 +698,7 @@ impl Wal {
             for (from, to) in moves {
                 if dir.symlink_metadata(from).is_ok_and(|md| md.is_file()) {
                     write_private(&cd.join(to), &read_at(dir, from)?)?;
-                    dir.remove_file(from)?;
+                    remove(dir, from)?;
                 }
             }
             current = digest_at(dir, name).unwrap_or_default();
@@ -558,7 +757,7 @@ impl Wal {
                 match stray(&dir, n) {
                     None => {}
                     Some(d) if Some(&d) == m.before.as_ref() || Some(&d) == m.after.as_ref() => {
-                        dir.remove_file(n)?
+                        remove(&dir, n)?
                     }
                     Some(_) => {
                         return self.conflict(
@@ -581,7 +780,7 @@ impl Wal {
         if cur == m.before {
             match stray(&dir, &temp) {
                 None => {}
-                Some(d) if Some(&d) == m.after.as_ref() => dir.remove_file(&temp)?,
+                Some(d) if Some(&d) == m.after.as_ref() => remove(&dir, &temp)?,
                 Some(_) => {
                     return self.conflict(
                         m,
@@ -602,6 +801,46 @@ impl Wal {
                 );
             }
             return self.forward(&dir, &name, m, bytes, backup_ok);
+        }
+        // Crashed between displace and place (two-rename replacement): the original is in the
+        // trash and Calve's bytes in the temp, both verified; finish placing (no-replace).
+        if cur.is_none()
+            && m.before.is_some()
+            && m.after.is_some()
+            && backup_ok
+            && stray(&dir, &trash) == m.before
+            && stray(&dir, &temp) == m.after
+        {
+            match self.prims.rename_noreplace(&dir, &temp, &name) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    return self.conflict(
+                        m,
+                        "created_concurrently",
+                        Some((&dir, &name)),
+                        &[(&trash, "displaced"), (&temp, "ours")],
+                        &[],
+                    );
+                }
+                Err(e) => return Err(e.into()),
+            }
+            sync_dir(&dir)?;
+            if digest_at(&dir, &name)? != m.after {
+                return self.conflict(
+                    m,
+                    "post_mutation_identity",
+                    Some((&dir, &name)),
+                    &[(&trash, "displaced")],
+                    &[],
+                );
+            }
+            remove(&dir, &trash)?;
+            sync_dir(&dir)?;
+            self.append(
+                "m.done",
+                json!({"step": m.step, "observed_after": m.after, "resolved_by": "reconcile"}),
+            )?;
+            return Ok(Outcome::Done);
         }
         self.conflict(
             m,
@@ -837,5 +1076,163 @@ mod tests {
         let mu = m("2", "y", None, Some(b"ours"));
         assert_eq!(w.apply(&mu, Some(b"ours")).unwrap(), Outcome::Done);
         assert_eq!(std::fs::read(root.join("y")).unwrap(), b"ours");
+    }
+
+    /// chmod: a replacement keeps the displaced file's rwx bits and drops setuid/setgid.
+    #[cfg(unix)]
+    #[test]
+    fn a_replacement_keeps_the_mode_without_setid_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        for (f, mode) in [("run.sh", 0o755), ("suid", 0o4755), ("ro", 0o444)] {
+            std::fs::write(root.join(f), b"old").unwrap();
+            std::fs::set_permissions(root.join(f), std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+        let mut w = wal(root);
+        for (i, f) in ["run.sh", "suid", "ro"].iter().enumerate() {
+            let mu = m(&i.to_string(), f, Some(b"old"), Some(b"new"));
+            assert_eq!(w.apply(&mu, Some(b"new")).unwrap(), Outcome::Done);
+        }
+        let mode = |f: &str| {
+            std::fs::metadata(root.join(f))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777
+        };
+        assert_eq!(mode("run.sh"), 0o755);
+        assert_eq!(mode("suid"), 0o755);
+        assert_eq!(mode("ro"), 0o444);
+        assert_eq!(std::fs::read(root.join("ro")).unwrap(), b"new");
+    }
+
+    /// A read-only file is replaced (keeping the flag) and deleted; nothing is left behind.
+    #[test]
+    fn read_only_files_are_replaced_and_deleted() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        for f in ["a", "b"] {
+            std::fs::write(root.join(f), b"old").unwrap();
+            let mut p = std::fs::metadata(root.join(f)).unwrap().permissions();
+            p.set_readonly(true);
+            std::fs::set_permissions(root.join(f), p).unwrap();
+        }
+        let mut w = wal(root);
+        let replace = m("1", "a", Some(b"old"), Some(b"new"));
+        assert_eq!(w.apply(&replace, Some(b"new")).unwrap(), Outcome::Done);
+        assert_eq!(std::fs::read(root.join("a")).unwrap(), b"new");
+        assert!(
+            std::fs::metadata(root.join("a"))
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
+        let delete = m("2", "b", Some(b"old"), None);
+        assert_eq!(w.apply(&delete, None).unwrap(), Outcome::Done);
+        assert!(!root.join("b").exists());
+        let names: Vec<_> = std::fs::read_dir(root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with(".calve-"))
+            .collect();
+        assert!(names.is_empty(), "{names:?}");
+    }
+
+    /// symlink: a symlink at the target is never followed; the file it points to is untouched.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_at_the_target_is_never_followed() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().join("tree");
+        std::fs::create_dir(&root).unwrap();
+        let outside = t.path().join("outside");
+        std::fs::write(&outside, b"old").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("a")).unwrap();
+        let mut w = wal(&root);
+        let mu = m("1", "a", Some(b"old"), Some(b"new"));
+        let r = w.apply(&mu, Some(b"new"));
+        assert!(
+            !matches!(r, Ok(Outcome::Done)),
+            "a symlinked target was materialized: {r:?}"
+        );
+        assert_eq!(std::fs::read(&outside).unwrap(), b"old");
+        assert!(
+            std::fs::symlink_metadata(root.join("a"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        // A delete through the symlink is refused the same way.
+        let mu = m("2", "a", Some(b"old"), None);
+        assert!(!matches!(w.apply(&mu, None), Ok(Outcome::Done)));
+        assert_eq!(std::fs::read(&outside).unwrap(), b"old");
+    }
+
+    /// Sharing violation: another process holds the file without FILE_SHARE_DELETE. The step
+    /// fails with the file untouched; once released, reconciliation completes it.
+    #[cfg(windows)]
+    #[test]
+    fn a_sharing_violation_fails_the_step_and_reconcile_completes_it() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        std::fs::write(root.join("a"), b"old").unwrap();
+        let mut w = wal(root);
+        assert_eq!(w.prims.name(), "windows-handle-rename");
+        let mu = m("1", "a", Some(b"old"), Some(b"new"));
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1) // FILE_SHARE_READ only
+            .open(root.join("a"))
+            .unwrap();
+        let e = w.apply(&mu, Some(b"new")).unwrap_err().to_string();
+        assert!(
+            e.contains("32") || e.to_lowercase().contains("used by another process"),
+            "{e}"
+        );
+        drop(held);
+        assert_eq!(std::fs::read(root.join("a")).unwrap(), b"old");
+        let records = Journal::open(&runs(&w.root).join(&w.op).join("journal"))
+            .unwrap()
+            .records;
+        assert_eq!(
+            w.reconcile(&records, &mu, Some(b"new")).unwrap(),
+            Outcome::Done
+        );
+        assert_eq!(std::fs::read(root.join("a")).unwrap(), b"new");
+    }
+
+    /// mkdir / rmdir: parents are created on demand (not journaled); a file in the parent chain
+    /// or a directory at the path is never replaced; rollback removes files only, so created
+    /// directories stay (documented limitation, ADR 0013).
+    #[test]
+    fn directories_are_created_on_demand_and_never_replaced() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        let mut w = wal(root);
+        let create = m("1", "x/y/new", None, Some(b"new"));
+        assert_eq!(w.apply(&create, Some(b"new")).unwrap(), Outcome::Done);
+        assert_eq!(std::fs::read(root.join("x/y/new")).unwrap(), b"new");
+        // A file where a parent directory is needed.
+        std::fs::write(root.join("f"), b"file").unwrap();
+        let under_file = m("2", "f/z", None, Some(b"z"));
+        assert!(matches!(
+            w.apply(&under_file, Some(b"z")).unwrap(),
+            Outcome::Conflicted(_)
+        ));
+        assert_eq!(std::fs::read(root.join("f")).unwrap(), b"file");
+        // A directory where a file is expected (replace and delete).
+        std::fs::create_dir(root.join("d")).unwrap();
+        std::fs::write(root.join("d/keep"), b"k").unwrap();
+        for (step, after) in [("3", Some(&b"n"[..])), ("4", None)] {
+            let mu = m(step, "d", Some(b"old"), after);
+            assert!(!matches!(w.apply(&mu, after), Ok(Outcome::Done)));
+            assert_eq!(std::fs::read(root.join("d/keep")).unwrap(), b"k");
+        }
+        // Rollback removes the file; the directories it needed stay.
+        assert_eq!(w.reverse(&create).unwrap(), Outcome::Done);
+        assert!(!root.join("x/y/new").exists());
+        assert!(root.join("x/y").is_dir());
     }
 }

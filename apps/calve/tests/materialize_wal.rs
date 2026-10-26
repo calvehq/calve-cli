@@ -77,8 +77,13 @@ fn walk(dir: &Path, prefix: &str, out: &mut Vec<(String, Vec<u8>)>) {
 
 /// v1 = {a.txt: one, dir/b.txt: bee}; v2 = {a.txt: two, c.txt: sea}. The tree starts at v2, so
 /// materializing v1 replaces a.txt (f1), deletes c.txt (f2) and creates dir/b.txt (f3).
-fn setup() -> T {
+/// `prims`: `CALVE_FS_PRIMITIVES` for every command (`displace` = the Windows replacement
+/// algorithm on Linux renames), or the probed default.
+fn setup_with(prims: Option<&str>) -> T {
     let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    if let Some(p) = prims {
+        env.vars.push(("CALVE_FS_PRIMITIVES".into(), p.into()));
+    }
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -127,6 +132,10 @@ fn setup() -> T {
     T { env, p, v1, v2 }
 }
 
+fn setup() -> T {
+    setup_with(None)
+}
+
 fn v1_tree() -> Vec<(String, Vec<u8>)> {
     vec![
         ("a.txt".into(), b"one\n".to_vec()),
@@ -136,9 +145,20 @@ fn v1_tree() -> Vec<(String, Vec<u8>)> {
 
 #[test]
 fn a_crash_at_every_record_boundary_converges_on_resume() {
-    let t = setup();
+    crash_at_every_boundary(None, &[]);
+}
+
+/// The displace-then-place replacement (Windows' algorithm), including a crash between its two
+/// renames.
+#[test]
+fn displace_then_place_converges_after_a_crash_at_every_boundary() {
+    crash_at_every_boundary(Some("displace"), &["materialize.replace.after_displace"]);
+}
+
+fn crash_at_every_boundary(prims: Option<&str>, extra: &[&str]) {
+    let t = setup_with(prims);
     let v2_tree = t.tree();
-    let points = [
+    let base = [
         "materialize.f1.after_intent",
         "materialize.f1.after_backup",
         "materialize.f1.after_temp",
@@ -154,7 +174,8 @@ fn a_crash_at_every_record_boundary_converges_on_resume() {
         "materialize.provenance.after_intent",
         "materialize.provenance.before_ack",
     ];
-    for point in points {
+    let points = base.iter().chain(extra);
+    for &point in points {
         let run = t.run(
             &[("CALVE_FAULT", point)],
             &["baseline", "materialize", &t.v1, "--apply"],
@@ -193,7 +214,16 @@ fn a_crash_at_every_record_boundary_converges_on_resume() {
 
 #[test]
 fn a_concurrent_writer_is_kept_and_nothing_is_reversed() {
-    let t = setup();
+    concurrent_writer(None);
+}
+
+#[test]
+fn displace_then_place_keeps_a_concurrent_writer() {
+    concurrent_writer(Some("displace"));
+}
+
+fn concurrent_writer(prims: Option<&str>) {
+    let t = setup_with(prims);
     // Between preserve (2) and mutate (3): the exchange displaces the writer's bytes.
     let a = t.root().join("a.txt");
     let run = t.run(
@@ -300,4 +330,76 @@ fn weak_filesystems_are_refused_unless_acknowledged_and_rollback_is_exact() {
     let back = t.ok(&["materialize", "rollback", &id, "--yes"]);
     assert_eq!(back["state"], "RolledBack", "{back}");
     assert_eq!(t.tree(), v2_tree);
+}
+
+/// ENOSPC while writing the temp file or the backup: the step fails, the tree is untouched, no
+/// partial file is left, and a resume (space freed) completes the operation.
+#[test]
+fn disk_full_leaves_the_tree_untouched_and_resume_completes() {
+    let t = setup();
+    let v2_tree = t.tree();
+    for point in ["f1.temp", "f1.backup"] {
+        let run = t.run(
+            &[("CALVE_TEST_ENOSPC", point)],
+            &["baseline", "materialize", &t.v1, "--apply"],
+        );
+        assert!(!run.success, "{point}");
+        assert!(
+            run.stderr.contains("No space left on device"),
+            "{point}: {}",
+            run.stderr
+        );
+        assert_eq!(t.tree(), v2_tree, "{point}: tree untouched");
+        let leftovers: Vec<_> = fs::read_dir(t.root())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with(".calve-"))
+            .collect();
+        assert!(leftovers.is_empty(), "{point}: {leftovers:?}");
+        let op = t.ops().last().unwrap().clone();
+        assert_eq!(op["state"], "Interrupted", "{point}: {op}");
+        let done = t.ok(&["materialize", "resume", op["op"].as_str().unwrap()]);
+        assert_eq!(done["state"], "Completed", "{point}: {done}");
+        assert_eq!(t.tree(), v1_tree(), "{point}");
+        assert_eq!(t.materialize(&t.v2)["state"], "Completed");
+    }
+}
+
+/// Two materializations started at once: one runs, the other is refused before writing; the
+/// tree ends exactly at the target and every operation is accounted for.
+#[test]
+fn concurrent_materializations_are_serialized() {
+    let t = setup();
+    let spawn = || {
+        std::process::Command::new(&t.env.calve)
+            .env("XDG_DATA_HOME", t.env.path().join("d"))
+            .env("XDG_CONFIG_HOME", t.env.path().join("c"))
+            .envs(t.env.vars.iter().map(|(k, v)| (k, v)))
+            .args(["--json", "--no-daemon-start", "--project", &t.p])
+            .args(["baseline", "materialize", &t.v1, "--apply"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let (a, b) = (spawn(), spawn());
+    let outs = [a.wait_with_output().unwrap(), b.wait_with_output().unwrap()];
+    let ok = outs.iter().filter(|o| o.status.success()).count();
+    let stderr: Vec<_> = outs
+        .iter()
+        .map(|o| String::from_utf8_lossy(&o.stderr).into_owned())
+        .collect();
+    assert!(ok >= 1, "{stderr:?}");
+    for (o, e) in outs.iter().zip(&stderr) {
+        if !o.status.success() {
+            // The project writer lock (or, if the first already journaled, the WAL gate).
+            assert!(
+                e.contains("PROJECT_LOCKED") || e.contains("unfinished_operation"),
+                "{e}"
+            );
+        }
+    }
+    assert_eq!(t.tree(), v1_tree());
+    let ops = t.ops();
+    assert!(ops.iter().all(|o| o["state"] == "Completed"), "{ops:?}");
 }
