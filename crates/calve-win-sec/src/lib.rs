@@ -919,6 +919,109 @@ mod handle_fs {
 #[cfg(windows)]
 pub use handle_fs::{flush_dir_handle, rename_by_handle};
 
+/// Which processes hold files open (Restart Manager; no administrator rights needed): for
+/// diagnosing a refused rename or delete. Directory handles (e.g. a process's working
+/// directory) are not reported.
+#[cfg(windows)]
+mod holders {
+    #![allow(unsafe_code)]
+
+    use std::io;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    use windows_sys::Win32::System::RestartManager::{
+        CCH_RM_SESSION_KEY, RM_PROCESS_INFO, RmEndSession, RmGetList, RmRegisterResources,
+        RmStartSession,
+    };
+
+    const ERROR_MORE_DATA: u32 = 234;
+
+    /// `(pid, application name)` of every process holding one of `files`.
+    pub fn file_holders(files: &[&Path]) -> io::Result<Vec<(u32, String)>> {
+        let mut session = 0u32;
+        let mut key = [0u16; CCH_RM_SESSION_KEY as usize + 1];
+        // SAFETY: `session` and `key` are writable for the call (key has room for the
+        // CCH_RM_SESSION_KEY characters and a NUL).
+        let rc = unsafe { RmStartSession(&mut session, 0, key.as_mut_ptr()) };
+        if rc != 0 {
+            return Err(io::Error::from_raw_os_error(rc as i32));
+        }
+        struct End(u32);
+        impl Drop for End {
+            fn drop(&mut self) {
+                // SAFETY: ends the session started above, once.
+                unsafe { RmEndSession(self.0) };
+            }
+        }
+        let _end = End(session);
+        let wide: Vec<Vec<u16>> = files
+            .iter()
+            .map(|p| p.as_os_str().encode_wide().chain(Some(0)).collect())
+            .collect();
+        let ptrs: Vec<*const u16> = wide.iter().map(|w| w.as_ptr()).collect();
+        // SAFETY: `ptrs` points to `ptrs.len()` NUL-terminated strings that outlive the call.
+        let rc = unsafe {
+            RmRegisterResources(
+                session,
+                ptrs.len() as u32,
+                ptrs.as_ptr(),
+                0,
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if rc != 0 {
+            return Err(io::Error::from_raw_os_error(rc as i32));
+        }
+        let mut infos: Vec<RM_PROCESS_INFO> = Vec::new();
+        loop {
+            let (mut needed, mut count, mut reasons) = (0u32, infos.len() as u32, 0u32);
+            // SAFETY: `infos` has room for `count` entries (null when empty, count 0).
+            let rc = unsafe {
+                RmGetList(
+                    session,
+                    &mut needed,
+                    &mut count,
+                    if infos.is_empty() {
+                        std::ptr::null_mut()
+                    } else {
+                        infos.as_mut_ptr()
+                    },
+                    &mut reasons,
+                )
+            };
+            if rc == ERROR_MORE_DATA {
+                // SAFETY: RM_PROCESS_INFO is plain data; zeroed entries are valid inputs.
+                infos.resize_with(needed as usize, || unsafe { std::mem::zeroed() });
+                continue;
+            }
+            if rc != 0 {
+                return Err(io::Error::from_raw_os_error(rc as i32));
+            }
+            infos.truncate(count as usize);
+            return Ok(infos
+                .iter()
+                .map(|i| {
+                    let n = i
+                        .strAppName
+                        .iter()
+                        .position(|c| *c == 0)
+                        .unwrap_or(i.strAppName.len());
+                    (
+                        i.Process.dwProcessId,
+                        String::from_utf16_lossy(&i.strAppName[..n]),
+                    )
+                })
+                .collect());
+        }
+    }
+}
+
+#[cfg(windows)]
+pub use holders::file_holders;
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -1145,5 +1248,149 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let dir = open_dir(d.path());
         flush_dir_handle(&dir).unwrap();
+    }
+
+    /// Isolation experiment (M5 E, ignored): how often does renaming a directory fail right
+    /// after a file is written into it, for PE bytes (an executable) vs. the same number of
+    /// non-PE bytes, single-threaded and 8 threads in parallel? `CALVE_FIXTURE_EXT` names the
+    /// PE file. Prints the counts; asserts nothing.
+    #[test]
+    #[ignore = "experiment"]
+    fn rename_after_write_experiment() {
+        // A 1 MiB prefix keeps the MZ/PE headers scanners key on without filling the disk.
+        let mut pe =
+            std::fs::read(std::env::var_os("CALVE_FIXTURE_EXT").expect("CALVE_FIXTURE_EXT"))
+                .unwrap();
+        pe.truncate(1 << 20);
+        let other = vec![0x5au8; pe.len()];
+        for (label, bytes) in [("pe", &pe), ("non-pe", &other)] {
+            for threads in [1usize, 8] {
+                let d = tempfile::tempdir().unwrap();
+                let fails = std::sync::atomic::AtomicUsize::new(0);
+                let codes = std::sync::Mutex::new(std::collections::BTreeMap::<i32, usize>::new());
+                std::thread::scope(|s| {
+                    for t in 0..threads {
+                        let (d, fails, codes) = (d.path(), &fails, &codes);
+                        s.spawn(move || {
+                            for i in 0..(200 / threads) {
+                                let a = d.join(format!("s-{t}-{i}"));
+                                std::fs::create_dir(&a).unwrap();
+                                std::fs::write(a.join("ext.exe"), bytes).unwrap();
+                                let b = d.join(format!("f-{t}-{i}"));
+                                let r = std::fs::rename(&a, &b);
+                                let _ = std::fs::remove_dir_all(&a);
+                                let _ = std::fs::remove_dir_all(&b);
+                                if let Err(e) = r {
+                                    fails.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    *codes
+                                        .lock()
+                                        .unwrap()
+                                        .entry(e.raw_os_error().unwrap_or(-1))
+                                        .or_default() += 1;
+                                }
+                            }
+                        });
+                    }
+                });
+                println!(
+                    "experiment {label} threads={threads}: {} of 200 renames failed {:?}",
+                    fails.into_inner(),
+                    codes.into_inner().unwrap()
+                );
+            }
+        }
+    }
+
+    /// Isolation experiment 2 (M5 E, ignored): rename a directory right after a process run
+    /// from it has exited (waited), vs. the same copy never executed. Small PE: whoami.exe.
+    #[test]
+    #[ignore = "experiment"]
+    fn rename_after_execute_experiment() {
+        // `CALVE_EXPERIMENT_EXE` (e.g. the unsigned 110 MB fixture) or a small signed tool;
+        // `CALVE_EXPERIMENT_N` iterations per configuration (default 160).
+        let exe = std::fs::read(
+            std::env::var_os("CALVE_EXPERIMENT_EXE")
+                .unwrap_or_else(|| r"C:\Windows\System32\whoami.exe".into()),
+        )
+        .unwrap();
+        let total: usize = std::env::var("CALVE_EXPERIMENT_N")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(160);
+        for run in [true, false] {
+            for threads in [1usize, 4] {
+                let d = tempfile::tempdir().unwrap();
+                let codes = std::sync::Mutex::new(std::collections::BTreeMap::<i32, usize>::new());
+                let retried_ok = std::sync::atomic::AtomicUsize::new(0);
+                std::thread::scope(|s| {
+                    for t in 0..threads {
+                        let (d, exe, codes, retried_ok) = (d.path(), &exe, &codes, &retried_ok);
+                        s.spawn(move || {
+                            for i in 0..(total / threads) {
+                                let a = d.join(format!("s-{t}-{i}"));
+                                std::fs::create_dir(&a).unwrap();
+                                let p = a.join("tool.exe");
+                                std::fs::write(&p, exe).unwrap();
+                                if run {
+                                    // Exit status irrelevant (the fixture expects a protocol on
+                                    // stdin): only that it ran and was waited for.
+                                    let mut c = Command::new(&p);
+                                    // `CALVE_EXPERIMENT_CWD=1`: the child runs with the directory
+                                    // being renamed as its working directory (as OpenAEVC's
+                                    // extension host does).
+                                    if std::env::var_os("CALVE_EXPERIMENT_CWD").is_some() {
+                                        c.current_dir(&a);
+                                    }
+                                    let _ = c
+                                        .stdin(Stdio::null())
+                                        .stdout(Stdio::null())
+                                        .stderr(Stdio::null())
+                                        .status()
+                                        .unwrap();
+                                }
+                                let b = d.join(format!("f-{t}-{i}"));
+                                if let Err(e) = std::fs::rename(&a, &b) {
+                                    *codes
+                                        .lock()
+                                        .unwrap()
+                                        .entry(e.raw_os_error().unwrap_or(-1))
+                                        .or_default() += 1;
+                                    // Does it succeed shortly after?
+                                    for _ in 0..50 {
+                                        std::thread::sleep(Duration::from_millis(20));
+                                        if std::fs::rename(&a, &b).is_ok() {
+                                            retried_ok
+                                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                            break;
+                                        }
+                                    }
+                                }
+                                let _ = std::fs::remove_dir_all(&a);
+                                let _ = std::fs::remove_dir_all(&b);
+                            }
+                        });
+                    }
+                });
+                println!(
+                    "experiment executed={run} threads={threads}: failed {:?} of {total}; succeeded on retry within 1 s: {}",
+                    codes.into_inner().unwrap(),
+                    retried_ok.into_inner()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn file_holders_names_the_process_holding_a_file() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("held.txt");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(file_holders(&[&f]).unwrap().is_empty());
+        let _held = std::fs::File::open(&f).unwrap();
+        let holders = file_holders(&[&f]).unwrap();
+        assert!(
+            holders.iter().any(|(pid, _)| *pid == std::process::id()),
+            "{holders:?}"
+        );
     }
 }

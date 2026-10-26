@@ -65,6 +65,40 @@ fn io(e: impl std::fmt::Display) -> InstallError {
     err("IO_ERROR", e.to_string())
 }
 
+/// Windows: which processes hold files under `dir` open (a refused rename's usual cause); a
+/// note for the error message. Directory handles (a process's working directory) are not
+/// visible to the Restart Manager, so "none" points at those.
+fn holders_note(dir: &Path) -> String {
+    #[cfg(windows)]
+    {
+        let files: Vec<PathBuf> = fs::read_dir(dir)
+            .map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect())
+            .unwrap_or_default();
+        let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+        return match calve_win_sec::file_holders(&refs) {
+            Ok(h) if h.is_empty() => "; no process holds a file in it open".into(),
+            Ok(h) => format!(
+                "; held open by {}",
+                h.iter()
+                    .map(|(pid, name)| format!("pid {pid} {name}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Err(e) => format!("; holders unknown ({e})"),
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        String::new()
+    }
+}
+
+/// An I/O error naming the operation and path (diagnosable on every platform).
+fn io_at<'a>(what: &'a str, path: &'a Path) -> impl Fn(std::io::Error) -> InstallError + 'a {
+    move |e| err("IO_ERROR", format!("{what} {}: {e}", path.display()))
+}
+
 fn gen_err(e: GenError) -> InstallError {
     match e {
         GenError::Refused(m) => err("CATALOG_UNTRUSTED", m),
@@ -140,12 +174,12 @@ fn write_json(path: &Path, v: &impl Serialize) -> Result<()> {
         fs::create_dir_all(p).map_err(io)?;
     }
     let tmp = path.with_extension(format!("tmp-{}", uuid::Uuid::now_v7().simple()));
-    let mut f = fs::File::create(&tmp).map_err(io)?;
+    let mut f = fs::File::create(&tmp).map_err(io_at("create", &tmp))?;
     f.write_all(&serde_json::to_vec_pretty(v).map_err(io)?)
         .and_then(|()| f.sync_all())
-        .map_err(io)?;
+        .map_err(io_at("write", &tmp))?;
     drop(f);
-    crate::workspace_io::rename_durable(&tmp, path).map_err(io)
+    crate::workspace_io::rename_durable(&tmp, path).map_err(io_at("rename into", path))
 }
 
 fn read_json<T: for<'a> Deserialize<'a> + Default>(path: &Path) -> Result<T> {
@@ -725,7 +759,7 @@ impl Installer {
             ));
         }
         j.append("I0.resolved", json!({"version": entry.version, "kind": entry.kind, "files": files.iter().map(|(r, f)| json!([r, f])).collect::<Vec<_>>(), "role": role}))
-            .map_err(io)?;
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Resolved)?;
 
         // I1: download every file in one transition (same accepted state), size-capped and
@@ -748,7 +782,7 @@ impl Installer {
             ".staging-{}",
             j.header["journal_id"].as_str().unwrap_or("x")
         ));
-        fs::create_dir_all(&staging).map_err(io)?;
+        fs::create_dir_all(&staging).map_err(io_at("create", &staging))?;
         let mut digests = BTreeMap::new();
         let mut bytes_by_role: BTreeMap<&str, Vec<u8>> = BTreeMap::new();
         for ((role_name, file), got) in files.iter().zip(fetched) {
@@ -796,12 +830,13 @@ impl Installer {
                 "refs" => "calve-refs.json".into(),
                 _ => "calve-ui.json".into(),
             };
-            fs::write(staging.join(&local), &bytes).map_err(io)?;
+            let to = staging.join(&local);
+            fs::write(&to, &bytes).map_err(io_at("write", &to))?;
             digests.insert(role_name.to_string(), info.sha256.clone());
             bytes_by_role.insert(role_name, bytes);
         }
         j.append("I1.downloaded", json!({"staging": staging.file_name().map(|n| n.to_string_lossy()), "digests": digests}))
-            .map_err(io)?;
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Downloaded)?;
 
         // I2: validation — kind rules, metadata, module, describe == signed metadata, then (with
@@ -943,7 +978,7 @@ impl Installer {
         };
         write_json(&staging.join("package.json"), &record)?;
         j.append("I2.validated", json!({"entrypoint": record.entrypoint}))
-            .map_err(io)?;
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Validated)?;
         Ok(Staged { staging, record })
     }
@@ -1030,14 +1065,20 @@ impl Installer {
         } else {
             // Read-only only after the move: renaming a directory to a new parent updates its
             // `..` entry, which needs write permission on the directory itself.
-            fs::rename(&staging, &final_dir).map_err(io)?;
+            fs::rename(&staging, &final_dir).map_err(|e| {
+                let base = io_at("rename staging to", &final_dir)(e);
+                err(
+                    base.code,
+                    format!("{}{}", base.message, holders_note(&staging)),
+                )
+            })?;
             set_read_only(&final_dir, true)?;
         }
         j.append(
             "I3.installed",
             json!({"dir": format!("{}/{}", record.id, record.native_digest())}),
         )
-        .map_err(io)?;
+        .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Installed)?;
         let mut pins = self.pins()?;
         let pin = Pin {
@@ -1053,7 +1094,7 @@ impl Installer {
             "I4.recorded",
             json!({"pin": pins.get(&record.id), "switched": switch && previous.is_some()}),
         )
-        .map_err(io)?;
+        .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Recorded)?;
         crate::journal::compact(
             jpath,
@@ -1209,21 +1250,24 @@ impl Installer {
         let retiring = self.paths.extension_dir.join(format!(".retiring-{jid}"));
         set_read_only(&dir, false)?;
         fs::rename(&dir, &retiring).map_err(io)?;
-        j.append("R0.retiring", json!({})).map_err(io)?;
+        j.append("R0.retiring", json!({}))
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Retiring)?;
         if in_use(r) {
             fs::rename(&retiring, &dir).map_err(io)?;
             set_read_only(&dir, true)?;
             j.append("R1.restored", json!({"reason": "in use"}))
-                .map_err(io)?;
+                .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
             return Err(err(
                 "EXTENSION_IN_USE",
                 format!("{}@{} became in use during retirement", r.id, r.version),
             ));
         }
-        j.append("R1.rechecked", json!({})).map_err(io)?;
+        j.append("R1.rechecked", json!({}))
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         remove_tree(&retiring)?;
-        j.append("R2.deleted", json!({})).map_err(io)?;
+        j.append("R2.deleted", json!({}))
+            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         crate::journal::compact(
             &jpath,
             &self.paths.journals().join("history"),
@@ -1274,9 +1318,9 @@ pub fn refs_get(paths: &Paths, hash: &str) -> Result<Option<Vec<u8>>> {
 /// Immutable means content-addressed and never rewritten by Calve, not tamper-proof against the
 /// same OS user (trusted boundary).
 fn set_read_only(dir: &Path, ro: bool) -> Result<()> {
-    for e in fs::read_dir(dir).map_err(io)? {
-        let p = e.map_err(io)?.path();
-        let mut perm = fs::metadata(&p).map_err(io)?.permissions();
+    for e in fs::read_dir(dir).map_err(io_at("list", dir))? {
+        let p = e.map_err(io_at("list", dir))?.path();
+        let mut perm = fs::metadata(&p).map_err(io_at("stat", &p))?.permissions();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1290,7 +1334,7 @@ fn set_read_only(dir: &Path, ro: bool) -> Result<()> {
         }
         #[cfg(not(unix))]
         perm.set_readonly(ro);
-        fs::set_permissions(&p, perm).map_err(io)?;
+        fs::set_permissions(&p, perm).map_err(io_at("set permissions on", &p))?;
     }
     #[cfg(unix)]
     {
@@ -1307,7 +1351,7 @@ fn set_read_only(dir: &Path, ro: bool) -> Result<()> {
 fn remove_tree(dir: &Path) -> Result<()> {
     if dir.exists() {
         let _ = set_read_only(dir, false);
-        fs::remove_dir_all(dir).map_err(io)?;
+        fs::remove_dir_all(dir).map_err(io_at("remove", dir))?;
     }
     Ok(())
 }
