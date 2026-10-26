@@ -1,0 +1,50 @@
+# cargo-deny policy (CI `deny` job). The license allowlist mirrors `xtask licenses`
+# (xtask/src/release.rs ALLOWED), which gates every release build per target.
+
+[graph]
+all-features = false
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[advisories]
+# Unsound advisories count for every dependency, not only direct ones: `lru` 0.12.5 (via
+# ratatui 0.28, shipped) has RUSTSEC-2026-0002 and RUSTSEC-2026-0253 and fails this check
+# until the console moves to ratatui 0.30 (no `lru`). Open M5 finding; not ignored.
+unsound = "all"
+# Every advisory fails the job; an exception needs an entry here with a reason.
+ignore = [
+    # `paste` is unmaintained (no vulnerability). It is a compile-time proc-macro of ratatui
+    # 0.28 (calve-console); nothing of it ships in the binary. Remove with the ratatui upgrade.
+    { id = "RUSTSEC-2024-0436", reason = "build-time proc-macro via ratatui; no runtime code; tracked for the console's ratatui upgrade" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# OpenAEVC v0.1.0 is fetched from its public tag (ADR 0003).
+allow-git = ["https://github.com/calvehq/openaevc.git"]

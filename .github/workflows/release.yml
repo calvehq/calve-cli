@@ -1,0 +1,137 @@
+name: Release
+
+# Builds, attests and verifies release archives for a version tag and stages them in a DRAFT
+# GitHub release. Publishing the draft is a manual, separately authorized step (ADR 0021).
+# Every action is pinned to a commit (tag in the comment). The release key is used only in the
+# `sign` job, which runs GitHub's own actions and shell commands, no third-party action.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: macos-13, target: x86_64-apple-darwin }
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # OpenAEVC v0.1.0 comes from its public tag over HTTPS; no deploy key (ADR 0003).
+      - name: Toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --target ${{ matrix.target }}
+          rustup default 1.95.0
+      - name: Archive, SBOM, license inventory and checksums
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          cargo run --locked -p xtask -- dist --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: target/dist/*
+
+  sign:
+    # The only job with the release key: first-party actions and shell only.
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: target/dist
+          merge-multiple: true
+      - name: Combined SHA256SUMS and release-key attestations
+        env:
+          CALVE_RELEASE_KEY: ${{ secrets.CALVE_RELEASE_KEY }}
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          cargo run --locked -q -p xtask -- sums --dist target/dist
+          umask 077; printf '%s' "$CALVE_RELEASE_KEY" > "$RUNNER_TEMP/release.key"
+          cargo run --locked -q -p xtask -- attest --dist target/dist --key "$RUNNER_TEMP/release.key"
+          rm -f "$RUNNER_TEMP/release.key"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed
+          path: target/dist/*
+
+  provenance:
+    # Keyless: an OIDC token, no stored key.
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed
+          path: release
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-checksums: release/SHA256SUMS
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Keyless signature on SHA256SUMS
+        run: cosign sign-blob --yes --bundle release/SHA256SUMS.sigstore.json release/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release
+          path: release/*
+
+  verify:
+    # A clean install per OS from the release files alone, as a user would do it.
+    needs: provenance
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - shell: bash
+        env:
+          # The release public key (hex), published with the release notes (ADR 0021).
+          RELEASE_PUBKEY: ${{ vars.CALVE_RELEASE_PUBKEY }}
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          cargo run --locked -q -p xtask -- verify-release --dist release \
+            --pubkey "$RELEASE_PUBKEY" --smoke
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          cosign verify-blob --bundle release/SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/$REPO/.github/workflows/release.yml@$REF" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com release/SHA256SUMS
+
+  draft:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: release
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          files: release/*

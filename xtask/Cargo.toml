@@ -12,7 +12,12 @@ publish = false
 workspace = true
 
 [dependencies]
+base64.workspace = true
 calve-api.workspace = true
+ed25519-dalek.workspace = true
+flate2.workspace = true
+getrandom.workspace = true
+sha2.workspace = true
 clap.workspace = true
 calve-app.workspace = true
 openaevc.workspace = true

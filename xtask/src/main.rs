@@ -1,11 +1,13 @@
 //! Repository checks that should remain independent of Calve's runtime modules.
 #![forbid(unsafe_code)]
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 mod json_schemas;
 mod openaevc_rules;
+mod release;
 
 use calve_app::compatibility::{OPENAEVC_REVISION, OPENAEVC_TAG};
 
@@ -14,7 +16,12 @@ const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
        cargo run --bin xtask -- cli-reference [--check]
        cargo run --bin xtask -- json-schemas [--write] [--from <recordings>]
        cargo run --bin xtask -- dist [--target <triple>]
-       cargo run --bin xtask -- sbom <output.json>";
+       cargo run --bin xtask -- sbom <output.json> [--target <triple>]
+       cargo run --bin xtask -- licenses [--target <triple>]
+       cargo run --bin xtask -- sums --dist <dir>
+       cargo run --bin xtask -- release-key --out <dir>
+       cargo run --bin xtask -- attest --dist <dir> --key <release.key>
+       cargo run --bin xtask -- verify-release --dist <dir> --pubkey <hex> [--smoke]";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -24,7 +31,29 @@ fn main() {
         }
         Some("check-isolation") if args.len() == 1 => check_isolation(),
         Some("dist") => dist(&args[1..]),
-        Some("sbom") if args.len() == 2 => sbom(Path::new(&args[1])),
+        Some("sbom") if args.len() == 2 || args.len() == 4 => {
+            let target = flag(&args, "--target").unwrap_or_else(host_triple);
+            sbom(Path::new(&args[1]), &target)
+        }
+        Some("licenses") => licenses(&flag(&args, "--target").unwrap_or_else(host_triple)),
+        Some("sums") => match flag(&args, "--dist") {
+            Some(d) => sums(Path::new(&d)),
+            None => Err(USAGE.into()),
+        },
+        Some("release-key") => match flag(&args, "--out") {
+            Some(d) => release_key(Path::new(&d)),
+            None => Err(USAGE.into()),
+        },
+        Some("attest") => match (flag(&args, "--dist"), flag(&args, "--key")) {
+            (Some(d), Some(k)) => attest(Path::new(&d), Path::new(&k)),
+            _ => Err(USAGE.into()),
+        },
+        Some("verify-release") => match (flag(&args, "--dist"), flag(&args, "--pubkey")) {
+            (Some(d), Some(k)) => {
+                verify_release(Path::new(&d), &k, args.iter().any(|a| a == "--smoke"))
+            }
+            _ => Err(USAGE.into()),
+        },
         Some("json-schemas") if args.len() <= 4 => json_schemas::run(
             &workspace_root(),
             args.iter().any(|a| a == "--write"),
@@ -62,92 +91,61 @@ fn run(command: &mut std::process::Command) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-/// CycloneDX 1.5 SBOM of every locked dependency, derived from Cargo.lock.
-fn sbom(output: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let lock: toml::Value = fs::read_to_string(workspace_root().join("Cargo.lock"))?.parse()?;
-    let components: Vec<serde_json::Value> = lock["package"]
-        .as_array()
-        .ok_or("Cargo.lock has no packages")?
-        .iter()
-        .map(|package| {
-            let name = package["name"].as_str().unwrap_or_default();
-            let version = package["version"].as_str().unwrap_or_default();
-            let field = |key: &str, default: &str| {
-                package
-                    .get(key)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(default)
-                    .to_owned()
-            };
-            serde_json::json!({
-                "type": "library",
-                "name": name,
-                "version": version,
-                "purl": format!("pkg:cargo/{name}@{version}"),
-                "properties": [
-                    {"name": "cargo:source", "value": field("source", "workspace")},
-                    {"name": "cargo:checksum", "value": field("checksum", "")},
-                ],
-            })
+fn flag(args: &[String], name: &str) -> Option<String> {
+    let i = args.iter().position(|a| a == name)?;
+    args.get(i + 1).cloned()
+}
+
+fn host_triple() -> String {
+    std::process::Command::new("rustc")
+        .arg("-vV")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|text| {
+            text.lines()
+                .find_map(|l| l.strip_prefix("host: ").map(str::to_owned))
         })
-        .collect();
-    let count = components.len();
-    let document = serde_json::json!({
-        "bomFormat": "CycloneDX",
-        "specVersion": "1.5",
-        "version": 1,
-        "metadata": {"component": {"type": "application", "name": "calve", "version": env!("CARGO_PKG_VERSION")}},
-        "components": components,
-    });
-    fs::write(output, serde_json::to_vec_pretty(&document)?)?;
-    println!("wrote {count} components to {}", output.display());
+        .unwrap_or_else(|| "unknown".into())
+}
+
+type DynResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+/// CycloneDX SBOM of the dependencies compiled into `calve`/`calved` for `target` (R7).
+fn sbom(output: &Path, target: &str) -> DynResult {
+    let packages = release::shipped_packages(&workspace_root(), "calve", target)?;
+    let doc = release::sbom(&packages, env!("CARGO_PKG_VERSION"), target);
+    fs::write(output, serde_json::to_vec_pretty(&doc)?)?;
+    println!(
+        "wrote {} components for {target} to {}",
+        packages.len(),
+        output.display()
+    );
     Ok(())
 }
 
-/// Packs `files` under a top-level `name/` directory into a reproducible `.tar.gz`: sorted
-/// entries, fixed mtime, numeric owner, and gzip without a timestamp.
-fn archive(
-    dist: &Path,
-    name: &str,
-    files: &[(PathBuf, String)],
-    epoch: &str,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let dir = dist.join(name);
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir)?;
-    for (source, file) in files {
-        fs::copy(source, dir.join(file))?;
+/// Every shipped dependency's license must be satisfiable from the allowlist (R13).
+fn licenses(target: &str) -> DynResult {
+    let packages = release::shipped_packages(&workspace_root(), "calve", target)?;
+    let bad = release::license_violations(&packages);
+    if !bad.is_empty() {
+        return Err(format!(
+            "licenses outside the allowlist for {target}:\n{}",
+            bad.join("\n")
+        )
+        .into());
     }
-    let tar = std::process::Command::new("tar")
-        .current_dir(dist)
-        .args([
-            "--sort=name",
-            "--owner=0",
-            "--group=0",
-            "--numeric-owner",
-            &format!("--mtime=@{epoch}"),
-            "-cf",
-            "-",
-            name,
-        ])
-        .stdout(std::process::Stdio::piped())
-        .spawn()?;
-    let gzip = std::process::Command::new("gzip")
-        .args(["-n", "-9"])
-        .stdin(tar.stdout.ok_or("tar produced no output")?)
-        .output()?;
-    if !gzip.status.success() {
-        return Err("gzip failed".into());
-    }
-    let path = dist.join(format!("{name}.tar.gz"));
-    fs::write(&path, gzip.stdout)?;
-    fs::remove_dir_all(&dir)?;
-    Ok(path)
+    println!(
+        "{} shipped packages for {target}: licenses allowed",
+        packages.len()
+    );
+    Ok(())
 }
 
-/// Builds release archives (core and extensions separately), a signed first-party catalog
-/// snapshot when a seed is given, the SBOM and SHA256SUMS (PLAN §51).
-fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+/// Builds the release archive for one target, its SBOM, third-party license inventory and
+/// `SHA256SUMS-<triple>` (PLAN §51; ADR 0021). Paths are remapped so the binaries do not depend
+/// on where the source was checked out (R12); archives need no platform `tar` (R9).
+fn dist(args: &[String]) -> DynResult {
     let mut target: Option<String> = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -158,23 +156,31 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
     let root = workspace_root();
     let version = env!("CARGO_PKG_VERSION");
-    let host = || {
-        std::process::Command::new("rustc")
-            .arg("-vV")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .and_then(|text| {
-                text.lines()
-                    .find_map(|l| l.strip_prefix("host: ").map(str::to_owned))
-            })
-            .unwrap_or_else(|| "unknown".into())
+    let triple = target.clone().unwrap_or_else(host_triple);
+    let packages = release::shipped_packages(&root, "calve", &triple)?;
+    let bad = release::license_violations(&packages);
+    if !bad.is_empty() {
+        return Err(format!("licenses outside the allowlist:\n{}", bad.join("\n")).into());
+    }
+    let home = std::env::var("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".cargo")))
+        .unwrap_or_default();
+    let remap = format!(
+        "--remap-path-prefix={}=/src --remap-path-prefix={}=/cargo",
+        root.display(),
+        home.display()
+    );
+    let rustflags = match std::env::var("RUSTFLAGS") {
+        Ok(f) if !f.is_empty() => format!("{f} {remap}"),
+        _ => remap,
     };
-    let triple = target.clone().unwrap_or_else(host);
     let mut build = std::process::Command::new("cargo");
     build
         .current_dir(&root)
-        .args(["build", "--release", "--locked", "-p", "calve"]);
+        .env("RUSTFLAGS", rustflags)
+        .env("CARGO_INCREMENTAL", "0")
+        .args(["build", "--release", "--locked", "-p", "calve", "--bins"]);
     if let Some(target) = &target {
         build.args(["--target", target]);
     }
@@ -188,9 +194,10 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         ""
     };
-    let dist = root.join("dist");
+    // Under target/ (ignored): release files are never committed by accident.
+    let dist = root.join("target/dist");
     fs::create_dir_all(&dist)?;
-    let epoch = std::env::var("SOURCE_DATE_EPOCH")
+    let epoch: u64 = std::env::var("SOURCE_DATE_EPOCH")
         .ok()
         .or_else(|| {
             std::process::Command::new("git")
@@ -200,42 +207,291 @@ fn dist(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 .ok()
                 .and_then(|o| String::from_utf8(o.stdout).ok())
                 .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty())
         })
-        .unwrap_or_else(|| "0".into());
-    let docs = ["LICENSE", "NOTICE", "README.md"].map(|f| (root.join(f), f.to_owned()));
-    let mut core: Vec<(PathBuf, String)> = ["calve", "calved"]
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let name = format!("calve-{version}-{triple}");
+    let inventory = dist.join(format!("{name}.THIRD-PARTY-LICENSES.txt"));
+    fs::write(&inventory, release::license_inventory(&packages))?;
+    let mut files: Vec<(PathBuf, String, bool)> = ["calve", "calved"]
         .iter()
-        .map(|b| (bin_dir.join(format!("{b}{exe}")), format!("{b}{exe}")))
+        .map(|b| (bin_dir.join(format!("{b}{exe}")), format!("{b}{exe}"), true))
         .collect();
-    core.extend(docs.iter().cloned());
-    let mut outputs = vec![archive(
-        &dist,
-        &format!("calve-{version}-{triple}"),
-        &core,
-        &epoch,
-    )?];
-
+    files.extend(["LICENSE", "NOTICE", "README.md"].map(|f| (root.join(f), f.to_owned(), false)));
+    files.push((inventory.clone(), "THIRD-PARTY-LICENSES.txt".into(), false));
     // Extensions ship from calve-extensions through the signed TUF catalog (plan §4); the core
     // archive carries no extension binaries.
-
-    let sbom_path = dist.join(format!("calve-{version}.cdx.json"));
-    sbom(&sbom_path)?;
+    let mut outputs = vec![release::archive(&dist, &name, &files, epoch)?];
+    fs::remove_file(&inventory)?;
+    let sbom_path = dist.join(format!("{name}.cdx.json"));
+    fs::write(
+        &sbom_path,
+        serde_json::to_vec_pretty(&release::sbom(&packages, version, &triple))?,
+    )?;
     outputs.push(sbom_path);
-    let mut sums = String::new();
+    let mut sums = BTreeMap::new();
     for output in &outputs {
-        let digest = openaevc::crypto::sha256(&fs::read(output)?).to_string();
-        let name = output.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        sums.push_str(&format!(
-            "{}  {name}\n",
-            digest.trim_start_matches("sha256:")
-        ));
+        let file = output
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_owned();
+        sums.insert(file, release::sha256_hex(&fs::read(output)?));
     }
-    fs::write(dist.join(format!("SHA256SUMS-{triple}")), sums)?;
+    fs::write(
+        dist.join(format!("SHA256SUMS-{triple}")),
+        release::render_sums(&sums),
+    )?;
     for output in outputs {
         println!("{}", output.display());
     }
     Ok(())
+}
+
+/// Combines every `SHA256SUMS-<triple>` in `dist` into `SHA256SUMS` (refusing conflicts).
+fn sums(dist: &Path) -> DynResult {
+    let mut all = BTreeMap::new();
+    for e in fs::read_dir(dist)? {
+        let p = e?.path();
+        let n = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if n.starts_with("SHA256SUMS-") && !n.ends_with(".intoto.json") {
+            for (file, digest) in release::parse_sums(&fs::read_to_string(&p)?)? {
+                if all
+                    .insert(file.clone(), digest.clone())
+                    .is_some_and(|d| d != digest)
+                {
+                    return Err(format!("{file} has different digests across targets").into());
+                }
+            }
+        }
+    }
+    fs::write(dist.join("SHA256SUMS"), release::render_sums(&all))?;
+    println!("SHA256SUMS: {} files", all.len());
+    Ok(())
+}
+
+/// A new ed25519 release key (`release.key`, hex seed; `release.pub`, hex public key), refused
+/// inside a git worktree.
+fn release_key(dir: &Path) -> DynResult {
+    let abs = std::path::absolute(dir)?;
+    if abs.ancestors().any(|a| a.join(".git").exists()) {
+        return Err(format!(
+            "{} is inside a git worktree; keep keys outside",
+            abs.display()
+        )
+        .into());
+    }
+    if dir.join("release.key").exists() {
+        return Err("release.key exists; refusing to overwrite".into());
+    }
+    fs::create_dir_all(dir)?;
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).map_err(|e| format!("random: {e}"))?;
+    let key = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let path = dir.join("release.key");
+    fs::write(&path, release::hex(&seed))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+    }
+    let public = release::hex(key.verifying_key().as_bytes());
+    fs::write(dir.join("release.pub"), &public)?;
+    println!(
+        "release public key {public} (key id {})",
+        release::key_id(&key.verifying_key())
+    );
+    Ok(())
+}
+
+/// Signs each `SHA256SUMS-<triple>` as an in-toto Statement (DSSE) over its files.
+fn attest(dist: &Path, key: &Path) -> DynResult {
+    let key = ed25519_dalek::SigningKey::from_bytes(&release::read_hex_key(key)?);
+    let root = workspace_root();
+    let git = |args: &[&str]| -> String {
+        std::process::Command::new("git")
+            .current_dir(&root)
+            .args(args)
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_owned())
+            .unwrap_or_default()
+    };
+    let rustc = std::process::Command::new("rustc")
+        .arg("-V")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default();
+    let dirty = !git(&["status", "--porcelain", "--untracked-files=no"]).is_empty();
+    let lock = release::sha256_hex(&fs::read(root.join("Cargo.lock"))?);
+    let mut n = 0;
+    for e in fs::read_dir(dist)? {
+        let p = e?.path();
+        let name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_owned();
+        let Some(triple) = name.strip_prefix("SHA256SUMS-") else {
+            continue;
+        };
+        if triple.ends_with(".intoto.json") {
+            continue;
+        }
+        let subjects = release::parse_sums(&fs::read_to_string(&p)?)?;
+        for (file, digest) in &subjects {
+            if release::sha256_hex(&fs::read(dist.join(file))?) != *digest {
+                return Err(format!("{file} does not match {name}").into());
+            }
+        }
+        let predicate = serde_json::json!({
+            "target": triple,
+            "source": {"repository": env!("CARGO_PKG_REPOSITORY"), "revision": git(&["rev-parse", "HEAD"]), "dirty": dirty},
+            "cargo_lock_sha256": lock,
+            "toolchain": rustc,
+            "source_date_epoch": std::env::var("SOURCE_DATE_EPOCH").ok(),
+            "openaevc": {"tag": OPENAEVC_TAG, "revision": OPENAEVC_REVISION},
+        });
+        let env = release::attest(&key, &subjects, predicate);
+        fs::write(
+            dist.join(format!("{name}.intoto.json")),
+            serde_json::to_vec_pretty(&env)?,
+        )?;
+        n += 1;
+    }
+    if n == 0 {
+        return Err("no SHA256SUMS-<triple> in dist".into());
+    }
+    println!(
+        "{n} attestation(s) signed by key {}",
+        release::key_id(&key.verifying_key())
+    );
+    Ok(())
+}
+
+/// Verifies a release directory as a user would: every file against `SHA256SUMS`, every
+/// attestation against the release key and the files it names; with `--smoke`, unpacks this
+/// host's archive into an empty directory and runs it with fresh data and config directories.
+fn verify_release(dist: &Path, pubkey: &str, smoke: bool) -> DynResult {
+    let key_bytes: [u8; 32] = release::hex_decode(pubkey.trim())?
+        .try_into()
+        .map_err(|_| "public key must be 32 bytes of hex")?;
+    let key = ed25519_dalek::VerifyingKey::from_bytes(&key_bytes)?;
+    let sums = release::parse_sums(&fs::read_to_string(dist.join("SHA256SUMS"))?)?;
+    for (file, digest) in &sums {
+        let got = release::sha256_hex(&fs::read(dist.join(file))?);
+        if got != *digest {
+            return Err(format!("{file}: sha256 {got} != {digest}").into());
+        }
+    }
+    let mut attested = BTreeSet::new();
+    for e in fs::read_dir(dist)? {
+        let p = e?.path();
+        let name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_owned();
+        if !name.ends_with(".intoto.json") {
+            continue;
+        }
+        let statement =
+            release::verify_attestation(&serde_json::from_slice(&fs::read(&p)?)?, &key)?;
+        for s in statement["subject"].as_array().into_iter().flatten() {
+            let file = s["name"].as_str().ok_or("subject name")?;
+            let digest = s["digest"]["sha256"].as_str().ok_or("subject digest")?;
+            if sums.get(file).map(String::as_str) != Some(digest) {
+                return Err(format!("{name}: {file} differs from SHA256SUMS").into());
+            }
+            attested.insert(file.to_owned());
+        }
+    }
+    let unattested: Vec<&String> = sums.keys().filter(|f| !attested.contains(*f)).collect();
+    if !unattested.is_empty() {
+        return Err(format!("not covered by a valid attestation: {unattested:?}").into());
+    }
+    println!(
+        "{} files match SHA256SUMS and valid attestations",
+        sums.len()
+    );
+    if smoke {
+        smoke_test(dist)?;
+    }
+    Ok(())
+}
+
+/// Clean install of this host's archive: nothing but the archive, fresh XDG directories, no
+/// cargo or source tree on the paths it uses.
+fn smoke_test(dist: &Path) -> DynResult {
+    let triple = host_triple();
+    let archive = fs::read_dir(dist)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(&format!("-{triple}.tar.gz")))
+        })
+        .ok_or_else(|| format!("no archive for {triple}"))?;
+    let work = tempfile_dir()?;
+    release::unpack(&archive, &work)?;
+    let dir = fs::read_dir(&work)?.next().ok_or("empty archive")??.path();
+    let exe = if cfg!(windows) { ".exe" } else { "" };
+    let calve = dir.join(format!("calve{exe}"));
+    let run = |args: &[&str]| -> DynResult<String> {
+        let out = std::process::Command::new(&calve)
+            .env_clear()
+            .env("HOME", work.join("home"))
+            .env("XDG_DATA_HOME", work.join("data"))
+            .env("XDG_CONFIG_HOME", work.join("config"))
+            .env("PATH", "/usr/bin:/bin")
+            .args(["--json", "--no-daemon-start"])
+            .args(args)
+            .output()?;
+        if !out.status.success() {
+            return Err(format!("calve {args:?}: {}", String::from_utf8_lossy(&out.stderr)).into());
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    let project = work.join("project");
+    let p = project.to_str().ok_or("path")?;
+    let version = run(&["version"])?;
+    run(&["init", p])?;
+    run(&["--project", p, "intent", "create", "smoke"])?;
+    run(&["--project", p, "pack", "create", "smoke"])?;
+    let status = run(&["--project", p, "status"])?;
+    for f in [
+        "LICENSE",
+        "NOTICE",
+        "THIRD-PARTY-LICENSES.txt",
+        &format!("calved{exe}"),
+    ] {
+        if !dir.join(f).is_file() {
+            return Err(format!("archive lacks {f}").into());
+        }
+    }
+    println!(
+        "clean install from {}: version, init, intent, pack, status OK ({} bytes of status)",
+        archive.display(),
+        status.len()
+    );
+    let _ = version;
+    let _ = fs::remove_dir_all(&work);
+    Ok(())
+}
+
+fn tempfile_dir() -> DynResult<PathBuf> {
+    let dir = std::env::temp_dir().join(format!(
+        "calve-smoke-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 /// Renders docs/reference/cli.md from the clap command tree so the reference never drifts.
