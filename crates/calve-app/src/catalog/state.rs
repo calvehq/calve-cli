@@ -268,6 +268,52 @@ pub fn replay(
     Ok(set)
 }
 
+/// Removes delegated role files that no longer verify under the generation's own top-level
+/// metadata (a refresh copies the previous generation, then updates only what it touched: a
+/// lazily fetched role pinned to an older snapshot version is stale, not corrupt). They are
+/// fetched and verified again when next needed; everything that stays passes [`replay`].
+fn prune_stale_delegations(
+    bootstrap: &[u8],
+    gen_dir: &Path,
+    at: jiff::Timestamp,
+) -> Result<(), String> {
+    let rd = |n: &str| fs::read(gen_dir.join(n)).map_err(|e| format!("{n}: {e}"));
+    let mut set = TrustedMetadataSet::from_root(bootstrap).map_err(|e| e.to_string())?;
+    let mut v = set.root().version + 1;
+    while let Ok(b) = fs::read(gen_dir.join(format!("root_history/{v}.root.json"))) {
+        set.update_root(&b).map_err(|e| format!("root v{v}: {e}"))?;
+        v += 1;
+    }
+    set.update_timestamp(&rd("timestamp.json")?, at)
+        .map_err(|e| format!("timestamp: {e}"))?;
+    set.update_snapshot(&rd("snapshot.json")?, at)
+        .map_err(|e| format!("snapshot: {e}"))?;
+    set.update_targets(&rd("targets.json")?, at)
+        .map_err(|e| format!("targets: {e}"))?;
+    let mut todo = vec!["targets".to_owned()];
+    while let Some(parent) = todo.pop() {
+        let kids: Vec<String> = set
+            .targets_role(&parent)
+            .and_then(|t| t.delegations.as_ref())
+            .map(|d| d.roles.iter().map(|r| r.name.clone()).collect())
+            .unwrap_or_default();
+        for k in kids {
+            if set.targets_role(&k).is_some() {
+                continue;
+            }
+            let file = gen_dir.join(format!("{}.json", encode_role(&k)));
+            if let Ok(b) = fs::read(&file) {
+                if set.update_delegated_targets(&b, &k, &parent, at).is_ok() {
+                    todo.push(k);
+                } else {
+                    fs::remove_file(&file).map_err(|e| format!("{k}: {e}"))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct Catalog {
     pub dir: PathBuf,
@@ -417,6 +463,10 @@ impl Catalog {
             }
         };
         crash(Step::ClientAccepted)?;
+        if let Err(e) = prune_stale_delegations(&self.bootstrap, &tmp.join(TUF_DIR), now) {
+            let _ = fs::remove_dir_all(&tmp);
+            return Err(GenError::Policy(format!("trust state: {e}")));
+        }
         let digest = state_digest(&tmp)?;
         let mut state = json!({
             "repo_id": self.repo_id, "gen": n, "parent_gen": self.active, "parent_state_digest": self.active_state_digest,

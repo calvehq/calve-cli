@@ -371,3 +371,28 @@ fn fg15_delegated_role_named_like_a_calve_file_cannot_collide() {
         assert_eq!(reopened.active, c.active, "{name}");
     }
 }
+
+/// A refresh after the publisher re-signed its role (new version pinned by the new snapshot)
+/// must leave a loadable state: the previous generation's lazily loaded role is stale, so it is
+/// pruned from the new generation and fetched again on demand (found by the M5 delegated
+/// publisher workflow: before, the next open was RecoveryRequired).
+#[test]
+fn fg15_refresh_after_a_delegated_role_changed_stays_loadable() {
+    let mut r = repo();
+    publish(&mut r, b"v1");
+    let d = tempfile::tempdir().unwrap();
+    let mut c = boot(&r, d.path());
+    let m = Mirror::dir(r.path());
+    c.resolve(&m, "acme/pkg", None).unwrap().unwrap();
+    publish(&mut r, b"v2");
+    c.refresh(&m, None).unwrap();
+    let g = d.path().join(format!("gen-{}", c.active));
+    assert!(
+        !g.join("tuf/acme.json").exists(),
+        "the stale role is not carried into the new generation"
+    );
+    let mut c = Catalog::open(d.path()).expect("state stays loadable");
+    let got = c.fetch_all(&m, &["acme/pkg"], None).unwrap();
+    assert_eq!(got[0].as_ref().unwrap().1, b"v2");
+    Catalog::open(d.path()).expect("loadable after the role is fetched again");
+}
