@@ -373,10 +373,21 @@ fn reaping_checks_parent_and_start_time() {
             .spawn()
             .unwrap();
         let pid = victim.id() as i32;
-        let forged = calve_app::journal::Journal::create(
-            &dir.join("forged.journal"),
+        // A record whose id is not ours, or does not match its file name, is never acted on
+        // (its id names files reaping would delete).
+        let traversal = calve_app::journal::Journal::create(
+            &dir.join("ffffffffffffffffffffffffffffffff.journal"),
             "spawn",
-            "forged",
+            "../../../victim",
+            serde_json::json!({"pgid": 1, "helper_pid": 1, "start_time": "1", "parent_pid": 999_999_999, "parent_start_time": "1"}),
+        )
+        .unwrap();
+        drop(traversal);
+        let id = "0123456789abcdef0123456789abcdef";
+        let forged = calve_app::journal::Journal::create(
+            &dir.join(format!("{id}.journal")),
+            "spawn",
+            id,
             serde_json::json!({"pgid": pid, "helper_pid": pid, "start_time": "1",
                 "parent_pid": 999_999_999, "parent_start_time": "1", "program": "x"}),
         )

@@ -404,6 +404,7 @@ name = "calve-win-sec"
 version = "0.1.0"
 dependencies = [
  "tempfile",
+ "tokio",
  "windows-sys 0.59.0",
 ]
 

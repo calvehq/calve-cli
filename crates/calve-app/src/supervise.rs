@@ -145,15 +145,31 @@ mod unix {
     /// Whether Landlock can hide the spawn directory from this worker: it lies outside the
     /// worker's read-write roots (directory, temp, home). Linux only.
     fn result_hidden(dir: &Path, cwd: &Path, env: &[(&str, &str)]) -> bool {
-        let home = env
-            .iter()
-            .find(|(k, _)| *k == "HOME")
-            .map(|(_, v)| PathBuf::from(v));
+        let var = |k: &str| {
+            env.iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_owned())
+        };
         cfg!(target_os = "linux")
-            && ![Some(std::env::temp_dir()), Some(cwd.to_path_buf()), home]
+            && !rw_roots(cwd, var("TMPDIR"), var("HOME"))
                 .iter()
-                .flatten()
                 .any(|r| dir.starts_with(r))
+    }
+
+    /// The worker's read-write roots, from its own environment (the helper runs with exactly
+    /// that environment, so the parent's `result_hidden` and the helper's Landlock rules agree).
+    pub(super) fn rw_roots(
+        cwd: &Path,
+        tmpdir: Option<String>,
+        home: Option<String>,
+    ) -> Vec<PathBuf> {
+        let tmp = tmpdir
+            .filter(|t| !t.is_empty())
+            .map_or_else(|| PathBuf::from("/tmp"), PathBuf::from);
+        [Some(tmp), Some(cwd.to_path_buf()), home.map(PathBuf::from)]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 
     fn kill_group(pgid: i32) {
@@ -207,6 +223,17 @@ mod unix {
         let started = Instant::now();
         let conn = loop {
             match listener.accept() {
+                // Linux: only the helper may report (any other same-user connector is dropped).
+                #[cfg(target_os = "linux")]
+                Ok((s, _))
+                    if rustix::net::sockopt::socket_peercred(&s)
+                        .map(|c| c.pid.as_raw_nonzero().get())
+                        .ok()
+                        != Some(pgid) =>
+                {
+                    drop(s);
+                    continue;
+                }
                 Ok((s, _)) => break s,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if child.try_wait()?.is_some() || started.elapsed() > Duration::from_secs(30) {
@@ -362,10 +389,19 @@ mod unix {
             if parent_alive {
                 continue;
             }
+            // The id names the files reaping removes: it must be ours (32 hex) and match the
+            // journal's own file name.
             let id = opened.journal.header["journal_id"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned();
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
+            if id.len() != 32 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || id != stem {
+                continue;
+            }
             let pgid = b["pgid"].as_i64().unwrap_or(0) as i32;
             // The recorded helper still runs (same start time), or it is gone and its orphaned
             // group remains (a PID is not reused as a group id while members exist). A live
@@ -448,15 +484,19 @@ mod unix {
         // 4. Landlock: the worker can read system paths and work in its directory, temp and
         // home; the spawn directory (runtime dir) is outside every rule.
         #[cfg(target_os = "linux")]
-        restrict_worker(&dir);
+        let landlock = restrict_worker(&dir);
+        #[cfg(not(target_os = "linux"))]
+        let landlock = "unsupported";
         // 5. The worker inherits the helper's group, stdio, environment and directory.
         let started = Instant::now();
         let status = Command::new(&argv[0]).args(&argv[1..]).status();
         let result = match status {
             Ok(s) => {
-                json!({"exit_code": s.code(), "signal": s.signal(), "wall_ms": started.elapsed().as_millis() as u64})
+                json!({"exit_code": s.code(), "signal": s.signal(), "wall_ms": started.elapsed().as_millis() as u64, "landlock": landlock})
             }
-            Err(e) => json!({"exit_code": 127, "signal": null, "spawn_error": e.to_string()}),
+            Err(e) => {
+                json!({"exit_code": 127, "signal": null, "spawn_error": e.to_string(), "landlock": landlock})
+            }
         };
         crate::journal::fault("helper.before_result");
         // 6. Report, then wait for the ack; without one, the result file.
@@ -478,14 +518,16 @@ mod unix {
         0
     }
 
+    /// Applies the worker ruleset; returns how far the kernel enforced it.
     #[cfg(target_os = "linux")]
-    fn restrict_worker(spawn_dir: &Path) {
+    fn restrict_worker(spawn_dir: &Path) -> &'static str {
         use landlock::{
             ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
         };
         let abi = ABI::V2;
         let read = AccessFs::from_read(abi);
         let all = AccessFs::from_all(abi);
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         let mut rw: Vec<PathBuf> = [
             "/dev/null",
             "/dev/zero",
@@ -495,14 +537,12 @@ mod unix {
         ]
         .iter()
         .map(PathBuf::from)
-        .chain([std::env::temp_dir()])
         .collect();
-        if let Ok(cwd) = std::env::current_dir() {
-            rw.push(cwd);
-        }
-        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-            rw.push(home);
-        }
+        rw.extend(rw_roots(
+            &cwd,
+            std::env::var("TMPDIR").ok(),
+            std::env::var("HOME").ok(),
+        ));
         // Read-only system paths, never a parent of the spawn directory. The read-write roots
         // stay even when one contains it (then the spawn records are not hidden; the spawn
         // journal says so): taking a worker's home away would break it silently.
@@ -526,7 +566,7 @@ mod unix {
             .handle_access(all)
             .and_then(|r| r.create());
         let Ok(mut r) = ruleset else {
-            return;
+            return "none";
         };
         for p in ro
             .iter()
@@ -536,7 +576,7 @@ mod unix {
             if let Ok(fd) = PathFd::new(&p) {
                 r = match r.add_rule(PathBeneath::new(fd, read)) {
                     Ok(r) => r,
-                    Err(_) => return,
+                    Err(_) => return "none",
                 };
             }
         }
@@ -544,11 +584,15 @@ mod unix {
             if let Ok(fd) = PathFd::new(&p) {
                 r = match r.add_rule(PathBeneath::new(fd, all)) {
                     Ok(r) => r,
-                    Err(_) => return,
+                    Err(_) => return "none",
                 };
             }
         }
-        let _ = r.restrict_self();
+        match r.restrict_self().map(|st| st.ruleset) {
+            Ok(landlock::RulesetStatus::FullyEnforced) => "full",
+            Ok(landlock::RulesetStatus::PartiallyEnforced) => "partial",
+            _ => "none",
+        }
     }
 }
 

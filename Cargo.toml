@@ -48,7 +48,7 @@ sha2 = "0.10"
 landlock = "0.4"
 cap-std = "3.4"
 cap-fs-ext = "3.4"
-rustix = { version = "1", features = ["fs", "process"] }
+rustix = { version = "1", features = ["fs", "process", "net"] }
 signal-hook = "0.3"
 proptest = "1.11"
 # TUF verifier (ADR 0007, G1-TUF): exact pin; any bump reruns conformance x3 + regression tests.
