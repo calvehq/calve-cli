@@ -182,10 +182,27 @@ fn a_lost_attempt_resumes_or_requires_rollback() {
         // normal one, however slow the machine is.
         t.env.vars.retain(|(k, _)| k != "CALVE_EXECUTION_LEASE_MS");
         std::thread::sleep(std::time::Duration::from_secs(7));
-        t.ok(&["execution", "list", "--pack", &pack]);
+        // Kept for diagnosis: once (M5 closeout, idle host) a resume here found the crashed
+        // attempt still live; print its lease and events if that recurs.
+        let executions = t.ok(&["execution", "list", "--pack", &pack]);
         let session = t.session_of(&pack)["session"].as_str().unwrap().to_owned();
         if applied {
-            let refused = t.fails(&["capture", "resume", &session]);
+            let resumed = t.env.run(&t.args(&["capture", "resume", &session]));
+            if resumed.success {
+                for e in executions.as_array().into_iter().flatten() {
+                    let id = e["id"].as_str().unwrap_or_default();
+                    eprintln!(
+                        "{point}: execution {e}\nlogs {}",
+                        t.ok(&["execution", "logs", id])
+                    );
+                }
+            }
+            assert!(
+                !resumed.success,
+                "{point}: resume unexpectedly succeeded: {}",
+                resumed.value
+            );
+            let refused = resumed.stderr;
             assert!(refused.contains("CAPTURE_INCOMPLETE"), "{point}: {refused}");
             assert_eq!(t.session_of(&pack)["state"], "Lost");
             let rolled = t.ok(&["capture", "rollback", &session, "--yes"]);
@@ -228,6 +245,10 @@ fn an_interrupted_chunk_upload_resumes_to_identical_content() {
             "capture.submit.1.1.after_send",
         ] {
             let mut t = T::new();
+            // Resume must happen within the crashed attempt's lease (see the test above).
+            t.env
+                .vars
+                .push(("CALVE_EXECUTION_LEASE_MS".into(), "3600000".into()));
             let pack = t.pack("P");
             fs::write(t.root().join("big.toy"), &big).unwrap();
             t.crash(
