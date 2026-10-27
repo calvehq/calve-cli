@@ -31,10 +31,13 @@ fn daemon_ok(env: &Env, args: &[&str]) -> Value {
 /// nothing is reported as succeeded.
 #[test]
 fn crash_during_execution_is_reported_lost() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
+    // A file domain, so the execution really runs (without one it fails right after the lease
+    // grant; that failure is now recorded, where it used to sit RUNNING until LOST).
+    env.enable_toy(&root);
     env.ok(&[
         "provider",
         "add",

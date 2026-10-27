@@ -1,5 +1,5 @@
 //! Lease experiments (M5 E; the M4 120 s anomalies). Explicit, deterministic versions of the
-//! suspected causes with a short lease (`CALVE_EXECUTION_LEASE_MS=5000`, the minimum):
+//! suspected causes with a short lease ([`LEASE_MS`]):
 //! - heartbeat: a worker running longer than the lease keeps it renewed;
 //! - expiry: a step that blocks longer than the lease without renewing it (debug hook
 //!   `CALVE_TEST_PAUSE=execution.after_worker=<ms>`, standing in for a slow whole-Project
@@ -13,11 +13,16 @@ use std::process::Command;
 
 use serde_json::Value;
 
+/// 20 s (renewed every 5 s): a worker or blocked step of 30 s outlives it, while scheduling
+/// stalls of up to 15 s (seen ≤ 4.4 s on a loaded WSL host; 5 s, the minimum, proved too tight
+/// under the full recorded suite) do not.
+const LEASE_MS: &str = "20000";
+
 fn calve(data: &Path, vars: &[(&str, &str)], args: &[&str]) -> (bool, Value, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
         .env("XDG_DATA_HOME", data.join("d"))
         .env("XDG_CONFIG_HOME", data.join("c"))
-        .env("CALVE_EXECUTION_LEASE_MS", "5000")
+        .env("CALVE_EXECUTION_LEASE_MS", LEASE_MS)
         .envs(vars.iter().copied())
         .args(["--json", "--no-daemon-start"])
         .args(args)
@@ -84,8 +89,8 @@ fn setup(file_domain: bool) -> T {
 [harnesses.long]
 provider = "shell"
 mode = "check"
-timeout_ms = 60000
-command = ["-c", "sleep 12"]
+timeout_ms = 120000
+command = ["-c", "sleep 30"]
 
 [harnesses.quick]
 provider = "shell"
@@ -184,7 +189,7 @@ fn a_worker_longer_than_the_lease_keeps_it() {
     let t = setup(true);
     let (state, _, gaps) = run(&t, "long", &[]);
     assert_eq!(state, "SUCCEEDED");
-    assert!(gaps.iter().all(|g| *g < 5000), "{gaps:?}");
+    assert!(gaps.iter().all(|g| *g < 20_000), "{gaps:?}");
 }
 
 #[test]
@@ -193,7 +198,7 @@ fn a_step_blocked_longer_than_the_lease_does_not_lose_the_execution() {
     let (state, _, _) = run(
         &t,
         "quick",
-        &[("CALVE_TEST_PAUSE", "execution.after_worker=9000")],
+        &[("CALVE_TEST_PAUSE", "execution.after_worker=30000")],
     );
     assert_eq!(state, "SUCCEEDED");
 }
@@ -206,7 +211,7 @@ fn an_error_after_the_lease_is_granted_fails_the_execution() {
     let t = setup(false);
     let (state, execution, _) = run(&t, "quick", &[]);
     assert_eq!(state, "FAILED", "{execution}");
-    std::thread::sleep(std::time::Duration::from_secs(7));
+    std::thread::sleep(std::time::Duration::from_secs(22));
     let shown = ok(
         &t.data,
         &["--project", &t.p, "execution", "show", &execution],
@@ -227,7 +232,7 @@ fn without_the_keeper_the_blocked_step_loses_the_execution() {
         &t,
         "quick",
         &[
-            ("CALVE_TEST_PAUSE", "execution.after_worker=9000"),
+            ("CALVE_TEST_PAUSE", "execution.after_worker=30000"),
             ("CALVE_TEST_NO_LEASE_KEEPER", "1"),
         ],
     );
