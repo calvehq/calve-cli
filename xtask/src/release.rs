@@ -5,7 +5,7 @@
 //! - Archives are ustar + gzip written in-process: sorted entries, fixed mode/owner/mtime
 //!   (`SOURCE_DATE_EPOCH`), no gzip timestamp or name (R9: no GNU tar).
 //! - `calve-<version>-<triple>.cdx.json` covers exactly the dependencies compiled into that
-//!   target's binaries (`cargo metadata --filter-platform`, normal dependencies; R7).
+//!   target's binaries (feature-resolved `cargo tree`, normal dependencies; R7).
 //! - Every shipped dependency's SPDX license expression must be satisfiable from [`ALLOWED`]
 //!   (R13); `THIRD-PARTY-LICENSES.txt` in each archive lists them.
 //! - An attestation is an in-toto v1 Statement (the subjects of one `SHA256SUMS-<triple>`, the
@@ -168,8 +168,12 @@ pub struct Package {
     pub checksum: Option<String>,
 }
 
-/// The packages compiled into `root_package`'s binaries for `target`: normal dependencies of
-/// the resolve graph filtered to that platform (dev- and build-only dependencies excluded).
+/// The packages compiled into `root_package`'s binaries for `target`: its normal dependencies
+/// in the feature-resolved graph (`cargo tree -e normal,no-proc-macro`), i.e. exactly what the
+/// build links. (`cargo metadata`'s resolve also lists optional dependencies no enabled feature
+/// activates, e.g. ratatui's termwiz backend, so it over-reports.) Proc macros run only at
+/// build time and are excluded; workspace crates are recorded with source `workspace`, never a
+/// local path.
 pub fn shipped_packages(
     workspace: &Path,
     root_package: &str,
@@ -178,20 +182,25 @@ pub fn shipped_packages(
     let out = std::process::Command::new("cargo")
         .current_dir(workspace)
         .args([
-            "metadata",
-            "--format-version",
-            "1",
+            "tree",
             "--locked",
-            "--filter-platform",
+            "-p",
+            root_package,
+            "-e",
+            "normal,no-proc-macro",
+            "--target",
             target,
+            "--prefix",
+            "none",
+            "--format",
+            "{p}|{l}",
         ])
         .output()?;
     if !out.status.success() {
-        return Err(format!("cargo metadata: {}", String::from_utf8_lossy(&out.stderr)).into());
+        return Err(format!("cargo tree: {}", String::from_utf8_lossy(&out.stderr)).into());
     }
-    let meta: Value = serde_json::from_slice(&out.stdout)?;
     let lock: toml::Value = fs::read_to_string(workspace.join("Cargo.lock"))?.parse()?;
-    let checksums: BTreeMap<(String, String), String> = lock["package"]
+    let locked: BTreeMap<(String, String), (String, Option<String>)> = lock["package"]
         .as_array()
         .into_iter()
         .flatten()
@@ -201,64 +210,47 @@ pub fn shipped_packages(
                     p.get("name")?.as_str()?.to_owned(),
                     p.get("version")?.as_str()?.to_owned(),
                 ),
-                p.get("checksum")?.as_str()?.to_owned(),
+                (
+                    p.get("source")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("workspace")
+                        .to_owned(),
+                    p.get("checksum")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_owned),
+                ),
             ))
         })
         .collect();
-    let packages: BTreeMap<&str, &Value> = meta["packages"]
-        .as_array()
-        .ok_or("cargo metadata: packages")?
-        .iter()
-        .filter_map(|p| Some((p["id"].as_str()?, p)))
-        .collect();
-    let nodes: BTreeMap<&str, &Value> = meta["resolve"]["nodes"]
-        .as_array()
-        .ok_or("cargo metadata: resolve")?
-        .iter()
-        .filter_map(|n| Some((n["id"].as_str()?, n)))
-        .collect();
-    let root = packages
-        .values()
-        .find(|p| p["name"] == root_package && p["source"].is_null())
-        .and_then(|p| p["id"].as_str())
-        .ok_or_else(|| format!("no workspace package {root_package}"))?;
-    let mut seen: BTreeSet<&str> = BTreeSet::new();
-    let mut todo = vec![root];
-    while let Some(id) = todo.pop() {
-        for dep in nodes
-            .get(id)
-            .and_then(|n| n["deps"].as_array())
-            .into_iter()
-            .flatten()
-        {
-            let normal = dep["dep_kinds"]
-                .as_array()
-                .is_some_and(|k| k.iter().any(|k| k["kind"].is_null()));
-            if let Some(pkg) = dep["pkg"].as_str()
-                && normal
-                && seen.insert(pkg)
-            {
-                todo.push(pkg);
-            }
+    let mut seen = BTreeSet::new();
+    let mut packages = Vec::new();
+    for line in String::from_utf8(out.stdout)?.lines() {
+        let line = line.trim_end_matches(" (*)").trim();
+        let Some((pkg, license)) = line.rsplit_once('|') else {
+            continue;
+        };
+        let mut parts = pkg.split_whitespace();
+        let (Some(name), Some(version)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let version = version.trim_start_matches('v').to_owned();
+        if name == root_package || !seen.insert((name.to_owned(), version.clone())) {
+            continue;
         }
+        let (source, checksum) = locked
+            .get(&(name.to_owned(), version.clone()))
+            .cloned()
+            .ok_or_else(|| format!("{name} {version} is not in Cargo.lock"))?;
+        packages.push(Package {
+            name: name.to_owned(),
+            version,
+            license: (!license.trim().is_empty()).then(|| license.trim().to_owned()),
+            source,
+            checksum,
+        });
     }
-    let mut out: Vec<Package> = seen
-        .into_iter()
-        .filter_map(|id| packages.get(id))
-        .map(|p| {
-            let name = p["name"].as_str().unwrap_or_default().to_owned();
-            let version = p["version"].as_str().unwrap_or_default().to_owned();
-            Package {
-                checksum: checksums.get(&(name.clone(), version.clone())).cloned(),
-                name,
-                version,
-                license: p["license"].as_str().map(str::to_owned),
-                source: p["source"].as_str().unwrap_or("workspace").to_owned(),
-            }
-        })
-        .collect();
-    out.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
-    Ok(out)
+    packages.sort_by(|a, b| (&a.name, &a.version).cmp(&(&b.name, &b.version)));
+    Ok(packages)
 }
 
 /// Whether an SPDX expression (`/` read as `OR`, as old Cargo manifests use it) is satisfiable
