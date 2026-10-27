@@ -579,3 +579,58 @@ fn the_registered_manifest_must_be_exactly_the_installed_one() {
         assert!(registration_matches(&rec, &b).is_err(), "{field}");
     }
 }
+
+/// Stress/regression coverage for the OPEN Windows install flake (M5: "Access is denied" at the
+/// staging→final rename in 3 of 7 parallel runs; holder not identified). Many threads install
+/// the same package into separate machines at once, round after round; every failure is
+/// printed with its full message, which on Windows names the processes holding files in the
+/// staging directory. Ignored by default (slow; heavy on disk: one native build per thread per
+/// round). `CALVE_STRESS_THREADS` (default 8), `CALVE_STRESS_ROUNDS` (default 5).
+#[test]
+#[ignore = "stress: run explicitly"]
+fn concurrent_installs_stress() {
+    let threads: usize = std::env::var("CALVE_STRESS_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let rounds: usize = std::env::var("CALVE_STRESS_ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let r = repo_with_toy();
+    let mut failures = Vec::new();
+    for round in 0..rounds {
+        let machines: Vec<Machine> = (0..threads).map(|_| machine()).collect();
+        for m in &machines {
+            catalog(m, "main", &r);
+        }
+        let results: Vec<std::result::Result<(), String>> = std::thread::scope(|s| {
+            let handles: Vec<_> = machines
+                .iter()
+                .map(|m| {
+                    s.spawn(move || {
+                        installer(m)
+                            .install(&req(true))
+                            .map(|_| ())
+                            .map_err(|e| format!("{}: {}", e.code, e.message))
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        for (i, res) in results.into_iter().enumerate() {
+            if let Err(e) = res {
+                println!("stress round {round} thread {i}: {e}");
+                failures.push(e);
+            }
+        }
+        // Machines (and their installed copies) are removed before the next round.
+        drop(machines);
+    }
+    println!(
+        "stress: {} of {} concurrent installs failed",
+        failures.len(),
+        threads * rounds
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+}
