@@ -52,9 +52,7 @@
                   }
                 },
                 "required": [
-                  "generation",
-                  "id",
-                  "state"
+                  "id"
                 ]
               },
               "runtime_instance": {

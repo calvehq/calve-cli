@@ -129,14 +129,12 @@
             }
           },
           "required": [
-            "actor",
             "body",
             "hash",
             "id",
             "kind",
             "namespace",
             "previous_hash",
-            "request_id",
             "runtime_instance",
             "sequence",
             "subjects",
