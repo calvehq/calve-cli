@@ -34,6 +34,34 @@ pub struct Env {
     pub vars: Vec<(String, std::ffi::OsString)>,
 }
 
+/// Installed packages are read-only by design (immutable digest paths), so the temp dir could
+/// not remove them and every test leaked its fixture build; make the tree writable first.
+impl Drop for Env {
+    fn drop(&mut self) {
+        let mut stack = vec![self.temp.path().to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for path in entries.flatten().map(|e| e.path()) {
+                let Ok(md) = std::fs::symlink_metadata(&path) else {
+                    continue;
+                };
+                if md.is_symlink() {
+                    continue;
+                }
+                let mut perm = md.permissions();
+                #[allow(clippy::permissions_set_readonly_false)]
+                perm.set_readonly(false);
+                let _ = std::fs::set_permissions(&path, perm);
+                if md.is_dir() {
+                    stack.push(path);
+                }
+            }
+        }
+    }
+}
+
 pub struct Run {
     pub success: bool,
     pub value: Value,
