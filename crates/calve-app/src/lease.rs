@@ -28,9 +28,16 @@ impl LeaseKeeper {
     pub(crate) fn start(client: crate::client::Client, lease: openaevc::protocol::Lease) -> Self {
         let stop = std::sync::Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
         let every = Duration::from_millis(lease.heartbeat_interval_ms.max(100));
-        let handle = tokio::runtime::Handle::current();
         let flag = stop.clone();
         let thread = std::thread::spawn(move || {
+            // Its own runtime: embedded commands run through spawn_blocking on the caller's
+            // runtime, and the main one may be blocked by the very step being outlived.
+            let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            else {
+                return;
+            };
             let (lock, cv) = &*flag;
             let mut stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
             loop {
@@ -43,7 +50,17 @@ impl LeaseKeeper {
                 }
                 if timeout.timed_out() {
                     drop(stopped);
-                    let _ = handle.block_on(client.heartbeat(&lease));
+                    let t = std::time::Instant::now();
+                    let r = rt.block_on(client.heartbeat(&lease));
+                    // Debug builds: renewal timing and failures, for the lease experiments.
+                    if cfg!(debug_assertions) && std::env::var_os("CALVE_TEST_KEEPER_LOG").is_some()
+                    {
+                        eprintln!(
+                            "lease keeper: heartbeat in {:?}: {:?}",
+                            t.elapsed(),
+                            r.as_ref().err()
+                        );
+                    }
                     stopped = lock.lock().unwrap_or_else(|e| e.into_inner());
                 }
             }

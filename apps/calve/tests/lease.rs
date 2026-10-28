@@ -23,6 +23,7 @@ fn calve(data: &Path, vars: &[(&str, &str)], args: &[&str]) -> (bool, Value, Str
         .env("XDG_DATA_HOME", data.join("d"))
         .env("XDG_CONFIG_HOME", data.join("c"))
         .env("CALVE_EXECUTION_LEASE_MS", LEASE_MS)
+        .env("CALVE_TEST_KEEPER_LOG", "1")
         .envs(vars.iter().copied())
         .args(["--json", "--no-daemon-start"])
         .args(args)
@@ -181,6 +182,9 @@ fn run(t: &T, harness: &str, vars: &[(&str, &str)]) -> (String, String, Vec<i64>
         .map(|(k, at)| format!("{k}@+{}ms", at - t0))
         .collect();
     println!("{harness} {vars:?}: {state}; renewal gaps (ms) {gaps:?}; events {kinds:?}");
+    for line in stderr.lines().filter(|l| l.starts_with("lease keeper:")) {
+        println!("  {line}");
+    }
     (state, execution, gaps)
 }
 
