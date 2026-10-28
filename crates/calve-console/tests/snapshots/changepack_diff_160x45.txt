@@ -2,17 +2,17 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││File                                       │
 │  Overview        5 ││                                                                                           ││crates/runner/http.rs                      │
-│  Work              ││2 files changed               crates/runner/http.rs                                        ││                                           │
-│  Change Graph      ││crates/runner/http.rs   +6 -2 @@ -1 +1 @@                                                  ││Status      ○ MODIFIED                     │
-│› ChangePacks       ││crates/runner/mod.rs    +1 -0    1      -pub const DEFAULT_TIMEOUT: u64 = 10;              ││Lines       +6 -2                          │
-│  Baselines         ││                                      1 +use std::time::Duration;                          ││Size        119 bytes                      │
-│  Evidence          ││                                      2 +                                                  ││Digest      sha256:c717a…6edecb3954f       │
-│  Events            ││                                      3 +pub const DEFAULT_TIMEOUT: u64 = 30;              ││Hunks       1                              │
-│                    ││                                 2    4                                                    ││                                           │
-│ SYSTEM             ││                                 3      -pub fn run() {}                                   ││Actions                                    │
-│  Projects          ││                                      5 +pub fn run() {                                    ││  Run snapshot verification                │
-│  Inbox           2 ││                                      6 +    retry(3, Duration::from_secs(1));             ││  Run language checks                      │
-│  Doctor            ││                                      7 +}                                                 ││  Evaluate change size                     │
+│  Work              ││2 files changed                crates/runner/http.rs  file 1/2                             ││                                           │
+│  Change Graph      ││crates/runner/http.rs    +6 -2 @@ -1 +1 @@                                                 ││Status      ○ MODIFIED                     │
+│› ChangePacks       ││crates/runner/mod.rs     +1 -0    1      -pub const DEFAULT_TIMEOUT: u64 = 10;             ││Lines       +6 -2                          │
+│  Baselines         ││                                       1 +use std::time::Duration;                         ││Size        119 bytes                      │
+│  Evidence          ││                                       2 +                                                 ││Digest      sha256:c717a…6edecb3954f       │
+│  Events            ││                                       3 +pub const DEFAULT_TIMEOUT: u64 = 30;             ││Hunks       1                              │
+│                    ││                                  2    4                                                   ││                                           │
+│ SYSTEM             ││                                  3      -pub fn run() {}                                  ││Actions                                    │
+│  Projects          ││                                       5 +pub fn run() {                                   ││  Run snapshot verification                │
+│  Inbox           2 ││                                       6 +    retry(3, Duration::from_secs(1));            ││  Run language checks                      │
+│  Doctor            ││                                       7 +}                                                ││  Evaluate change size                     │
 │  Extensions        ││                                                                                           ││  Approve                                  │
 │                    ││                                                                                           ││  Reject                                   │
 │                    ││                                                                                           ││  Refresh qualification                    │
@@ -42,4 +42,4 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- ↑↓ files  ]c/[c hunks  z fullscreen  w wrap  tab tabs  ^P commands  : command  ? help
+ ↑↓ files  enter open file  ]c/[c hunks  / search  n/N matches  w wrap  ^P commands  : command

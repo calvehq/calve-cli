@@ -1,6 +1,6 @@
  Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4ntr7snpiayi56xooe5y   ● healthy
 ┌ Navigation ────────┐┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y ───────────────────────┐┌ Inspector ─────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…ntr7snpiayi56xooe5y    │
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││cpk_…ntr7snpiayi56xooe5y    │
 │  Overview        5 ││                                                                  ││Refactor verification rules │
 │  Work              ││cpk_…r7snpiayi56xooe5y · Refactor verification rules   ○ OPEN     ││                            │
 │  Change Graph      ││                                                                  ││State       ○ OPEN          │

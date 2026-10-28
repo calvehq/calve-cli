@@ -2,7 +2,7 @@
 ┌ Calve / ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq / Diff ────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                                                                                         │
 │                                                                                                                                                              │
-│crates/runner/http.rs                                                                                                                                         │
+│crates/runner/http.rs  file 1/2                                                                                                                               │
 │@@ -1 +1 @@                                                                                                                                                   │
 │   1      -pub const DEFAULT_TIMEOUT: u64 = 10;                                                                                                               │
 │        1 +use std::time::Duration;                                                                                                                           │
@@ -42,4 +42,4 @@
 │                                                                                                                                                              │
 │                                                                                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- ↑↓ files  ]c/[c hunks  z fullscreen  w wrap  tab tabs  ^P commands  : command  ? help
+ ↑↓ files  enter open file  ]c/[c hunks  / search  n/N matches  w wrap  ^P commands  : command

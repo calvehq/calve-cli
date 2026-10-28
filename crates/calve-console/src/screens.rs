@@ -91,7 +91,8 @@ pub enum Body {
     Table(Table),
     Text(Vec<Line<'static>>),
     Graph(Graph),
-    Diff,
+    /// The Diff workstation; the key holds its file selection and `/` search term.
+    Diff(String),
     Status {
         tone: Tone,
         title: String,
@@ -1470,7 +1471,7 @@ fn pack(app: &App, id: &str) -> Screen {
     };
     let tab = app.tab_name().unwrap_or("Summary");
     let body = match tab {
-        "Diff" => Body::Diff,
+        "Diff" => Body::Diff(format!("diff-files:{id}")),
         "Verify" => verify_body(app, id, value),
         "Risk" => {
             let rows = value["evaluations"].clone();
@@ -1635,11 +1636,12 @@ fn pack(app: &App, id: &str) -> Screen {
     screen.explain = Some(pack_explain(app, value));
     screen.hints = match tab {
         "Diff" => vec![
-            ("↑↓", "files"),
+            ("↑↓", if app.diff_lines { "lines" } else { "files" }),
+            ("enter", "open file"),
             ("]c/[c", "hunks"),
-            ("z", "fullscreen"),
+            ("/", "search"),
+            ("n/N", "matches"),
             ("w", "wrap"),
-            ("tab", "tabs"),
         ],
         "Review" => vec![
             ("r", "review"),

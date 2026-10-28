@@ -171,7 +171,12 @@ fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
     let mut spans = Vec::new();
     if app.filter_editing || screen_filter(app, screen).is_some() {
         let filter = screen_filter(app, screen).unwrap_or_default();
-        spans.push(span(" /filter: ", theme.accent()));
+        let what = if matches!(screen.body, Body::Diff(_)) {
+            " /search: "
+        } else {
+            " /filter: "
+        };
+        spans.push(span(what, theme.accent()));
         spans.push(span(line(&filter), theme.text()));
         spans.push(span(
             if app.filter_editing {
@@ -270,6 +275,7 @@ pub fn table_key(screen: &Screen) -> Option<&str> {
     match &screen.body {
         Body::Table(table) => Some(&table.key),
         Body::Graph(graph) => Some(&graph.key),
+        Body::Diff(key) => Some(key),
         _ => None,
     }
 }
@@ -387,8 +393,22 @@ fn workspace(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect, focu
     if !tabs.is_empty() {
         let mut spans = Vec::new();
         let mut x = inner.x;
-        for (index, name) in tabs.iter().enumerate() {
+        // Tabs that do not fit scroll so the active one stays visible, marked ‹ › (§5.3).
+        let widths: Vec<u16> = tabs.iter().map(|t| t.len() as u16 + 2).collect();
+        let mut first = 0;
+        while first < app.tab() && widths[first..=app.tab()].iter().sum::<u16>() + 2 > inner.width {
+            first += 1;
+        }
+        if first > 0 {
+            spans.push(span("‹", app.theme.muted()));
+            x += 1;
+        }
+        for (index, name) in tabs.iter().enumerate().skip(first) {
             let width = name.len() as u16 + 2;
+            if x + width + 1 > inner.x + inner.width {
+                spans.push(span("›", app.theme.muted()));
+                break;
+            }
             app.hits.borrow_mut().push((
                 Rect {
                     x,
@@ -427,7 +447,7 @@ fn workspace(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect, focu
             );
         }
         Body::Graph(graph) => draw_graph(frame, app, graph, inner),
-        Body::Diff => draw_diff(frame, app, inner, focused),
+        Body::Diff(_) => draw_diff(frame, app, inner, focused),
         Body::Status { tone, title, body } => {
             let mut lines = vec![
                 Line::from(""),
@@ -742,7 +762,8 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
         return;
     };
     let theme = &app.theme;
-    let files = pack["files"].as_array().cloned().unwrap_or_default();
+    // Borrowed, never copied per frame (§71).
+    let files: &[Value] = pack["files"].as_array().map_or(&[], Vec::as_slice);
     if files.is_empty() {
         frame.render_widget(
             Paragraph::new(span("No files in this ChangePack.", theme.muted())),
@@ -751,49 +772,47 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
         return;
     }
     let files_key = format!("diff-files:{id}");
-    let index = app
-        .collections
-        .get(&files_key)
-        .map_or(0, |c| c.selected_index)
-        .min(files.len() - 1);
-    let narrow = area.width < 70;
-    let [list_area, diff_area] = if app.fullscreen || narrow {
+    let state = app.collections.get(&files_key);
+    let index = state.map_or(0, |c| c.selected_index).min(files.len() - 1);
+    let search = state.map(|c| c.filter.to_lowercase()).unwrap_or_default();
+    // The file list stays down to a 48-column diff area (§33, Scenario C); below that the
+    // header still says which file of how many is open.
+    let list_width = (area.width / 3).clamp(14, 30);
+    let [list_area, diff_area] = if app.fullscreen || area.width < 48 {
         [Rect { width: 0, ..area }, area]
     } else {
-        Layout::horizontal([
-            Constraint::Length(30.min(area.width / 3)),
+        let [list, _gap, diff] = Layout::horizontal([
+            Constraint::Length(list_width),
+            Constraint::Length(1),
             Constraint::Min(20),
         ])
-        .areas(area)
+        .areas(area);
+        [list, diff]
     };
     if list_area.width > 0 {
         let mut lines = vec![Line::from(span(
             format!("{} files changed", files.len()),
             theme.muted(),
         ))];
-        for (i, file) in files.iter().enumerate() {
+        let height = list_area.height.saturating_sub(1) as usize;
+        let start = index.saturating_sub(height.saturating_sub(1));
+        for (i, file) in files.iter().enumerate().skip(start).take(height) {
             let counts = format!("+{} -{}", file["added"], file["removed"]);
+            let room = (list_area.width as usize).saturating_sub(counts.len() + 1);
             let name = text::middle(
-                file["path"].as_str().unwrap_or(""),
-                (list_area.width as usize).saturating_sub(counts.len() + 2),
+                &line(file["path"].as_str().unwrap_or("")),
+                room,
                 app.symbols.ellipsis(),
             );
             let style = if i == index {
-                theme.selected(focused)
+                theme.selected(focused && !app.diff_lines)
             } else {
                 theme.text()
             };
             lines.push(Line::from(vec![
+                span(fit(&name, room, app.symbols.ellipsis()), style),
                 span(
-                    fit(
-                        &name,
-                        (list_area.width as usize).saturating_sub(counts.len() + 1),
-                        app.symbols.ellipsis(),
-                    ),
-                    style,
-                ),
-                span(
-                    format!("+{}", file["added"]),
+                    format!(" +{}", file["added"]),
                     Style::default().fg(theme.diff_add),
                 ),
                 span(
@@ -806,7 +825,13 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
     }
     let file = &files[index];
     let path = file["path"].as_str().unwrap_or("");
-    let mut lines = vec![Line::from(span(line(path), theme.heading()))];
+    let mut lines = vec![Line::from(vec![
+        span(line(path), theme.heading()),
+        span(
+            format!("  file {}/{}", index + 1, files.len()),
+            theme.muted(),
+        ),
+    ])];
     match app.value(&format!("diff:{id}:{path}")) {
         None => lines.push(Line::from(span(
             format!("Loading diff{}", app.symbols.ellipsis()),
@@ -830,7 +855,21 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
             )));
         }
         Some(diff) => {
-            let all = diff["lines"].as_array().cloned().unwrap_or_default();
+            let all: &[Value] = diff["lines"].as_array().map_or(&[], Vec::as_slice);
+            if !search.is_empty() {
+                let matches = all
+                    .iter()
+                    .filter(|l| {
+                        l["text"]
+                            .as_str()
+                            .is_some_and(|t| t.to_lowercase().contains(&search))
+                    })
+                    .count();
+                lines.push(Line::from(span(
+                    format!("/{search}: {matches} matches  n/N next/previous"),
+                    theme.muted(),
+                )));
+            }
             if all.len() > 2000 {
                 lines.push(Line::from(span(
                     format!(
@@ -846,7 +885,9 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
             // Only the visible window is styled (§33.4).
             for entry in all.iter().skip(app.diff_scroll).take(height) {
                 let kind = entry["kind"].as_str().unwrap_or("");
-                let text = line(entry["text"].as_str().unwrap_or(""));
+                let raw = entry["text"].as_str().unwrap_or("");
+                let text = line(raw);
+                let hit = !search.is_empty() && raw.to_lowercase().contains(&search);
                 let number = |key: &str| {
                     entry[key]
                         .as_u64()
@@ -872,7 +913,11 @@ fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
                 let mut spans = vec![
                     span(
                         format!("{} {} ", number("old"), number("new")),
-                        theme.muted(),
+                        if hit {
+                            theme.selected(true)
+                        } else {
+                            theme.muted()
+                        },
                     ),
                     span(marker.to_owned(), style),
                 ];

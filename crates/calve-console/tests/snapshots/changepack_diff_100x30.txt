@@ -1,0 +1,30 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy
+┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ─────────────────┐┌ Inspector ─────────────────────────┐
+│ Summary  Diff  Verify  Risk  Evidence  Review  Receipts ›  ││File                                │
+│                                                            ││crates/runner/http.rs               │
+│2 files changed      crates/runner/http.rs  file 1/2        ││                                    │
+│crates/…ttp.rs +6 -2 @@ -1 +1 @@                            ││Status      ○ MODIFIED              │
+│crates/…mod.rs +1 -0    1      -pub const DEFAULT_TIMEOUT:… ││Lines       +6 -2                   │
+│                             1 +use std::time::Duration;    ││Size        119 bytes               │
+│                             2 +                            ││Digest      sha256:c717a…6edecb3954f│
+│                             3 +pub const DEFAULT_TIMEOUT:… ││Hunks       1                       │
+│                        2    4                              ││                                    │
+│                        3      -pub fn run() {}             ││Actions                             │
+│                             5 +pub fn run() {              ││  Run snapshot verification         │
+│                             6 +    retry(3, Duration::fro… ││  Run language checks               │
+│                             7 +}                           ││  Evaluate change size              │
+│                                                            ││  Approve                           │
+│                                                            ││  Reject                            │
+│                                                            ││  Refresh qualification             │
+│                                                            ││  a all actions                     │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+└────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
+ ↑↓ files  enter open file  ]c/[c hunks  / search  n/N matches  w wrap  ^P commands  : command

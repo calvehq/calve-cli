@@ -1,0 +1,24 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd
+┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ───────────────────────────────────┐
+│ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw         │
+│                                                                              │
+│2 files changed            crates/runner/http.rs  file 1/2                    │
+│crates/run…r/http.rs +6 -2 @@ -1 +1 @@                                        │
+│crates/runner/mod.rs +1 -0    1      -pub const DEFAULT_TIMEOUT: u64 = 10;    │
+│                                   1 +use std::time::Duration;                │
+│                                   2 +                                        │
+│                                   3 +pub const DEFAULT_TIMEOUT: u64 = 30;    │
+│                              2    4                                          │
+│                              3      -pub fn run() {}                         │
+│                                   5 +pub fn run() {                          │
+│                                   6 +    retry(3, Duration::from_secs(1));   │
+│                                   7 +}                                       │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ files  enter open file  ]c/[c hunks  / search  n/N matches  w wrap  ^P comma

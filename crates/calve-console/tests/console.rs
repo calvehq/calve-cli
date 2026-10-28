@@ -241,6 +241,56 @@ fn changepack_diff_workstation() {
     );
 }
 
+/// Scenario C, §33.1: the file list stays at 100 columns, `/` searches the open diff, n/N
+/// move between matches, Enter opens the file's lines and scrolling stops at the end.
+#[test]
+fn diff_search_navigation_and_widths() {
+    let mut h = Harness::new(100, 30);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner.clone()));
+    h.pump();
+    h.key(KeyCode::Char('2'));
+    let screen = h.render();
+    assert!(
+        screen.contains("2 files changed") && screen.contains("file 1/2"),
+        "{screen}"
+    );
+    snapshot("changepack_diff_100x30", &screen);
+    h.app.size = (80, 24);
+    let narrow = h.render();
+    assert!(narrow.contains("file 1/2"), "{narrow}");
+    snapshot("changepack_diff_80x24", &narrow);
+    h.app.size = (160, 45);
+    h.key(KeyCode::Char('/'))
+        .keys("duration")
+        .key(KeyCode::Enter);
+    assert!(h.app.diff_lines, "a match opens the lines");
+    let first = h.app.diff_scroll;
+    let screen = h.render();
+    assert!(screen.contains("/duration: 2 matches"), "{screen}");
+    h.key(KeyCode::Char('n'));
+    assert!(h.app.diff_scroll > first);
+    h.key(KeyCode::Char('N'));
+    assert_eq!(h.app.diff_scroll, first);
+    // Line focus: j scrolls, and never past the last line.
+    for _ in 0..200 {
+        h.key(KeyCode::Char('j'));
+    }
+    let end = h.app.diff_scroll;
+    h.key(KeyCode::Char('J'));
+    assert_eq!(h.app.diff_scroll, end, "scroll is bounded");
+    // Esc clears the search, then returns to the file list.
+    h.key(KeyCode::Esc).key(KeyCode::Esc);
+    assert!(!h.app.diff_lines);
+    h.key(KeyCode::Char('j'));
+    assert!(h.render().contains("file 2/2"));
+    h.key(KeyCode::Char('y'));
+    assert_eq!(
+        h.app.clipboard.take().as_deref(),
+        Some("crates/runner/mod.rs")
+    );
+}
+
 /// Scenario D: verification results come from OpenAEVC and keep stable order.
 #[test]
 fn verification_tab() {

@@ -356,6 +356,8 @@ pub struct App {
     pub graph_list: bool,
     pub diff_scroll: usize,
     pub diff_wrap: bool,
+    /// Diff focus is on the open file's lines rather than the file list (§33.1).
+    pub diff_lines: bool,
     /// Execution output stays scrolled to the newest line (§28); scrolling up pauses it.
     pub log_follow: bool,
     /// Events screen live mode (§42.3): the newest event stays selected.
@@ -418,6 +420,7 @@ impl App {
             graph_list: false,
             diff_scroll: 0,
             diff_wrap: false,
+            diff_lines: false,
             log_follow: true,
             events_live: false,
             time: TimeStyle::Relative,
@@ -682,6 +685,7 @@ impl App {
     fn after_route_change(&mut self) {
         self.fullscreen = false;
         self.diff_scroll = 0;
+        self.diff_lines = false;
         if let Some(index) = nav_routes().iter().position(|r| *r == self.route.section()) {
             self.nav_index = index;
         }

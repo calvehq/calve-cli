@@ -74,7 +74,7 @@ pub fn sync(app: &mut App) {
                 app.collection(&key).selected_id = Some(first.id.clone());
             }
         }
-        Body::Diff => {
+        Body::Diff(_) => {
             if let Route::ChangePack(id) = app.route.clone()
                 && let Some(pack) = app.value(&format!("pack:{id}")).cloned()
             {
@@ -927,7 +927,8 @@ fn move_selection(app: &mut App, delta: isize) {
             state.selected_id = Some(id);
             state.selected_index = next;
         }
-        Body::Diff => {
+        Body::Diff(_) if app.diff_lines => scroll_diff(app, delta),
+        Body::Diff(_) => {
             if let Route::ChangePack(id) = &app.route {
                 let count = app
                     .value(&format!("pack:{id}"))
@@ -1033,7 +1034,7 @@ fn selected_id(app: &App, screen: &Screen) -> Option<String> {
             let row = visible_rows(app, table)[i];
             row.copy.clone().unwrap_or_else(|| row.id.clone())
         }),
-        Body::Diff => diff_path(app),
+        Body::Diff(_) => diff_path(app),
         Body::Graph(graph) => app
             .collections
             .get(&graph.key)
@@ -1061,6 +1062,60 @@ fn diff_path(app: &App) -> Option<String> {
     files.get(index.min(files.len().saturating_sub(1)))?["path"]
         .as_str()
         .map(str::to_owned)
+}
+
+/// Texts of the open file's diff lines.
+fn diff_texts(app: &App) -> Vec<String> {
+    let (Route::ChangePack(id), Some(path)) = (&app.route, diff_path(app)) else {
+        return vec![];
+    };
+    app.value(&format!("diff:{id}:{path}"))
+        .and_then(|d| d["lines"].as_array())
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|l| l["text"].as_str().unwrap_or("").to_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Scrolls the open diff, never past its last line (§33.1).
+fn scroll_diff(app: &mut App, delta: isize) {
+    let last = diff_texts(app).len().saturating_sub(1) as isize;
+    app.diff_scroll = (app.diff_scroll as isize + delta).clamp(0, last.max(0)) as usize;
+}
+
+/// `/` search in the open diff: the next (or previous) matching line from the current one.
+fn jump_match(app: &mut App, forward: bool, include_current: bool) {
+    let Some(term) = crate::render::table_key(&screens::build(app))
+        .and_then(|key| app.collections.get(key))
+        .map(|c| c.filter.to_lowercase())
+        .filter(|t| !t.is_empty())
+    else {
+        return;
+    };
+    let hits: Vec<usize> = diff_texts(app)
+        .iter()
+        .enumerate()
+        .filter(|(_, text)| text.contains(&term))
+        .map(|(i, _)| i)
+        .collect();
+    let at = app.diff_scroll;
+    let target = if forward {
+        hits.iter()
+            .find(|&&h| h > at || include_current && h == at)
+            .or(hits.first())
+    } else {
+        hits.iter().rev().find(|&&h| h < at).or(hits.last())
+    };
+    match target {
+        Some(&line) => {
+            app.diff_scroll = line;
+            app.diff_lines = true;
+        }
+        None => app.notify(Tone::Neutral, format!("No matches for “{term}”")),
+    }
 }
 
 fn jump_hunk(app: &mut App, forward: bool) {
@@ -1126,7 +1181,12 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.collection(&table_key).filter.clear();
                 app.filter_editing = false;
             }
-            KeyCode::Enter => app.filter_editing = false,
+            KeyCode::Enter => {
+                app.filter_editing = false;
+                if matches!(screen.body, Body::Diff(_)) {
+                    jump_match(app, true, true);
+                }
+            }
             _ => {
                 let state = app.collection(&table_key);
                 edit_text(&mut state.filter, &key);
@@ -1175,7 +1235,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         return;
     }
     let on_tabs = !app.route.tabs().is_empty();
-    let diff = matches!(screen.body, Body::Diff);
+    let diff = matches!(screen.body, Body::Diff(_));
     match key.code {
         KeyCode::Char('q') => {
             if app.fullscreen {
@@ -1308,10 +1368,13 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 '['
             })
         }
-        KeyCode::Char('J') if diff => app.diff_scroll += 1,
-        KeyCode::Char('K') if diff => app.diff_scroll = app.diff_scroll.saturating_sub(1),
-        KeyCode::Char('d') if ctrl && diff => app.diff_scroll += 20,
-        KeyCode::Char('u') if ctrl && diff => app.diff_scroll = app.diff_scroll.saturating_sub(20),
+        KeyCode::Char('J') if diff => scroll_diff(app, 1),
+        KeyCode::Char('K') if diff => scroll_diff(app, -1),
+        KeyCode::Char('d') if ctrl && diff => scroll_diff(app, 20),
+        KeyCode::Char('u') if ctrl && diff => scroll_diff(app, -20),
+        KeyCode::Char('n') if diff => jump_match(app, true, false),
+        KeyCode::Char('N') if diff => jump_match(app, false, false),
+        KeyCode::Enter if diff && app.focus == Focus::Workspace => app.diff_lines = true,
         KeyCode::Char(' ') => {
             if let Body::Table(table) = &screen.body
                 && let Some(index) = selection(app, table)
@@ -1443,6 +1506,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.collection(&key).filter.clear();
             } else if app.fullscreen {
                 app.fullscreen = false;
+            } else if diff && app.diff_lines {
+                app.diff_lines = false;
             } else if app.focus == Focus::Inspector {
                 app.focus = Focus::Workspace;
             } else if matches!(
