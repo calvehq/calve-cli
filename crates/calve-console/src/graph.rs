@@ -140,6 +140,15 @@ fn junction(mask: u8, unicode: bool) -> char {
 pub struct NodeView<'a> {
     pub label: &'a str,
     pub tone: Tone,
+    /// Outside the active `/` filter: drawn muted (§29.1 filter/highlight).
+    pub dim: bool,
+}
+
+/// Lines of the drawn graph and the edges the layered layout cannot route (same layer or
+/// pointing backwards), which callers list instead of dropping silently.
+pub struct Drawn {
+    pub lines: Vec<Line<'static>>,
+    pub unrouted: Vec<(usize, usize)>,
 }
 
 /// Renders nodes as `[✓ label]` boxes on a grid and edges as routed connectors. Returns lines
@@ -152,7 +161,7 @@ pub fn render(
     theme: &Theme,
     symbols: &Symbols,
     width: usize,
-) -> Vec<Line<'static>> {
+) -> Drawn {
     const NODE: usize = 22;
     const GAP: usize = 6;
     let layers = placement
@@ -175,6 +184,12 @@ pub fn render(
         let (l, r) = placement.positions[node];
         (l * (NODE + GAP), r * 2)
     };
+    let mut unrouted = Vec::new();
+    // The node at each canvas cell, so drawing never scans every node per cell (§71).
+    let mut cells = std::collections::HashMap::new();
+    for node in 0..nodes.len() {
+        cells.insert(at(node), node);
+    }
     for &(from, to) in edges {
         if from >= nodes.len() || to >= nodes.len() || from == to {
             continue;
@@ -184,6 +199,7 @@ pub fn render(
         let start = fx + NODE;
         let end = tx.saturating_sub(1);
         if end <= start {
+            unrouted.push((from, to));
             continue;
         }
         let mid = start + GAP / 2;
@@ -215,7 +231,7 @@ pub fn render(
         let mut spans: Vec<Span<'static>> = Vec::new();
         let mut x = 0;
         while x < canvas_w {
-            if let Some(node) = (0..nodes.len()).find(|&n| at(n) == (x, y)) {
+            if let Some(&node) = cells.get(&(x, y)) {
                 let view = &nodes[node];
                 let body = text::truncate(&text::line(view.label), NODE - 5, symbols.ellipsis());
                 let label = text::fit(
@@ -225,6 +241,8 @@ pub fn render(
                 );
                 let style = if selected == Some(node) {
                     theme.selected(true)
+                } else if view.dim {
+                    theme.muted()
                 } else {
                     theme.tone(view.tone)
                 };
@@ -247,7 +265,41 @@ pub fn render(
         }
         lines.push(clip(spans, scroll, width));
     }
-    lines
+    Drawn { lines, unrouted }
+}
+
+/// Nodes in stable traversal order: by layer, then row (§29.1 Tab).
+pub fn traversal(placement: &Placement) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..placement.positions.len()).collect();
+    order.sort_by_key(|&n| placement.positions[n]);
+    order
+}
+
+/// Nodes within `depth` undirected steps of `center` (§29.3 neighborhood).
+pub fn neighborhood(
+    count: usize,
+    edges: &[(usize, usize)],
+    center: usize,
+    depth: usize,
+) -> Vec<bool> {
+    let mut keep = vec![false; count];
+    let mut frontier = vec![center];
+    if center < count {
+        keep[center] = true;
+    }
+    for _ in 0..depth {
+        let mut next = Vec::new();
+        for &(a, b) in edges {
+            for (here, there) in [(a, b), (b, a)] {
+                if frontier.contains(&here) && there < count && !keep[there] {
+                    keep[there] = true;
+                    next.push(there);
+                }
+            }
+        }
+        frontier = next;
+    }
+    keep
 }
 
 /// Keeps the characters in `[scroll, scroll + width)`.
@@ -291,6 +343,15 @@ mod tests {
             layout(4, &[(0, 1), (1, 2), (0, 2)]).positions,
             placement.positions
         );
+    }
+
+    #[test]
+    fn neighborhoods_and_traversal() {
+        let edges = [(0, 1), (1, 2), (2, 3)];
+        assert_eq!(neighborhood(4, &edges, 1, 1), vec![true, true, true, false]);
+        assert_eq!(neighborhood(4, &edges, 0, 2), vec![true, true, true, false]);
+        let placement = layout(3, &[(0, 2), (1, 2)]);
+        assert_eq!(traversal(&placement), vec![0, 1, 2]);
     }
 
     #[test]

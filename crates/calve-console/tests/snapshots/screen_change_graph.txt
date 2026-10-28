@@ -6,9 +6,9 @@
 │› Change Graph      ││                                                                                           ││State       ✓ COMPLETE                     │
 │  ChangePacks       ││                                                                                           ││Kind        Task                           │
 │  Baselines         ││● running  ✓ complete  ! blocked  ◆ review  ○ pending                                      ││                                           │
-│  Evidence          ││                                                                                           ││Leads to                                   │
+│  Evidence          ││                                                                                           ││Relationships                              │
 │  Events            ││                                                                                           ││  → Runtime HTTP support (depends on)      │
-│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││e next edge · enter edge detail            │
 │ SYSTEM             ││                                                                                           ││                                           │
 │  Projects          ││                                                                                           ││                                           │
 │  Inbox           2 ││                                                                                           ││                                           │
@@ -42,4 +42,4 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- hjkl move  enter open  v list/graph  z fullscreen  ^P commands  : command  ? help
+ hjkl move  tab next node  e edges  f neighborhood  v list/graph  enter open  ^P commands  : command

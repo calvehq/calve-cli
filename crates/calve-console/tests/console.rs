@@ -955,3 +955,104 @@ fn evidence_catalog_pages_and_reverse_references() {
     h.pump();
     assert!(h.render().contains("Report/v1"));
 }
+
+/// §29, §23: graph filter/highlight with Tab among matches, neighborhood depth, go-to-node,
+/// relationship inspection, vertical scrolling, the large-graph banner and unrouted edges.
+#[test]
+fn graph_navigation_filter_neighborhood_and_edges() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::ChangeGraph);
+    h.pump();
+    let id_of = |h: &Harness, label: &str| {
+        h.data["graph"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["label"] == label)
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let runtime = id_of(&h, "Runtime HTTP support");
+    // `/` highlights; Tab steps only through matches.
+    h.key(KeyCode::Char('/'))
+        .keys("runtime")
+        .key(KeyCode::Enter);
+    h.key(KeyCode::Tab);
+    assert_eq!(
+        h.app.collections["graph"].selected_id.as_deref(),
+        Some(runtime.as_str())
+    );
+    h.key(KeyCode::Tab);
+    assert_eq!(
+        h.app.collections["graph"].selected_id.as_deref(),
+        Some(runtime.as_str())
+    );
+    h.key(KeyCode::Esc);
+    // Neighborhood: depth 1 keeps the node and its direct relations only.
+    h.key(KeyCode::Char('f'));
+    let screen = h.render();
+    assert!(screen.contains("Neighborhood depth 1"), "{screen}");
+    assert!(!screen.contains("Update SDK"), "{screen}");
+    h.key(KeyCode::Char('f')).key(KeyCode::Char('f'));
+    assert_eq!(h.app.graph_depth, None);
+    // Relationships: e selects one; Enter explains it without inventing a reason.
+    h.key(KeyCode::Char('e'));
+    assert!(h.render().contains("▶"));
+    h.key(KeyCode::Enter);
+    match h.app.overlays.last() {
+        Some(Overlay::Explain { lines, .. }) => {
+            assert!(
+                lines.iter().any(|(_, l)| l == "Reason not recorded."),
+                "{lines:?}"
+            );
+            assert!(
+                lines
+                    .iter()
+                    .any(|(_, l)| l.contains("depends on") || l.contains("produces"))
+            );
+        }
+        other => panic!("edge detail expected, got {other:?}"),
+    }
+    h.key(KeyCode::Esc);
+    // g picks a node by name.
+    h.key(KeyCode::Char('g')).keys("SDK").key(KeyCode::Enter);
+    let sdk = id_of(&h, "Update SDK bindings");
+    assert_eq!(
+        h.app.collections["graph"].selected_id.as_deref(),
+        Some(sdk.as_str())
+    );
+    // A tall graph scrolls to the selection; a large one names the real keys; a cycle edge is
+    // listed rather than dropped.
+    let mut nodes = vec![];
+    let mut edges = vec![];
+    for i in 0..230 {
+        nodes.push(
+            json!({"id":format!("n{i}"),"label":format!("Node {i}"),"kind":"task","state":"OPEN"}),
+        );
+        if i > 0 {
+            edges.push(json!({"from":"n0","to":format!("n{i}"),"kind":"depends_on"}));
+        }
+    }
+    edges.push(json!({"from":"n229","to":"n0","kind":"depends_on"}));
+    edges.push(json!({"from":"n1","to":"n2","kind":"depends_on"}));
+    h.data.insert(
+        "graph".into(),
+        json!({"intent":null,"nodes":nodes,"edges":edges}),
+    );
+    h.key(KeyCode::Char('r'));
+    h.app.collection("graph").selected_id = Some("n200".into());
+    let screen = h.render();
+    assert!(
+        screen.contains("Node 200"),
+        "selected node scrolled into view:\n{screen}"
+    );
+    assert!(
+        screen.contains("v list view   f focus neighborhood"),
+        "{screen}"
+    );
+    h.app.collection("graph").selected_id = Some("n1".into());
+    let screen = h.render();
+    assert!(screen.contains("not drawn"), "{screen}");
+}

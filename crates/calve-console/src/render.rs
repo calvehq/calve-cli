@@ -699,22 +699,38 @@ fn draw_graph(frame: &mut Frame<'_>, app: &App, graph_body: &screens::Graph, are
         } else {
             Some(0)
         });
+    let filter = app
+        .collections
+        .get(&graph_body.key)
+        .map(|c| c.filter.clone())
+        .unwrap_or_default();
     let views: Vec<graph::NodeView<'_>> = graph_body
         .nodes
         .iter()
         .map(|n| graph::NodeView {
             label: &n.label,
             tone: n.tone,
+            dim: !filter.is_empty() && !screens::matches_search(&n.search, &filter),
         })
         .collect();
     let mut lines = Vec::new();
-    if graph_body.nodes.len() > 200 {
+    if graph_body.total > 200 && app.graph_depth.is_none() {
         lines.push(Line::from(span(
             format!(
-                "Graph is large · {} nodes   l list view",
-                graph_body.nodes.len()
+                "Graph is large · {} nodes   v list view   f focus neighborhood",
+                graph_body.total
             ),
             app.theme.tone(Tone::Warning),
+        )));
+    }
+    if let Some(depth) = app.graph_depth {
+        lines.push(Line::from(span(
+            format!(
+                "Neighborhood depth {depth} · {} of {} nodes   f wider",
+                graph_body.nodes.len(),
+                graph_body.total
+            ),
+            app.theme.muted(),
         )));
     }
     if !placement.cyclic.is_empty() {
@@ -727,7 +743,7 @@ fn draw_graph(frame: &mut Frame<'_>, app: &App, graph_body: &screens::Graph, are
             app.theme.tone(Tone::Warning),
         )));
     }
-    lines.extend(graph::render(
+    let drawn = graph::render(
         &views,
         &graph_body.edges,
         &placement,
@@ -735,11 +751,35 @@ fn draw_graph(frame: &mut Frame<'_>, app: &App, graph_body: &screens::Graph, are
         &app.theme,
         &app.symbols,
         area.width as usize,
-    ));
+    );
+    // Edges the layers cannot route are listed, never dropped silently (§29.2).
+    let mut footer: Vec<Line<'static>> = drawn
+        .unrouted
+        .iter()
+        .map(|(from, to)| {
+            Line::from(span(
+                format!(
+                    "{} not drawn: {} {} {}",
+                    app.symbols.tone(Tone::Warning),
+                    text::truncate(
+                        &line(&graph_body.nodes[*from].label),
+                        24,
+                        app.symbols.ellipsis()
+                    ),
+                    app.symbols.arrow(),
+                    text::truncate(
+                        &line(&graph_body.nodes[*to].label),
+                        24,
+                        app.symbols.ellipsis()
+                    ),
+                ),
+                app.theme.tone(Tone::Warning),
+            ))
+        })
+        .collect();
     if graph_body.legend {
-        lines.push(Line::from(""));
         let s = &app.symbols;
-        lines.push(Line::from(span(
+        footer.push(Line::from(span(
             format!(
                 "{} running  {} complete  {} blocked  {} review  {} pending",
                 s.tone(Tone::Running),
@@ -751,6 +791,13 @@ fn draw_graph(frame: &mut Frame<'_>, app: &App, graph_body: &screens::Graph, are
             app.theme.muted(),
         )));
     }
+    // Vertical scroll keeps the selected node in view (§29.1).
+    let room = (area.height as usize).saturating_sub(lines.len() + footer.len() + 1);
+    let row = selected.map_or(0, |n| placement.positions[n].1 * 2);
+    let top = row.saturating_sub(room.saturating_sub(2));
+    lines.extend(drawn.lines.into_iter().skip(top).take(room));
+    lines.push(Line::from(""));
+    lines.extend(footer);
     frame.render_widget(Paragraph::new(lines), area);
 }
 

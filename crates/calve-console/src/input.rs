@@ -276,6 +276,10 @@ fn run_target(app: &mut App, target: Target) {
             app.switch_project(root);
             app.navigate(route);
         }
+        Target::Select { key, id } => {
+            app.collection(&key).selected_id = Some(id);
+            app.graph_edge = None;
+        }
     }
     sync(app);
 }
@@ -969,7 +973,38 @@ fn move_graph(app: &mut App, graph: &screens::Graph, direction: Direction) {
         .unwrap_or(0);
     if let Some(next) = graph::neighbor(&placement.positions, current, direction) {
         app.collection(&key).selected_id = Some(graph.nodes[next].id.clone());
+        app.graph_edge = None;
     }
+}
+
+/// Tab / Shift+Tab: the next node in stable traversal order, among `/` matches if filtering.
+fn step_graph(app: &mut App, graph: &screens::Graph, forward: bool) {
+    let placement = graph::layout(graph.nodes.len(), &graph.edges);
+    let filter = app
+        .collections
+        .get(&graph.key)
+        .map(|c| c.filter.clone())
+        .unwrap_or_default();
+    let order: Vec<usize> = graph::traversal(&placement)
+        .into_iter()
+        .filter(|&n| filter.is_empty() || screens::matches_search(&graph.nodes[n].search, &filter))
+        .collect();
+    if order.is_empty() {
+        return;
+    }
+    let current = app
+        .collections
+        .get(&graph.key)
+        .and_then(|c| c.selected_id.as_ref())
+        .and_then(|id| graph.nodes.iter().position(|n| &n.id == id))
+        .and_then(|n| order.iter().position(|&o| o == n));
+    let next = match (current, forward) {
+        (Some(i), true) => (i + 1) % order.len(),
+        (Some(i), false) => (i + order.len() - 1) % order.len(),
+        (None, _) => 0,
+    };
+    app.collection(&graph.key).selected_id = Some(graph.nodes[order[next]].id.clone());
+    app.graph_edge = None;
 }
 
 fn open_selected(app: &mut App) {
@@ -1008,6 +1043,13 @@ fn open_selected(app: &mut App) {
             app.focus = Focus::Inspector;
         }
         sync(app);
+        return;
+    }
+    if matches!(screen.body, Body::Graph(_))
+        && let Some((title, lines)) = screen.detail.clone()
+    {
+        // An inspected relationship opens its detail (§23).
+        app.overlays.push(Overlay::Explain { title, lines });
         return;
     }
     let route = match &screen.body {
@@ -1281,6 +1323,41 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }),
         KeyCode::Char('/') if crate::render::table_key(&screen).is_some() => {
             app.filter_editing = true;
+        }
+        KeyCode::Char('g') if !ctrl && let Body::Graph(graph) = &screen.body => {
+            app.overlays.push(Overlay::Actions {
+                title: "Go to node".into(),
+                items: graph
+                    .nodes
+                    .iter()
+                    .map(|n| PaletteItem {
+                        group: "Nodes",
+                        label: n.label.clone(),
+                        detail: n.id.clone(),
+                        target: Target::Select {
+                            key: graph.key.clone(),
+                            id: n.id.clone(),
+                        },
+                    })
+                    .collect(),
+                query: String::new(),
+                selected: 0,
+            })
+        }
+        KeyCode::Char('f') if matches!(screen.body, Body::Graph(_)) => {
+            app.graph_depth = match app.graph_depth {
+                None => Some(1),
+                Some(1) => Some(2),
+                _ => None,
+            };
+        }
+        KeyCode::Char('e') if matches!(screen.body, Body::Graph(_)) => {
+            app.graph_edge = Some(app.graph_edge.map_or(0, |i| i + 1));
+        }
+        KeyCode::Tab | KeyCode::BackTab
+            if app.focus == Focus::Workspace && let Body::Graph(graph) = &screen.body =>
+        {
+            step_graph(app, graph, key.code == KeyCode::Tab);
         }
         KeyCode::Char('g') if !ctrl => app.overlays.push(Overlay::Navigation {
             query: String::new(),

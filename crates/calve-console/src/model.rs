@@ -232,6 +232,11 @@ pub enum Target {
         root: String,
         route: Route,
     },
+    /// Select `id` in collection `key` (graph go-to-node, §29.1).
+    Select {
+        key: String,
+        id: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -354,6 +359,10 @@ pub struct App {
     pub version: String,
     pub quit: bool,
     pub graph_list: bool,
+    /// Neighborhood depth around the selected node; `None` shows the whole graph (§29.3).
+    pub graph_depth: Option<usize>,
+    /// The selected node's relationship under inspection (§23), cycled with `e`.
+    pub graph_edge: Option<usize>,
     pub diff_scroll: usize,
     pub diff_wrap: bool,
     /// Diff focus is on the open file's lines rather than the file list (§33.1).
@@ -418,6 +427,8 @@ impl App {
             version: env!("CARGO_PKG_VERSION").into(),
             quit: false,
             graph_list: false,
+            graph_depth: None,
+            graph_edge: None,
             diff_scroll: 0,
             diff_wrap: false,
             diff_lines: false,

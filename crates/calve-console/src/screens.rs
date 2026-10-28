@@ -78,13 +78,85 @@ pub struct GraphNode {
     pub label: String,
     pub tone: Tone,
     pub open: Option<Route>,
+    /// Fields the `/` filter highlights by.
+    pub search: Vec<(&'static str, String)>,
 }
 
 pub struct Graph {
     pub key: String,
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<(usize, usize)>,
+    /// Relation of each edge (`depends_on`, `produces`, `requires`, …).
+    pub kinds: Vec<String>,
     pub legend: bool,
+    /// Nodes before the neighborhood limit (§29.3).
+    pub total: usize,
+}
+
+/// A graph limited to the selected node's neighborhood when `app.graph_depth` is set.
+fn graph_body(
+    app: &App,
+    key: String,
+    nodes: Vec<GraphNode>,
+    edges: Vec<(usize, usize, String)>,
+    legend: bool,
+) -> Body {
+    let total = nodes.len();
+    let pairs: Vec<(usize, usize)> = edges.iter().map(|(a, b, _)| (*a, *b)).collect();
+    let center = selected_row_id(app, &key).and_then(|id| nodes.iter().position(|n| n.id == id));
+    let keep = match (app.graph_depth, center) {
+        (Some(depth), Some(center)) => crate::graph::neighborhood(total, &pairs, center, depth),
+        _ => vec![true; total],
+    };
+    let mut index = vec![usize::MAX; total];
+    let mut kept = Vec::new();
+    for (i, node) in nodes.into_iter().enumerate() {
+        if keep[i] {
+            index[i] = kept.len();
+            kept.push(node);
+        }
+    }
+    let (edges, kinds) = edges
+        .into_iter()
+        .filter(|(a, b, _)| keep[*a] && keep[*b])
+        .map(|(a, b, kind)| ((index[a], index[b]), kind))
+        .unzip();
+    Body::Graph(Graph {
+        key,
+        nodes: kept,
+        edges,
+        kinds,
+        legend,
+        total,
+    })
+}
+
+/// The edges touching `node` (incoming, then outgoing) as (other end, relation, outgoing).
+pub fn node_edges<'a>(edges: &'a [Value], node: &str) -> Vec<&'a Value> {
+    edges
+        .iter()
+        .filter(|e| e["to"] == node)
+        .chain(edges.iter().filter(|e| e["from"] == node))
+        .collect()
+}
+
+/// Edge detail (§23): the relation in words; a reason only when one is recorded.
+fn edge_detail(edge: &Value, name: &dyn Fn(&str) -> String) -> Detail {
+    let from = name(str_of(edge, "from"));
+    let to = name(str_of(edge, "to"));
+    let kind = str_of(edge, "kind");
+    let sentence = match kind {
+        "depends_on" => format!("{to} depends on {from}"),
+        "produces" => format!("{from} produces {to}"),
+        "requires" => format!("{from} requires {to}"),
+        other => format!("{from} {} {to}", label(other).to_lowercase()),
+    };
+    let mut lines = vec![(Tone::Neutral, sentence), (Tone::Neutral, String::new())];
+    match edge["reason"].as_str() {
+        Some(reason) => lines.push((Tone::Neutral, format!("Reason: {reason}"))),
+        None => lines.push((Tone::Neutral, "Reason not recorded.".into())),
+    }
+    (label(kind), lines)
 }
 
 pub enum Body {
@@ -1133,41 +1205,52 @@ fn change_graph(app: &App) -> Screen {
         Ok(value) => value,
         Err(screen) => return *screen,
     };
-    let nodes: Vec<GraphNode> = value["nodes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|node| {
-            let id = str_of(node, "id");
-            GraphNode {
-                id: id.to_owned(),
-                label: str_of(node, "label").to_owned(),
-                tone: state_tone(str_of(node, "state")),
-                open: Some(if node["kind"] == "pack" {
-                    Route::ChangePack(id.to_owned())
-                } else {
-                    Route::Task(id.to_owned())
-                }),
-            }
+    let empty = Vec::new();
+    let all_nodes = value["nodes"].as_array().unwrap_or(&empty);
+    let all_edges = value["edges"].as_array().unwrap_or(&empty);
+    let route = |node: &Value| {
+        let id = str_of(node, "id").to_owned();
+        if node["kind"] == "pack" {
+            Route::ChangePack(id)
+        } else {
+            Route::Task(id)
+        }
+    };
+    let nodes: Vec<GraphNode> = all_nodes
+        .iter()
+        .map(|node| GraphNode {
+            id: str_of(node, "id").to_owned(),
+            label: str_of(node, "label").to_owned(),
+            tone: state_tone(str_of(node, "state")),
+            open: Some(route(node)),
+            search: search(&[
+                ("text", str_of(node, "label")),
+                ("id", str_of(node, "id")),
+                ("state", str_of(node, "state")),
+                ("type", str_of(node, "kind")),
+            ]),
         })
         .collect();
     let index = |id: &str| nodes.iter().position(|n| n.id == id);
-    let edges: Vec<(usize, usize)> = value["edges"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|edge| Some((index(edge["from"].as_str()?)?, index(edge["to"].as_str()?)?)))
+    let edges: Vec<(usize, usize, String)> = all_edges
+        .iter()
+        .filter_map(|edge| {
+            Some((
+                index(edge["from"].as_str()?)?,
+                index(edge["to"].as_str()?)?,
+                str_of(edge, "kind").to_owned(),
+            ))
+        })
         .collect();
     let selected = selected_row_id(app, "graph");
     let node = selected
         .as_deref()
-        .and_then(|id| value["nodes"].as_array()?.iter().find(|n| n["id"] == id));
+        .and_then(|id| all_nodes.iter().find(|n| n["id"] == id));
     let mut screen = if app.graph_list || nodes.is_empty() {
-        let rows = value["nodes"].clone();
         let mut screen = Screen::new(table_body(
             app,
             "graph".into(),
-            &rows,
+            &value["nodes"],
             &[
                 ("label", "Node"),
                 ("kind", "Kind"),
@@ -1178,61 +1261,25 @@ fn change_graph(app: &App) -> Screen {
         ));
         if let Body::Table(table) = &mut screen.body {
             for row in &mut table.sections[0].rows {
-                let kind = value["nodes"]
-                    .as_array()
-                    .and_then(|n| n.iter().find(|n| n["id"] == row.id.as_str()))
-                    .map(|n| str_of(n, "kind").to_owned());
-                row.open = Some(if kind.as_deref() == Some("pack") {
-                    Route::ChangePack(row.id.clone())
-                } else {
-                    Route::Task(row.id.clone())
-                });
+                row.open = all_nodes
+                    .iter()
+                    .find(|n| n["id"] == row.id.as_str())
+                    .map(route);
             }
         }
         screen
     } else {
-        Screen::new(Body::Graph(Graph {
-            key: "graph".into(),
-            nodes,
-            edges,
-            legend: true,
-        }))
+        Screen::new(graph_body(app, "graph".into(), nodes, edges, true))
     };
     if let Some(node) = node {
         let id = str_of(node, "id");
         let name = |id: &str| {
-            value["nodes"]
-                .as_array()
-                .and_then(|n| n.iter().find(|n| n["id"] == id))
+            all_nodes
+                .iter()
+                .find(|n| n["id"] == id)
                 .map(|n| str_of(n, "label").to_owned())
                 .unwrap_or_else(|| id.to_owned())
         };
-        let incoming: Vec<String> = value["edges"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|e| e["to"] == id)
-            .map(|e| {
-                format!(
-                    "{} ({})",
-                    name(str_of(e, "from")),
-                    label(str_of(e, "kind")).to_lowercase()
-                )
-            })
-            .collect();
-        let outgoing: Vec<String> = value["edges"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|e| e["from"] == id)
-            .map(|e| {
-                format!(
-                    "{} ({})",
-                    name(str_of(e, "to")),
-                    label(str_of(e, "kind")).to_lowercase()
-                )
-            })
-            .collect();
         screen.inspector = vec![
             heading(app, str_of(node, "label")),
             muted_line(app, id),
@@ -1240,32 +1287,54 @@ fn change_graph(app: &App) -> Screen {
             field_state(app, "State", str_of(node, "state")),
             field(app, "Kind", label(str_of(node, "kind"))),
         ];
-        if !incoming.is_empty() {
-            screen.inspector.push(blank());
-            screen.inspector.push(heading(app, "Depends on"));
-            screen.inspector.extend(
-                incoming
-                    .iter()
-                    .map(|t| muted_line(app, format!("  {} {t}", app.symbols.back_arrow()))),
-            );
-        }
-        if !outgoing.is_empty() {
-            screen.inspector.push(blank());
-            screen.inspector.push(heading(app, "Leads to"));
-            screen.inspector.extend(
-                outgoing
-                    .iter()
-                    .map(|t| muted_line(app, format!("  {} {t}", app.symbols.arrow()))),
-            );
-        }
+        let (lines, detail) = relations(app, all_edges, id, &name);
+        screen.inspector.extend(lines);
+        screen.detail = detail;
     }
     screen.hints = vec![
         ("hjkl", "move"),
-        ("enter", "open"),
+        ("tab", "next node"),
+        ("e", "edges"),
+        ("f", "neighborhood"),
         ("v", "list/graph"),
-        ("z", "fullscreen"),
+        ("enter", "open"),
     ];
     screen
+}
+
+/// The selected node's relationships, the selected one (key `e`) marked; Enter on it opens
+/// its detail (§23).
+fn relations(
+    app: &App,
+    edges: &[Value],
+    node: &str,
+    name: &dyn Fn(&str) -> String,
+) -> (Vec<Line<'static>>, Option<Detail>) {
+    let list = node_edges(edges, node);
+    if list.is_empty() {
+        return (vec![], None);
+    }
+    let mut lines = vec![blank(), heading(app, "Relationships")];
+    let chosen = app.graph_edge.map(|i| i % list.len());
+    for (i, edge) in list.iter().enumerate() {
+        let (arrow, other) = if edge["to"] == node {
+            (app.symbols.back_arrow(), name(str_of(edge, "from")))
+        } else {
+            (app.symbols.arrow(), name(str_of(edge, "to")))
+        };
+        let text = format!(
+            "{} {arrow} {other} ({})",
+            if chosen == Some(i) { "▶" } else { " " },
+            label(str_of(edge, "kind")).to_lowercase()
+        );
+        lines.push(if chosen == Some(i) {
+            Line::from(Span::styled(line(&text), app.theme.selected(true)))
+        } else {
+            muted_line(app, text)
+        });
+    }
+    lines.push(muted_line(app, "e next edge · enter edge detail"));
+    (lines, chosen.map(|i| edge_detail(list[i], name)))
 }
 
 fn packs(app: &App) -> Screen {
@@ -2467,23 +2536,30 @@ fn baseline(app: &App, id: &str) -> Screen {
                         .unwrap_or_else(|| text::middle(str_of(m, "digest"), 14, "…")),
                     tone: state_tone(m["state"].as_str().unwrap_or("")),
                     open: m["pack"].as_str().map(|p| Route::ChangePack(p.to_owned())),
+                    search: search(&[
+                        ("text", m["title"].as_str().unwrap_or("")),
+                        ("id", m["pack"].as_str().unwrap_or("")),
+                        ("digest", str_of(m, "digest")),
+                        ("state", m["state"].as_str().unwrap_or("")),
+                    ]),
                 })
                 .collect();
             let edges = value["edges"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|e| Some((digest_index(&e["from"])?, digest_index(&e["to"])?)))
+                .filter_map(|e| {
+                    Some((
+                        digest_index(&e["from"])?,
+                        digest_index(&e["to"])?,
+                        str_of(e, "kind").to_owned(),
+                    ))
+                })
                 .collect();
             if app.graph_list {
                 return baseline_list_fallback(app, id, value);
             }
-            Body::Graph(Graph {
-                key: format!("baseline-graph:{id}"),
-                nodes,
-                edges,
-                legend: false,
-            })
+            graph_body(app, format!("baseline-graph:{id}"), nodes, edges, false)
         }
     };
     let mut screen = Screen::new(body);
@@ -2509,6 +2585,19 @@ fn baseline(app: &App, id: &str) -> Screen {
             "Head",
             if member["head"] == true { "yes" } else { "no" },
         ));
+        let name = |digest: &str| {
+            members
+                .iter()
+                .find(|m| m["digest"] == digest)
+                .and_then(|m| m["title"].as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| text::middle(digest, 18, app.symbols.ellipsis()))
+        };
+        let empty = Vec::new();
+        let edges = value["edges"].as_array().unwrap_or(&empty);
+        let (lines, detail) = relations(app, edges, &selected, &name);
+        screen.inspector.extend(lines);
+        screen.detail = detail;
     }
     screen.actions = baseline_actions(id);
     screen.explain = Some(baseline_explain(app, value));
@@ -3431,14 +3520,17 @@ fn compare_cells(a: &str, b: &str) -> std::cmp::Ordering {
 
 /// `/` filter: plain words match any field; `field:value` matches that field (§10.1).
 pub fn matches_filter(row: &Row, filter: &str) -> bool {
+    matches_search(&row.search, filter)
+}
+
+pub fn matches_search(fields: &[(&'static str, String)], filter: &str) -> bool {
     filter.split_whitespace().all(|token| {
         let token = token.to_lowercase();
         match token.split_once(':') {
-            Some((field, value)) if !field.is_empty() => row
-                .search
+            Some((field, value)) if !field.is_empty() => fields
                 .iter()
                 .any(|(name, text)| *name == field && text.contains(value)),
-            _ => row.search.iter().any(|(_, text)| text.contains(&token)),
+            _ => fields.iter().any(|(_, text)| text.contains(&token)),
         }
     })
 }
