@@ -39,8 +39,8 @@ fn content(effect: &openaevc::protocol::AppliedEffect) -> Option<Vec<u8>> {
     b64::decode(effect.payload["content"].as_str()?).ok()
 }
 
-/// Unified-diff lines between two file versions, with 3 lines of context.
-pub fn diff_lines(old: &[u8], new: &[u8]) -> Value {
+/// Unified-diff lines between two file versions, with `context` lines around each change.
+pub fn diff_lines(old: &[u8], new: &[u8], context: usize) -> Value {
     let (Ok(old), Ok(new)) = (std::str::from_utf8(old), std::str::from_utf8(new)) else {
         return json!({"binary":true,"old_size":old.len(),"new_size":new.len()});
     };
@@ -48,7 +48,7 @@ pub fn diff_lines(old: &[u8], new: &[u8]) -> Value {
     let mut lines = Vec::new();
     let (mut added, mut removed) = (0usize, 0usize);
     let mut truncated = false;
-    for group in diff.grouped_ops(3) {
+    for group in diff.grouped_ops(context) {
         if lines.len() >= MAX_DIFF_LINES {
             truncated = true;
             break;
@@ -116,6 +116,7 @@ impl Project {
         d: &crate::domains::FileDomain,
         before: &crate::resources::FileState,
         effect: &openaevc::protocol::AppliedEffect,
+        context: usize,
     ) -> Value {
         use crate::domains::FileOp;
         let path = effect.target.locator.as_str();
@@ -133,7 +134,7 @@ impl Project {
             .map(<[u8]>::to_vec)
             .unwrap_or_default();
         let new = content(effect).unwrap_or_default();
-        let mut diff = diff_lines(&old, &new);
+        let mut diff = diff_lines(&old, &new, context);
         diff["path"] = json!(path);
         diff["status"] = json!(status);
         if status == "renamed" {
@@ -145,7 +146,14 @@ impl Project {
     }
 
     /// One file's change in a pack against previously accepted content.
-    pub async fn view_pack_diff(&self, pack_id: &str, path: &str) -> Result<Value> {
+    /// `context`: unchanged lines around each change (default 3, at most 50).
+    pub async fn view_pack_diff(
+        &self,
+        pack_id: &str,
+        path: &str,
+        context: Option<u32>,
+    ) -> Result<Value> {
+        let context = context.unwrap_or(3).min(50) as usize;
         let pack = self.pack(pack_id).await?;
         let d = self.file_domain().await?;
         let effect = pack
@@ -161,7 +169,7 @@ impl Project {
         let before = self
             .accepted_state_for(&paths, Some(&pack.id.to_string()))
             .await?;
-        Ok(Self::file_diff(&d, &before, effect))
+        Ok(Self::file_diff(&d, &before, effect, context))
     }
 
     /// Everything the ChangePack workstation needs in one read.
@@ -197,7 +205,7 @@ impl Project {
                 files.push(json!({"path":path,"kind":effect.target.kind,"status":"changed","effect":effect.kind}));
                 continue;
             };
-            let diff = Self::file_diff(d, &before, effect);
+            let diff = Self::file_diff(d, &before, effect, 3);
             added += diff["added"].as_u64().unwrap_or(0);
             removed += diff["removed"].as_u64().unwrap_or(0);
             let mut row = json!({"path":path,"kind":effect.target.kind,"status":diff["status"],
@@ -969,10 +977,10 @@ mod tests {
 
     #[test]
     fn diff_counts_and_marks_binary() {
-        let diff = diff_lines(b"a\nb\nc\n", b"a\nB\nc\nd\n");
+        let diff = diff_lines(b"a\nb\nc\n", b"a\nB\nc\nd\n", 3);
         assert_eq!(diff["added"], 2);
         assert_eq!(diff["removed"], 1);
         assert_eq!(diff["lines"][0]["kind"], "hunk");
-        assert_eq!(diff_lines(&[0xff, 0], b"x")["binary"], true);
+        assert_eq!(diff_lines(&[0xff, 0], b"x", 3)["binary"], true);
     }
 }

@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePacks   ✓ healthy
+ Calve  project: openaevc  workspace: main  ChangePacks   ● healthy
 ┌ ChangePacks ─────────────────────────────────────────────────────────────────┐
 │ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1              │
 │                                                                              │

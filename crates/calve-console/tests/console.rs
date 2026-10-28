@@ -374,6 +374,217 @@ fn connection_loss_is_safe() {
     assert!(!h.render().contains("offline"));
 }
 
+/// Scenario I: the selection survives a disconnect and reconnect; a lost daemon says so.
+#[test]
+fn reconnect_keeps_selection() {
+    let mut h = Harness::new(120, 35);
+    h.app.navigate(Route::ChangePacks);
+    h.pump();
+    h.key(KeyCode::Char('j')).key(KeyCode::Char('j'));
+    let selected = h.app.collections["packs"].selected_id.clone();
+    h.app.connection = h.app.connection.after(None);
+    assert_eq!(h.app.connection, Connection::Disconnected);
+    h.app.now += 14;
+    let screen = h.render();
+    assert!(screen.contains("! daemon disconnected"), "{screen}");
+    assert!(screen.contains("STALE · last update 14s ago"), "{screen}");
+    h.app.connection = Connection::Daemon;
+    h.key(KeyCode::Char('r'));
+    assert_eq!(h.app.collections["packs"].selected_id, selected);
+    assert!(h.render().contains("● healthy"));
+}
+
+/// §88: the shell renders before the backend answers.
+#[test]
+fn startup_shows_connecting() {
+    let (now, _) = fixtures();
+    let mut app = App::new(
+        Theme::new(ThemeName::Mono),
+        Symbols { unicode: true },
+        Connection::Connecting,
+        now,
+    );
+    app.size = (100, 30);
+    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+    terminal.draw(|f| render::draw(f, &app)).unwrap();
+    let top: String = (0..100)
+        .map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_owned())
+        .collect();
+    assert!(top.contains("○ connecting"), "{top}");
+    assert!(!app.can_act(), "no actions before the backend answers");
+}
+
+/// §87: without a Project the console welcomes and lists registered Projects.
+#[test]
+fn first_run_welcomes_instead_of_exiting() {
+    let mut h = Harness::new(120, 35);
+    let status = h.data.remove("status").unwrap();
+    h.app.data.clear();
+    h.app.project.clear();
+    h.app.refresh();
+    h.pump();
+    assert_eq!(h.app.route, Route::Projects);
+    let screen = h.render();
+    assert!(screen.contains("Welcome to Calve"), "{screen}");
+    assert!(screen.contains("openaevc"), "{screen}");
+    // Enter opens the selected Project: every later request targets its root.
+    h.data.insert("status".into(), status);
+    h.key(KeyCode::Enter);
+    assert_eq!(h.app.open_project.as_deref(), Some("/home/dev/openaevc"));
+    assert_eq!(h.app.route, Route::Overview);
+}
+
+/// §16, §91.4: event rows keep their identity when events are inserted above, deleted below
+/// or reordered, and the inspector follows the same event.
+#[test]
+fn event_selection_survives_refresh_changes() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::Events);
+    h.pump();
+    h.key(KeyCode::Char('j')).key(KeyCode::Char('j'));
+    let selected = h.app.collections["events"].selected_id.clone().unwrap();
+    let events = h.data["events"].as_array().unwrap().clone();
+    let mut inserted = events.clone();
+    let mut fresh = events[0].clone();
+    fresh["id"] = json!("calve:999");
+    fresh["kind"] = json!("pack.sealed");
+    inserted.insert(0, fresh);
+    let mut deleted_below = events.clone();
+    deleted_below.truncate(4);
+    let mut reordered = events.clone();
+    reordered.swap(0, 3);
+    for data in [inserted, deleted_below, reordered] {
+        h.data.insert("events".into(), Value::Array(data));
+        h.key(KeyCode::Char('r'));
+        assert_eq!(
+            h.app.collections["events"].selected_id.as_deref(),
+            Some(selected.as_str())
+        );
+        assert!(
+            h.render().contains(&selected),
+            "inspector shows the same event"
+        );
+    }
+    // Deleted: the nearest neighbour is selected, never a silent jump to the top.
+    let remaining: Vec<Value> = events
+        .iter()
+        .filter(|e| e["id"] != selected.as_str())
+        .cloned()
+        .collect();
+    h.data.insert("events".into(), Value::Array(remaining));
+    h.key(KeyCode::Char('r'));
+    let now = h.app.collections["events"].selected_id.clone().unwrap();
+    assert_ne!(now, selected);
+    assert_ne!(
+        Some(&now),
+        events[0]["id"].as_str().map(str::to_owned).as_ref()
+    );
+}
+
+/// §42.3: `f` follows new events; scrolling away pauses; the footer says which.
+#[test]
+fn events_live_mode_follows_and_pauses() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::Events);
+    h.pump();
+    h.key(KeyCode::Char('j'));
+    h.key(KeyCode::Char('f'));
+    assert!(h.render().contains("● LIVE"));
+    let mut events = h.data["events"].as_array().unwrap().clone();
+    let mut fresh = events[0].clone();
+    fresh["id"] = json!("calve:1000");
+    events.insert(0, fresh);
+    h.data.insert("events".into(), Value::Array(events));
+    h.key(KeyCode::Char('r'));
+    assert_eq!(
+        h.app.collections["events"].selected_id.as_deref(),
+        Some("calve:1000")
+    );
+    h.key(KeyCode::Char('j'));
+    assert!(h.render().contains("paused · f follow"));
+}
+
+/// §52: `y` copies the object reference, never an internal row key.
+#[test]
+fn copy_uses_object_references() {
+    let mut h = Harness::new(160, 45);
+    h.key(KeyCode::Char('y'));
+    let copied = h.app.clipboard.take().unwrap();
+    assert!(copied.starts_with("exe_"), "{copied}");
+    let id = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(id));
+    h.pump();
+    h.keys("2").key(KeyCode::Char('y'));
+    assert_eq!(
+        h.app.clipboard.take().as_deref(),
+        Some("crates/runner/http.rs")
+    );
+    h.app.navigate(Route::Events);
+    h.pump();
+    h.key(KeyCode::Char('y'));
+    assert_eq!(h.app.clipboard.take().as_deref(), Some("calve:37"));
+}
+
+/// §25.2: Enter on an attention item opens its native tab.
+#[test]
+fn overview_items_open_their_context() {
+    let mut h = Harness::new(160, 45);
+    h.key(KeyCode::Char('j'))
+        .key(KeyCode::Char('j'))
+        .key(KeyCode::Enter);
+    assert!(
+        matches!(h.app.route, Route::ChangePack(_)),
+        "{:?}",
+        h.app.route
+    );
+    assert_eq!(h.app.tab_name(), Some("Review"));
+    h.key(KeyCode::Esc);
+    h.key(KeyCode::Char('G')).key(KeyCode::Enter);
+    assert!(
+        matches!(
+            h.app.route,
+            Route::ChangePack(_) | Route::Execution(_) | Route::Events
+        ),
+        "recent activity opens its object: {:?}",
+        h.app.route
+    );
+}
+
+/// §16, §43, §72: marks show a persistent count and drive bulk actions; the drawer shows
+/// daemon events; a pasted newline never submits a command.
+#[test]
+fn marks_drawer_and_paste() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::Inbox);
+    h.pump();
+    h.key(KeyCode::Char(' '))
+        .key(KeyCode::Char('j'))
+        .key(KeyCode::Char(' '));
+    assert!(h.render().contains("✓ 2 selected"));
+    h.key(KeyCode::Char('a'));
+    assert!(h.render().contains("Acknowledge 2 selected"));
+    h.key(KeyCode::Enter);
+    assert!(
+        h.commands.iter().any(|c| c.contains("Acknowledge 2 items")),
+        "{:?}",
+        h.commands
+    );
+    h.key_with(KeyCode::Char('l'), KeyModifiers::CONTROL);
+    let screen = h.render();
+    assert!(
+        screen.contains("Daemon events") && screen.contains("execution.finished"),
+        "{screen}"
+    );
+    let before = h.commands.len();
+    h.key(KeyCode::Char(':'));
+    calve_console::input::handle_paste(&mut h.app, "pack list\nproject unregister x");
+    h.pump();
+    assert!(
+        matches!(h.app.overlays.last(), Some(Overlay::Command { input, .. }) if input == "pack list project unregister x")
+    );
+    assert_eq!(h.commands.len(), before, "paste ran nothing");
+}
+
 /// Scenario J: hostile terminal sequences in backend text render as inert text.
 #[test]
 fn hostile_text_is_sanitized() {

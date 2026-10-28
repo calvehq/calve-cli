@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Overview   ✓ healthy                            v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Overview   ● healthy                            v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Overview ────────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││Needs attention ──────────────────────────────────────────────────││openaevc                    │
 │› Overview        5 ││    Subject                                                       ││prj_01a0ef13-e366-71a6-816c-│
@@ -14,19 +14,19 @@
 │  Inbox           2 ││S│  cpk_…arz75ayzoee · ChangePack   Refactor verification rules         │                       │
 │  Doctor            ││ │                                                                      │                       │
 │  Extensions        ││R│↑↓ select  enter run  esc close                                       │                       │
-│                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
-│                    ││1m     calve     execution.finished              exe_…kmvsvhf3a   ││                            │
-│                    ││1m     openaevc  execution.failed                exe_…kmvsvhf3a   ││                            │
-│                    ││1m     calve     pack.created                    cpk_…byu3s65zi   ││                            │
-│                    ││1m     openaevc  changepack.created              cpk_…byu3s65zi   ││                            │
-│                    ││1m     openaevc  changepack.quarantined          cpk_…7sqtlkoba   ││                            │
-│                    ││1m     calve     pack.created                    cpk_…7sqtlkoba   ││                            │
-│                    ││1m     openaevc  changepack.created              cpk_…7sqtlkoba   ││                            │
-│                    ││1m     calve     file.captured                   rules.txt        ││                            │
-│                    ││1m     openaevc  execution.succeeded             exe_…z2zkohuja   ││                            │
-│                    ││1m     openaevc  effect.applied                  exe_…z2zkohuja   ││                            │
-│                    ││1m     calve     pack.created                    cpk_…z75ayzoee   ││                            │
-│                    ││1m     openaevc  changepack.created              cpk_…z75ayzoee   ││                            │
+│                    ││T└──────────────────────────────────────────────────────────────────────┘                       │
+│                    ││21:31:21Z calve          execution.finished      exe_…kmvsvhf3a   ││                            │
+│                    ││21:31:21Z pri_…dboetqnv4 execution.failed        exe_…kmvsvhf3a   ││                            │
+│                    ││21:31:20Z calve          pack.created            cpk_…byu3s65zi   ││                            │
+│                    ││21:31:20Z pri_…dboetqnv4 changepack.created      cpk_…byu3s65zi   ││                            │
+│                    ││21:31:19Z pri_…dboetqnv4 changepack.quarantined  cpk_…7sqtlkoba   ││                            │
+│                    ││21:31:19Z calve          pack.created            cpk_…7sqtlkoba   ││                            │
+│                    ││21:31:18Z pri_…dboetqnv4 changepack.created      cpk_…7sqtlkoba   ││                            │
+│                    ││21:31:18Z calve          file.captured           rules.txt        ││                            │
+│                    ││21:31:18Z pri_…dboetqnv4 execution.succeeded     exe_…z2zkohuja   ││                            │
+│                    ││21:31:17Z pri_…dboetqnv4 effect.applied          exe_…z2zkohuja   ││                            │
+│                    ││21:31:17Z calve          pack.created            cpk_…z75ayzoee   ││                            │
+│                    ││21:31:16Z pri_…dboetqnv4 changepack.created      cpk_…z75ayzoee   ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

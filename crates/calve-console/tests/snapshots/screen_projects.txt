@@ -1,19 +1,19 @@
- Calve  project: openaevc  workspace: main  Projects   ✓ healthy                                                                    v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Projects   ● healthy                                                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Projects ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Project                   Path                               Health                        ││openaevc                                   │
 │  Overview        5 ││openaevc                  /home/dev/openaevc                 ✓ HEALTHY            current  ││prj_01a0ef13-e366-71a6-816c-8197620898db   │
-│  Work              ││                                                                                           ││                                           │
-│  Change Graph      ││                                                                                           ││Health      ✓ HEALTHY                      │
-│  ChangePacks       ││                                                                                           ││                                           │
-│  Baselines         ││                                                                                           ││Actions                                    │
-│  Evidence          ││                                                                                           ││  Health check                             │
-│  Events            ││                                                                                           ││  Unregister                               │
-│                    ││                                                                                           ││  a all actions                            │
-│ SYSTEM             ││                                                                                           ││                                           │
-│› Projects          ││                                                                                           ││                                           │
-│  Inbox           2 ││                                                                                           ││                                           │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││                                                                                           ││                                           │
+│  Work              ││                                                                                           ││/home/dev/openaevc                         │
+│  Change Graph      ││                                                                                           ││                                           │
+│  ChangePacks       ││                                                                                           ││Health      ✓ HEALTHY                      │
+│  Baselines         ││                                                                                           ││                                           │
+│  Evidence          ││                                                                                           ││Actions                                    │
+│  Events            ││                                                                                           ││  Open                                     │
+│                    ││                                                                                           ││  Doctor                                   │
+│ SYSTEM             ││                                                                                           ││  Health check                             │
+│› Projects          ││                                                                                           ││  Register                                 │
+│  Inbox           2 ││                                                                                           ││  Relocate                                 │
+│  Doctor            ││                                                                                           ││  Unregister                               │
+│  Extensions        ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
@@ -42,4 +42,4 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help
+ ↑↓ navigate  enter open project  a actions  ^P commands  : command  ? help

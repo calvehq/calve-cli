@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePacks   [ok] healthy                      v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  ChangePacks   [*] healthy                       v0.1.0  ^P Commands  ? Help
 + Navigation --------++ ChangePacks -----------------------------------------------------++ Inspector -----------------+
 | PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  ||cpk_...j44nesmebyu3s65zi    |
 |  Overview        5 ||                                                                  ||Lint sweep                  |

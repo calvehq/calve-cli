@@ -116,8 +116,8 @@ pub struct Loaded {
     pub value: Option<Value>,
     pub error: Option<String>,
     pub loading: bool,
-    /// Tick of the last successful load; drives the stale marker.
-    pub at: u64,
+    /// Wall-clock second of the last successful load; drives `STALE · last update Ns ago`.
+    pub at: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,12 +146,36 @@ impl Width {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Connection {
+    /// Starting or reaching the backend; nothing has answered yet (§88).
+    Connecting,
     /// Talking to calved.
     Daemon,
     /// Running the application in-process.
     Local,
     /// The last request could not reach the backend.
     Offline,
+    /// calved answered earlier and now does not (§6.2 `! daemon disconnected`).
+    Disconnected,
+}
+
+impl Connection {
+    /// The state after a reply that reached `backend` (`None`: nothing answered).
+    pub fn after(self, backend: Option<Self>) -> Self {
+        match backend {
+            Some(state) => state,
+            None if matches!(self, Self::Daemon | Self::Disconnected) => Self::Disconnected,
+            None => Self::Offline,
+        }
+    }
+}
+
+/// How tables show times (`[console] time`, §54); inspectors always add the exact time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimeStyle {
+    #[default]
+    Relative,
+    Absolute,
+    Both,
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +210,11 @@ pub enum Target {
         generation: u64,
     },
     Command(String),
+    /// Switch the console to another registered Project, landing on `route` (§44).
+    OpenProject {
+        root: String,
+        route: Route,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -310,16 +339,33 @@ pub struct App {
     pub graph_list: bool,
     pub diff_scroll: usize,
     pub diff_wrap: bool,
+    /// Execution output stays scrolled to the newest line (§28); scrolling up pauses it.
     pub log_follow: bool,
+    /// Events screen live mode (§42.3): the newest event stays selected.
+    pub events_live: bool,
+    pub time: TimeStyle,
+    pub show_footer: bool,
+    pub wrap_logs: bool,
+    pub log_timestamps: bool,
+    /// Output viewer search term (§28).
+    pub log_search: Option<String>,
+    pub diff_context: Option<u32>,
     pub commands: u64,
-    /// Text the runtime should place on the clipboard (OSC 52).
+    /// Text the runtime should place on the clipboard, and what it is (for the notice).
     pub clipboard: Option<String>,
+    pub clipboard_label: String,
     pub hits: std::cell::RefCell<Vec<(ratatui::layout::Rect, Hit)>>,
     pub last_click: Option<(u64, u16, u16)>,
     /// Pressed key -> default key it stands for; `'\0'` means the default was remapped away.
     pub keymap: BTreeMap<char, char>,
     /// Remapped actions for the help overlay.
     pub custom_keys: Vec<(String, char)>,
+    /// No Project is open: the backend's reason, shown on the welcome screen (§87).
+    pub welcome: Option<String>,
+    /// A Project root the runtime should switch the request scope to.
+    pub open_project: Option<String>,
+    /// Bumped on every Project switch; replies from an older epoch are dropped.
+    pub epoch: u64,
 }
 
 impl App {
@@ -356,12 +402,23 @@ impl App {
             diff_scroll: 0,
             diff_wrap: false,
             log_follow: true,
+            events_live: false,
+            time: TimeStyle::Relative,
+            show_footer: true,
+            wrap_logs: false,
+            log_timestamps: false,
+            log_search: None,
+            diff_context: None,
             commands: 0,
             clipboard: None,
+            clipboard_label: String::new(),
             hits: std::cell::RefCell::new(Vec::new()),
             last_click: None,
             keymap: BTreeMap::new(),
             custom_keys: Vec::new(),
+            welcome: None,
+            open_project: None,
+            epoch: 0,
         };
         app.load_route();
         app.request("status", status_action());
@@ -408,15 +465,18 @@ impl App {
     }
 
     pub fn respond(&mut self, key: &str, result: Result<Value, String>) {
-        let tick = self.tick;
+        let now = self.now;
         let entry = self.data.entry(key.to_owned()).or_default();
         entry.loading = false;
         match result {
             Ok(value) => {
                 entry.value = Some(value);
                 entry.error = None;
-                entry.at = tick;
-                if self.connection == Connection::Offline {
+                entry.at = now;
+                if matches!(
+                    self.connection,
+                    Connection::Offline | Connection::Connecting
+                ) {
                     self.connection = Connection::Local;
                 }
             }
@@ -424,18 +484,37 @@ impl App {
                 if error.contains("Connection refused")
                     || error.contains("No such file") && key == "status"
                 {
-                    self.connection = Connection::Offline;
+                    self.connection = self.connection.after(None);
                 }
                 entry.error = Some(error);
             }
         }
-        if key == "status"
-            && let Some(value) = self.value("status")
-        {
-            self.project = value["project"]["name"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
+        if key == "status" {
+            match self.data.get("status") {
+                Some(Loaded {
+                    value: Some(value),
+                    error: None,
+                    ..
+                }) => {
+                    self.project = value["project"]["name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned();
+                    self.welcome = None;
+                }
+                // The backend answered but no Project is open here: welcome, not an exit (§87).
+                Some(Loaded {
+                    value: None,
+                    error: Some(error),
+                    ..
+                }) if self.can_act() => {
+                    self.welcome = Some(error.clone());
+                    if self.route != Route::Projects {
+                        self.navigate(Route::Projects);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -456,12 +535,33 @@ impl App {
 
     /// Reloads the current route (and status) without dropping cached values.
     pub fn refresh(&mut self) {
-        for (key, action) in route_requests(&self.route) {
+        let mut keys = route_requests(&self.route);
+        if self.drawer {
+            keys.push(("events".into(), action(&["activity"])));
+        }
+        for (key, action) in keys {
             if let Some(entry) = self.data.get_mut(&key) {
                 entry.loading = false;
             }
             self.request(&key, action);
         }
+        self.request("status", status_action());
+    }
+
+    /// Switches every later request to the Project at `root` (§44 Open) and starts over there.
+    pub fn switch_project(&mut self, root: String) {
+        self.open_project = Some(root);
+        self.epoch += 1;
+        self.data.clear();
+        self.outbox.clear();
+        self.collections.clear();
+        self.back.clear();
+        self.forward.clear();
+        self.overlays.clear();
+        self.project.clear();
+        self.welcome = None;
+        self.route = Route::Overview;
+        self.after_route_change();
         self.request("status", status_action());
     }
 
@@ -548,7 +648,7 @@ impl App {
 
     /// Actions change authority-bearing state, so they are disabled while offline (§6.2).
     pub fn can_act(&self) -> bool {
-        self.connection != Connection::Offline
+        matches!(self.connection, Connection::Daemon | Connection::Local)
     }
 }
 

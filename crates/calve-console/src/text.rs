@@ -39,11 +39,13 @@ pub fn sanitize(input: &str) -> String {
                 }
             }
             '\t' => out.push_str("  "),
-            // C1 controls, bidi overrides and zero-width joiners that can disguise text.
+            // C1 controls, bidi overrides and zero-width characters that can disguise text.
             c if c.is_control()
                 || ('\u{202a}'..='\u{202e}').contains(&c)
                 || ('\u{2066}'..='\u{2069}').contains(&c)
-                || c == '\u{200b}' =>
+                || ('\u{200b}'..='\u{200f}').contains(&c)
+                || c == '\u{2060}'
+                || c == '\u{feff}' =>
             {
                 out.push('\u{fffd}');
             }
@@ -91,12 +93,28 @@ pub fn middle(text: &str, max: usize, ellipsis: &str) -> String {
     if width(text) <= max {
         return text.to_owned();
     }
+    // Both halves are measured in display columns, so wide (CJK) text cannot overflow.
     let room = max.saturating_sub(width(ellipsis));
-    let head = room.div_ceil(2);
-    let tail = room - head;
-    let chars: Vec<char> = text.chars().collect();
-    let start: String = chars.iter().take(head).collect();
-    let end: String = chars[chars.len().saturating_sub(tail)..].iter().collect();
+    let take = |chars: &mut dyn Iterator<Item = char>, budget: usize| {
+        let mut used = 0;
+        let mut out = Vec::new();
+        for ch in chars {
+            let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+            if used + w > budget {
+                break;
+            }
+            used += w;
+            out.push(ch);
+        }
+        out
+    };
+    let start: String = take(&mut text.chars(), room.div_ceil(2))
+        .into_iter()
+        .collect();
+    let end: String = take(&mut text.chars().rev(), room / 2)
+        .into_iter()
+        .rev()
+        .collect();
     format!("{start}{ellipsis}{end}")
 }
 
@@ -107,17 +125,28 @@ pub fn fit(text: &str, cols: usize, ellipsis: &str) -> String {
     format!("{cut}{}", " ".repeat(pad))
 }
 
-/// Unix seconds from either a number or an RFC 3339 UTC timestamp.
+/// Unix seconds from either a number or an RFC 3339 timestamp (`Z` or a `±hh:mm` offset).
 pub fn unix_seconds(value: &Value) -> Option<i64> {
     if let Some(seconds) = value.as_i64() {
         return Some(seconds);
     }
     let text = value.as_str()?;
-    let (date, rest) = text.split_once('T')?;
+    let (date, rest) = text.split_once(['T', ' '])?;
     let mut parts = date.split('-').map(|p| p.parse::<i64>().ok());
     let (y, m, d) = (parts.next()??, parts.next()??, parts.next()??);
-    let time = rest.trim_end_matches('Z');
-    let time = time.split(['+', '.']).next()?;
+    let (time, offset) = match rest.find(['Z', 'z', '+', '-']) {
+        Some(i) if rest[i..].eq_ignore_ascii_case("z") => (&rest[..i], 0),
+        Some(i) => {
+            let sign = if rest[i..].starts_with('-') { -1 } else { 1 };
+            let (oh, om) = rest[i + 1..].split_once(':')?;
+            (
+                &rest[..i],
+                sign * (oh.parse::<i64>().ok()? * 3600 + om.parse::<i64>().ok()? * 60),
+            )
+        }
+        None => return None,
+    };
+    let time = time.split('.').next()?;
     let mut hms = time.split(':').map(|p| p.parse::<i64>().ok());
     let (hh, mm, ss) = (hms.next()??, hms.next()??, hms.next()??);
     // Days from civil date (Howard Hinnant's algorithm).
@@ -128,7 +157,7 @@ pub fn unix_seconds(value: &Value) -> Option<i64> {
     let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
-    Some(days * 86_400 + hh * 3600 + mm * 60 + ss)
+    Some(days * 86_400 + hh * 3600 + mm * 60 + ss - offset)
 }
 
 /// Compact relative age: `now`, `42s`, `11m`, `2h`, `3d`, `5w`.
@@ -163,6 +192,16 @@ pub fn absolute(seconds: i64) -> String {
         secs % 3600 / 60,
         secs % 60
     )
+}
+
+/// Compact UTC clock time for tables: `06:12:01Z` today, `09-28 06:12Z` otherwise.
+pub fn clock(seconds: i64, now: i64) -> String {
+    let full = absolute(seconds);
+    if seconds.div_euclid(86_400) == now.div_euclid(86_400) {
+        format!("{}Z", &full[11..19])
+    } else {
+        format!("{} {}Z", &full[5..10], &full[11..16])
+    }
 }
 
 /// Human value for the generic structured renderer (console-ux §81).
@@ -245,11 +284,28 @@ mod tests {
     }
 
     #[test]
+    fn offsets_and_zero_width_are_handled() {
+        let utc = unix_seconds(&json!("2026-09-28T00:42:01Z")).unwrap();
+        assert_eq!(unix_seconds(&json!("2026-09-28T06:12:01+05:30")), Some(utc));
+        assert_eq!(
+            unix_seconds(&json!("2026-09-27T19:42:01.5-05:00")),
+            Some(utc)
+        );
+        assert_eq!(unix_seconds(&json!("2026-09-28T00:42:01")), None);
+        assert!(
+            !sanitize("a\u{200d}b\u{feff}c\u{2060}").contains(['\u{200d}', '\u{feff}', '\u{2060}'])
+        );
+        assert!(width(&middle("日本語のとても長いファイル名.rs", 12, "…")) <= 12);
+    }
+
+    #[test]
     fn times_parse_and_format() {
         let t = unix_seconds(&json!("2026-09-29T10:00:05.123456789Z")).unwrap();
         assert_eq!(absolute(t), "2026-09-29 10:00:05 UTC");
         assert_eq!(unix_seconds(&json!(1_790_000_000)), Some(1_790_000_000));
         assert_eq!(relative(t - 660, t), "11m");
         assert_eq!(relative(t, t), "now");
+        assert_eq!(clock(t, t + 60), "10:00:05Z");
+        assert_eq!(clock(t, t + 86_400), "09-29 10:00Z");
     }
 }

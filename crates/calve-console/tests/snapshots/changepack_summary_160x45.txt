@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fch6v6mnbhlp7sqtlkoba   ✓ healthy                                   v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fch6v6mnbhlp7sqtlkoba   ● healthy                                   v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ ChangePack cpk_agqo6fch6v6mnbhlp7sqtlkoba ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││cpk_…h6v6mnbhlp7sqtlkoba                   │
 │  Overview        5 ││                                                                                           ││Experimental transport                     │

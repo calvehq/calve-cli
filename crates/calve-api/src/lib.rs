@@ -282,7 +282,13 @@ pub enum ViewQuery {
     /// ChangePack workstation read model.
     Pack { id: String },
     /// One file diff read model.
-    PackDiff { id: String, path: String },
+    PackDiff {
+        id: String,
+        path: String,
+        /// Unchanged lines around each change (default 3).
+        #[arg(long)]
+        context: Option<u32>,
+    },
     /// Change graph read model.
     ChangeGraph {
         #[arg(long)]

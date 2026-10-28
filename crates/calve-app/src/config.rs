@@ -112,6 +112,18 @@ pub struct ConsoleConfig {
     pub mouse: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unicode: Option<bool>,
+    /// Table times: `relative` (default), `absolute` or `both` (§54).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_footer: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_logs: Option<bool>,
+    /// Unchanged lines around each diff change (0–50).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff_context: Option<u32>,
+    // No `confirm_destructive`: console confirmations are the `--yes` of destructive commands,
+    // so turning them off would be a console-only bypass.
     /// Single-key remaps, action name -> key (e.g. `explain = "e"`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub keys: BTreeMap<String, String>,
@@ -336,17 +348,32 @@ impl ConfigPaths {
                 }
                 file.console.theme = Some(value.to_owned());
             }
-            "console.mouse" | "console.unicode" => {
+            "console.mouse" | "console.unicode" | "console.show_footer" | "console.wrap_logs" => {
                 let flag = match value {
                     "true" => true,
                     "false" => false,
                     _ => return Err(invalid(format!("{key} must be true or false"))),
                 };
-                if key == "console.mouse" {
-                    file.console.mouse = Some(flag);
-                } else {
-                    file.console.unicode = Some(flag);
+                *match key {
+                    "console.mouse" => &mut file.console.mouse,
+                    "console.unicode" => &mut file.console.unicode,
+                    "console.show_footer" => &mut file.console.show_footer,
+                    _ => &mut file.console.wrap_logs,
+                } = Some(flag);
+            }
+            "console.time" => {
+                if !["relative", "absolute", "both"].contains(&value) {
+                    return Err(invalid("console.time must be relative, absolute or both"));
                 }
+                file.console.time = Some(value.to_owned());
+            }
+            "console.diff_context" => {
+                let lines: u32 = value
+                    .parse()
+                    .ok()
+                    .filter(|n| *n <= 50)
+                    .ok_or_else(|| invalid("console.diff_context must be an integer 0–50"))?;
+                file.console.diff_context = Some(lines);
             }
             "ui.page_size" => {
                 let size: u16 = value
@@ -380,6 +407,10 @@ impl ConfigPaths {
             "console.theme" => file.console.theme = None,
             "console.mouse" => file.console.mouse = None,
             "console.unicode" => file.console.unicode = None,
+            "console.time" => file.console.time = None,
+            "console.show_footer" => file.console.show_footer = None,
+            "console.wrap_logs" => file.console.wrap_logs = None,
+            "console.diff_context" => file.console.diff_context = None,
             key if key.starts_with("secrets.") => {
                 file.secrets.remove(key.trim_start_matches("secrets."));
             }
@@ -439,6 +470,10 @@ impl ConfigPaths {
             "console.theme" => Ok(json!(config.console.theme)),
             "console.mouse" => Ok(json!(config.console.mouse)),
             "console.unicode" => Ok(json!(config.console.unicode)),
+            "console.time" => Ok(json!(config.console.time)),
+            "console.show_footer" => Ok(json!(config.console.show_footer)),
+            "console.wrap_logs" => Ok(json!(config.console.wrap_logs)),
+            "console.diff_context" => Ok(json!(config.console.diff_context)),
             key if key.starts_with("secrets.") => {
                 let name = key.trim_start_matches("secrets.");
                 config
@@ -591,6 +626,17 @@ fn validate(file: &ConfigFile) -> Result<()> {
         validate_secret_ref(value)?;
     }
     validate_console_keys(&file.console.keys)?;
+    if file
+        .console
+        .time
+        .as_deref()
+        .is_some_and(|t| !["relative", "absolute", "both"].contains(&t))
+    {
+        return Err(invalid("console.time must be relative, absolute or both"));
+    }
+    if file.console.diff_context.is_some_and(|n| n > 50) {
+        return Err(invalid("console.diff_context must be an integer 0–50"));
+    }
     for (id, profile) in &file.providers {
         validate_profile(id, profile)?;
     }
@@ -660,6 +706,18 @@ impl EffectiveConfig {
         }
         if file.console.unicode.is_some() {
             self.console.unicode = file.console.unicode;
+        }
+        if file.console.time.is_some() {
+            self.console.time = file.console.time;
+        }
+        if file.console.show_footer.is_some() {
+            self.console.show_footer = file.console.show_footer;
+        }
+        if file.console.wrap_logs.is_some() {
+            self.console.wrap_logs = file.console.wrap_logs;
+        }
+        if file.console.diff_context.is_some() {
+            self.console.diff_context = file.console.diff_context;
         }
         self.console.keys.extend(file.console.keys);
         for id in file.providers.keys() {

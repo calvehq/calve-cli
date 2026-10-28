@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Doctor   ✓ healthy                                                                      v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Doctor   ● healthy                                                                      v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Doctor ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Check                Status     Detail                                                     ││Project                                    │
 │  Overview        5 ││Product database     ✓ PASS     ok                                                         ││prj_01a0ef13-e366-71a6-816c-8197620898db   │

@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Overview   ✓ healthy        v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Overview   ● healthy        v0.1.0  ^P Commands  ? Help
 ┌ Overview ──────────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
 │Needs attention ────────────────────────────────────────────││openaevc                            │
 │    Subject                                                 ││prj_01a0ef13-e366-71a6-816c-81976208│
@@ -14,17 +14,17 @@
 │SDK compatibility              0/1     1      ● RUNNING     ││                                    │
 │                                                            ││                                    │
 │Recent activity ────────────────────────────────────────────││                                    │
-│       Source    Event                     Subject          ││                                    │
-│1m     calve     execution.finished        exe_…kmvsvhf3a   ││                                    │
-│1m     openaevc  execution.failed          exe_…kmvsvhf3a   ││                                    │
-│1m     calve     pack.created              cpk_…byu3s65zi   ││                                    │
-│1m     openaevc  changepack.created        cpk_…byu3s65zi   ││                                    │
-│1m     openaevc  changepack.quarantined    cpk_…7sqtlkoba   ││                                    │
-│1m     calve     pack.created              cpk_…7sqtlkoba   ││                                    │
-│1m     openaevc  changepack.created        cpk_…7sqtlkoba   ││                                    │
-│1m     calve     file.captured             rules.txt        ││                                    │
-│1m     openaevc  execution.succeeded       exe_…z2zkohuja   ││                                    │
-│1m     openaevc  effect.applied            exe_…z2zkohuja   ││                                    │
-│1m     calve     pack.created              cpk_…z75ayzoe1/19││                                    │
+│Time      Actor          Event                              ││                                    │
+│21:31:21Z calve          execution.finished                 ││                                    │
+│21:31:21Z pri_…dboetqnv4 execution.failed                   ││                                    │
+│21:31:20Z calve          pack.created                       ││                                    │
+│21:31:20Z pri_…dboetqnv4 changepack.created                 ││                                    │
+│21:31:19Z pri_…dboetqnv4 changepack.quarantined             ││                                    │
+│21:31:19Z calve          pack.created                       ││                                    │
+│21:31:18Z pri_…dboetqnv4 changepack.created                 ││                                    │
+│21:31:18Z calve          file.captured                      ││                                    │
+│21:31:18Z pri_…dboetqnv4 execution.succeeded                ││                                    │
+│21:31:17Z pri_…dboetqnv4 effect.applied                     ││                                    │
+│21:31:17Z calve          pack.created                   1/19││                                    │
 └────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

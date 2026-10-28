@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Overview   ✓ healthy
+ Calve  project: openaevc  workspace: main  Overview   ● healthy
 ┌ Overview ────────────────────────────────────────────────────────────────────┐
 │Needs attention ──────────────────────────────────────────────────────────────│
 │    Subject                                                                   │
@@ -14,11 +14,11 @@
 │SDK compatibility                                0/1     1      ● RUNNING     │
 │                                                                              │
 │Recent activity ──────────────────────────────────────────────────────────────│
-│       Source    Event                                       Subject          │
-│1m     calve     execution.finished                          exe_…kmvsvhf3a   │
-│1m     openaevc  execution.failed                            exe_…kmvsvhf3a   │
-│1m     calve     pack.created                                cpk_…byu3s65zi   │
-│1m     openaevc  changepack.created                          cpk_…byu3s65zi   │
-│1m     openaevc  changepack.quarantined                      cpk_…7sqtlkob1/19│
+│Time      Actor          Event                               Object           │
+│21:31:21Z calve          execution.finished                  exe_…kmvsvhf3a   │
+│21:31:21Z pri_…dboetqnv4 execution.failed                    exe_…kmvsvhf3a   │
+│21:31:20Z calve          pack.created                        cpk_…byu3s65zi   │
+│21:31:20Z pri_…dboetqnv4 changepack.created                  cpk_…byu3s65zi   │
+│21:31:19Z pri_…dboetqnv4 changepack.quarantined              cpk_…7sqtlkob1/19│
 └──────────────────────────────────────────────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

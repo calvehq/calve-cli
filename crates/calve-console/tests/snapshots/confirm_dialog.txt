@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fb73fzondjarz75ayzoee   ✓ healthy
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fb73fzondjarz75ayzoee   ● healthy
 ┌ Navigation ────────┐┌ ChangePack cpk_agqo6fb73fzondjarz75ayzoee ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…73fzondjarz75ayzoee    │
 │  Overview        5 ││                                                                  ││Refactor verification rules │

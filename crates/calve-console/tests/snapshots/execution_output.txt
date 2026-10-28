@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Execution exe_agqo6fcpwj26lfwyckmvsvhf3a   ✓ healthy                                    v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Execution exe_agqo6fcpwj26lfwyckmvsvhf3a   ● healthy                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Execution exe_agqo6fcpwj26lfwyckmvsvhf3a ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqo6fcpwj26lfwyckmvsvhf3a   │
 │  Overview        5 ││                                                                                           ││                                           │
@@ -42,4 +42,4 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- tab tabs  f follow  a actions  esc back  ^P commands  : command  ? help
+ ● LIVE  tab tabs  f follow  a actions  esc back  ^P commands  : command  ? help

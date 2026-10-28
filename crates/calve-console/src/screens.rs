@@ -48,6 +48,10 @@ pub struct Row {
     pub id: String,
     pub cells: Vec<Cell>,
     pub open: Option<Route>,
+    /// What `y` copies when the row id is not the user-facing reference (§52).
+    pub copy: Option<String>,
+    /// The tab `open` lands on (Overview items open Verify or Review, §25.2).
+    pub tab: Option<&'static str>,
     /// Lowercased text matched by `/` filters and structured `field:value` tokens.
     pub search: Vec<(&'static str, String)>,
 }
@@ -147,9 +151,22 @@ fn age_cell(app: &App, value: &Value) -> Cell {
     muted(app, age(app, value))
 }
 
+/// A table time in the user's style (`[console] time`, §54).
 pub fn age(app: &App, value: &Value) -> String {
+    use crate::model::TimeStyle;
     unix_seconds(value)
-        .map(|t| relative(t, app.now))
+        .map(|t| match app.time {
+            TimeStyle::Relative => relative(t, app.now),
+            TimeStyle::Absolute => text::clock(t, app.now),
+            TimeStyle::Both => format!("{} · {}", relative(t, app.now), text::clock(t, app.now)),
+        })
+        .unwrap_or_else(|| "—".into())
+}
+
+/// Inspector time: relative and exact, with the zone stated (§54).
+pub fn exact(app: &App, value: &Value) -> String {
+    unix_seconds(value)
+        .map(|t| format!("{} ago · {}", relative(t, app.now), text::absolute(t)))
         .unwrap_or_else(|| "—".into())
 }
 
@@ -437,10 +454,18 @@ fn overview(app: &App) -> Screen {
         "running" => Tone::Running,
         _ => Tone::Neutral,
     };
+    // Enter opens the item's native context (§25.2).
     let route_for = |kind: &str, id: &str| match kind {
         "pack" | "quarantined_pack" | "stale_review" => Some(Route::ChangePack(id.to_owned())),
         "task" | "task_inconsistency" => Some(Route::Task(id.to_owned())),
         "execution" => Some(Route::Execution(id.to_owned())),
+        "baseline" => Some(Route::Baseline(id.to_owned())),
+        _ => route_for_id(id),
+    };
+    let tab_for = |kind: &str, subject_kind: &str| match (kind, subject_kind) {
+        (_, "baseline") => Some("Explain"),
+        ("failure", "pack") => Some("Verify"),
+        ("review" | "stale", _) | (_, "stale_review") => Some("Review"),
         _ => None,
     };
     let attention: Vec<Row> = value["needs_attention"]
@@ -458,6 +483,8 @@ fn overview(app: &App) -> Screen {
                     plain(app, str_of(entry, "message")),
                     age_cell(app, &entry["at"]),
                 ],
+                copy: Some(subject.to_owned()),
+                tab: tab_for(str_of(entry, "kind"), str_of(entry, "subject_kind")),
                 open: route_for(str_of(entry, "subject_kind"), subject),
                 search: search(&[
                     ("id", subject),
@@ -482,6 +509,9 @@ fn overview(app: &App) -> Screen {
                 muted(app, entry["packs"].to_string()),
                 state_cell(app, str_of(entry, "state")),
             ],
+            copy: Some(str_of(entry, "id").to_owned()),
+            tab: None,
+            // Opens Work filtered to this intent's tasks (see `input::open_selected`).
             open: Some(Route::Work),
             search: search(&[
                 ("text", str_of(entry, "title")),
@@ -493,8 +523,7 @@ fn overview(app: &App) -> Screen {
         .as_array()
         .into_iter()
         .flatten()
-        .enumerate()
-        .map(|(index, entry)| activity_row(app, index, entry))
+        .map(|entry| activity_row(app, entry, true))
         .collect();
     let mut sections = vec![Section {
         title: Some("Needs attention".into()),
@@ -518,12 +547,7 @@ fn overview(app: &App) -> Screen {
     });
     sections.push(Section {
         title: Some("Recent activity".into()),
-        columns: vec![
-            col("", 6, 1),
-            col("Source", 9, 3),
-            fill("Event", 20, 1),
-            col("Subject", 16, 2),
-        ],
+        columns: activity_columns(),
         rows: activity,
     });
     let mut screen = Screen::new(Body::Table(Table {
@@ -554,40 +578,82 @@ fn overview(app: &App) -> Screen {
     screen
 }
 
-fn activity_row(app: &App, index: usize, entry: &Value) -> Row {
-    let source = str_of(entry, "source");
+/// The native screen of an OpenAEVC/Calve ID, from its type prefix.
+pub fn route_for_id(id: &str) -> Option<Route> {
+    let (prefix, _) = id.split_once('_')?;
+    Some(match prefix {
+        "cpk" => Route::ChangePack(id.to_owned()),
+        "exe" => Route::Execution(id.to_owned()),
+        "tsk" => Route::Task(id.to_owned()),
+        "bsl" => Route::Baseline(id.to_owned()),
+        _ => return None,
+    })
+}
+
+/// Time, actor, event, object (§42, §25 Recent activity).
+fn activity_columns() -> Vec<Col> {
+    vec![
+        col("Time", 9, 1),
+        col("Actor", 14, 2),
+        fill("Event", 20, 1),
+        col("Object", 16, 2),
+    ]
+}
+
+/// The stable reference of an activity entry: its event id, never its position (§16).
+pub fn event_id(entry: &Value) -> String {
+    match entry["id"].as_str() {
+        Some(id) => id.to_owned(),
+        None => format!("{}:{}", str_of(entry, "source"), entry["source_sequence"]),
+    }
+}
+
+fn event_time(entry: &Value) -> &Value {
+    if entry["created_at"].is_null() {
+        &entry["timestamp"]
+    } else {
+        &entry["created_at"]
+    }
+}
+
+/// `open_subject`: Enter opens the event's object (Overview) rather than the event.
+fn activity_row(app: &App, entry: &Value, open_subject: bool) -> Row {
     let kind = str_of(entry, "kind");
     let subject = entry["subject"]
         .as_str()
         .or_else(|| entry["subjects"][0].as_str())
         .unwrap_or("");
-    let time = entry["created_at"].clone();
-    let time = if time.is_null() {
-        entry["timestamp"].clone()
-    } else {
-        time
+    let actor = entry["actor"].as_str().unwrap_or(str_of(entry, "source"));
+    let id = event_id(entry);
+    // Activity reads as a timeline: clock times unless the user asked for both (§25, §42).
+    let time = match app.time {
+        crate::model::TimeStyle::Both => age(app, event_time(entry)),
+        _ => unix_seconds(event_time(entry))
+            .map(|t| text::clock(t, app.now))
+            .unwrap_or_else(|| "—".into()),
     };
     Row {
-        id: format!(
-            "event:{index}:{}",
-            entry["id"]
-                .as_str()
-                .or(entry["sequence"].as_str())
-                .unwrap_or("")
-        ),
         cells: vec![
-            muted(app, age(app, &time)),
-            muted(app, source),
+            muted(app, time),
+            muted(app, text::short_id(actor, 14, app.symbols.ellipsis())),
             plain(app, kind),
             id_cell(app, subject),
         ],
-        open: None,
+        copy: None,
+        tab: None,
+        open: if open_subject {
+            route_for_id(subject).or(Some(Route::Events))
+        } else {
+            None
+        },
         search: search(&[
             ("type", kind),
-            ("actor", str_of(entry, "actor")),
+            ("actor", actor),
             ("object", subject),
-            ("source", source),
+            ("source", str_of(entry, "source")),
+            ("id", &id),
         ]),
+        id,
     }
 }
 
@@ -626,12 +692,15 @@ fn work(app: &App) -> Screen {
                     state_cell(app, str_of(task, "state")),
                     age_cell(app, &task["updated_at"]),
                 ],
+                copy: None,
+                tab: None,
                 open: Some(Route::Task(str_of(task, "id").to_owned())),
                 search: search(&[
                     ("text", str_of(task, "title")),
                     ("state", str_of(task, "state")),
                     ("actor", task["assignee"].as_str().unwrap_or("")),
                     ("id", str_of(task, "id")),
+                    ("intent", intent_id),
                 ]),
             })
             .collect();
@@ -659,7 +728,6 @@ fn work(app: &App) -> Screen {
             ],
             rows,
         });
-        let _ = intent_id;
     }
     let mut screen = Screen::new(Body::Table(Table {
         key: "work".into(),
@@ -810,6 +878,8 @@ fn task(app: &App, id: &str) -> Screen {
                 .map(|execution| Row {
                     id: execution.to_owned(),
                     cells: vec![id_cell(app, execution)],
+                    copy: None,
+                    tab: None,
                     open: Some(Route::Execution(execution.to_owned())),
                     search: search(&[("id", execution)]),
                 })
@@ -1017,6 +1087,8 @@ fn table_body(
                     }
                 })
                 .collect(),
+            copy: None,
+            tab: None,
             open: None,
             search: fields
                 .iter()
@@ -1205,6 +1277,8 @@ fn packs(app: &App) -> Screen {
                     muted(app, format!("{} files", pack["changed"])),
                     age_cell(app, &pack["updated_at"]),
                 ],
+                copy: None,
+                tab: None,
                 open: Some(Route::ChangePack(id.to_owned())),
                 search: search(&[
                     ("id", id),
@@ -1402,6 +1476,8 @@ fn pack(app: &App, id: &str) -> Screen {
                             ),
                             age_cell(app, &v["at"]),
                         ],
+                        copy: None,
+                        tab: None,
                         open: None,
                         search: search(&[
                             ("text", str_of(v, "verifier")),
@@ -1808,6 +1884,8 @@ fn baselines(app: &App) -> Screen {
                     ),
                     age_cell(app, &b["created_at"]),
                 ],
+                copy: None,
+                tab: None,
                 open: Some(Route::Baseline(id.to_owned())),
                 search: search(&[
                     ("id", id),
@@ -1951,6 +2029,8 @@ fn baseline(app: &App, id: &str) -> Screen {
                                 text::middle(str_of(m, "digest"), 22, app.symbols.ellipsis()),
                             ),
                         ],
+                        copy: None,
+                        tab: None,
                         open: (!pack.is_empty()).then(|| Route::ChangePack(pack.to_owned())),
                         search: search(&[
                             ("id", pack),
@@ -1989,19 +2069,13 @@ fn baseline(app: &App, id: &str) -> Screen {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .enumerate()
-                    .map(|(i, e)| activity_row(app, i, e))
+                    .map(|e| activity_row(app, e, true))
                     .collect();
                 Body::Table(Table {
                     key: format!("baseline-history:{id}"),
                     sections: vec![Section {
                         title: None,
-                        columns: vec![
-                            col("", 6, 1),
-                            col("Source", 9, 3),
-                            fill("Event", 20, 1),
-                            col("Subject", 16, 2),
-                        ],
+                        columns: activity_columns(),
                         rows,
                     }],
                     empty: (
@@ -2178,6 +2252,8 @@ fn evidence(app: &App) -> Screen {
                     ),
                     muted(app, str_of(e, "media_type")),
                 ],
+                copy: None,
+                tab: None,
                 open: e["pack"].as_str().map(|p| Route::ChangePack(p.to_owned())),
                 search: search(&[
                     ("digest", digest),
@@ -2258,53 +2334,82 @@ fn events(app: &App) -> Screen {
         .as_array()
         .into_iter()
         .flatten()
-        .enumerate()
-        .map(|(i, e)| activity_row(app, i, e))
+        .map(|e| activity_row(app, e, false))
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "events".into(),
         sections: vec![Section {
             title: None,
-            columns: vec![
-                col("When", 6, 1),
-                col("Source", 9, 3),
-                fill("Event", 20, 1),
-                col("Object", 16, 2),
-            ],
+            columns: activity_columns(),
             rows,
         }],
         empty: ("No events yet.".into(), String::new()),
         chips: vec![],
     }));
-    if let Some(index) =
-        selected_row_id(app, "events").and_then(|id| id.split(':').nth(1)?.parse::<usize>().ok())
-        && let Some(e) = value.as_array().and_then(|v| v.get(index))
+    if let Some(id) = selected_row_id(app, "events")
+        && let Some(e) = value
+            .as_array()
+            .and_then(|v| v.iter().find(|e| event_id(e) == id))
     {
-        screen.inspector = vec![heading(app, str_of(e, "kind")), blank()];
-        let time = if e["created_at"].is_null() {
-            &e["timestamp"]
-        } else {
-            &e["created_at"]
-        };
-        if let Some(seconds) = unix_seconds(time) {
+        screen.inspector = event_inspector(app, e);
+        if let Some(route) = e["subject"]
+            .as_str()
+            .or_else(|| e["subjects"][0].as_str())
+            .and_then(route_for_id)
+        {
             screen
-                .inspector
-                .push(field(app, "Time", text::absolute(seconds)));
+                .actions
+                .push(item("Open object", &route.title(), Target::Open(route)));
         }
-        screen
-            .inspector
-            .push(field(app, "Source", str_of(e, "source")));
-        screen
-            .inspector
-            .push(field(app, "Actor", e["actor"].as_str().unwrap_or("—")));
-        screen.inspector.extend(raw_lines(app, e));
     }
     screen.hints = vec![
         ("↑↓", "navigate"),
-        ("/", "filter actor: type: object:"),
-        ("f", "follow"),
+        ("/", "filter actor: type: object: after:"),
+        (
+            "f",
+            if app.events_live {
+                "pause live"
+            } else {
+                "live"
+            },
+        ),
     ];
     screen
+}
+
+/// Event detail (§42.2): exact time, actor, type, object, related references, raw event.
+fn event_inspector(app: &App, e: &Value) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        heading(app, str_of(e, "kind")),
+        muted_line(app, event_id(e)),
+        blank(),
+        field(app, "Time", exact(app, event_time(e))),
+        field(app, "Actor", e["actor"].as_str().unwrap_or("—")),
+        field(app, "Source", str_of(e, "source")),
+    ];
+    let subjects: Vec<String> = e["subjects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.as_str().map(str::to_owned))
+        .collect();
+    if !subjects.is_empty() {
+        lines.push(blank());
+        lines.push(heading(app, "Objects"));
+        for subject in subjects {
+            lines.push(muted_line(
+                app,
+                format!("  {} {subject}", app.symbols.arrow()),
+            ));
+        }
+    }
+    if let Some(detail) = e["detail"].as_str() {
+        lines.push(field(app, "Detail", detail));
+    }
+    lines.push(blank());
+    lines.push(heading(app, "Raw"));
+    lines.extend(raw_lines(app, e));
+    lines
 }
 
 fn projects(app: &App) -> Screen {
@@ -2346,6 +2451,8 @@ fn projects(app: &App) -> Screen {
                         },
                     ),
                 ],
+                copy: Some(str_of(p, "path").to_owned()),
+                tab: None,
                 open: None,
                 search: search(&[
                     ("text", str_of(p, "name")),
@@ -2355,10 +2462,26 @@ fn projects(app: &App) -> Screen {
             }
         })
         .collect();
+    // First run (§87): no Project is open, so the registered ones are the way in.
+    let title = app
+        .welcome
+        .as_ref()
+        .map(|_| "Welcome to Calve · No project is currently open · Detected projects".to_owned());
+    let empty = if app.welcome.is_some() {
+        (
+            "No Calve project found.".into(),
+            "Run calve init <path>, or :project register <path>.".into(),
+        )
+    } else {
+        (
+            "No registered Projects.".into(),
+            "Run calve init in a directory, or :project register <path>.".into(),
+        )
+    };
     let mut screen = Screen::new(Body::Table(Table {
         key: "projects".into(),
         sections: vec![Section {
-            title: None,
+            title,
             columns: vec![
                 fill("Project", 14, 1),
                 col("Path", 34, 3),
@@ -2367,20 +2490,36 @@ fn projects(app: &App) -> Screen {
             ],
             rows,
         }],
-        empty: (
-            "No registered Projects.".into(),
-            "Run calve init in a directory, or :project register <path>.".into(),
-        ),
+        empty,
         chips: vec![],
     }));
-    if let Some(id) = selected_row_id(app, "projects") {
+    let register = item(
+        "Register",
+        "project register <path>",
+        Target::Prompt {
+            args: vec!["project".into(), "register".into()],
+            suffix: vec![],
+            field: "Project directory".into(),
+            confirm: false,
+            label: "Register project".into(),
+        },
+    );
+    if let Some(id) = selected_row_id(app, "projects")
+        && let Some(project) = value
+            .as_array()
+            .and_then(|v| v.iter().find(|p| p["project_id"] == id.as_str()))
+    {
+        let root = str_of(project, "path").to_owned();
+        screen.inspector = vec![
+            heading(app, str_of(project, "name")),
+            muted_line(app, &id),
+            muted_line(app, &root),
+        ];
         if let Some(health) = app.value(&format!("project-health:{id}")) {
-            screen.inspector = vec![
-                heading(app, str_of(health, "name")),
-                muted_line(app, &id),
-                blank(),
-                field_state(app, "Health", str_of(health, "status")),
-            ];
+            screen.inspector.push(blank());
+            screen
+                .inspector
+                .push(field_state(app, "Health", str_of(health, "status")));
             for finding in health["findings"].as_array().into_iter().flatten() {
                 screen
                     .inspector
@@ -2389,9 +2528,37 @@ fn projects(app: &App) -> Screen {
         }
         screen.actions = vec![
             item(
+                "Open",
+                "switch the console to this Project",
+                Target::OpenProject {
+                    root: root.clone(),
+                    route: Route::Overview,
+                },
+            ),
+            item(
+                "Doctor",
+                "open this Project's diagnostics",
+                Target::OpenProject {
+                    root,
+                    route: Route::Doctor,
+                },
+            ),
+            item(
                 "Health check",
                 "project health",
                 run("Project health", &["project", "health", &id], false),
+            ),
+            register,
+            item(
+                "Relocate",
+                "project relocate <new path>",
+                Target::Prompt {
+                    args: vec!["project".into(), "relocate".into(), id.clone()],
+                    suffix: vec![],
+                    field: "New directory".into(),
+                    confirm: false,
+                    label: "Relocate project".into(),
+                },
             ),
             item(
                 "Unregister",
@@ -2399,7 +2566,14 @@ fn projects(app: &App) -> Screen {
                 run("Unregister project", &["project", "unregister", &id], true),
             ),
         ];
+    } else {
+        screen.actions = vec![register];
     }
+    screen.hints = vec![
+        ("↑↓", "navigate"),
+        ("enter", "open project"),
+        ("a", "actions"),
+    ];
     screen
 }
 
@@ -2439,6 +2613,8 @@ fn inbox(app: &App) -> Screen {
                     ),
                     age_cell(app, &i["first_seen"]),
                 ],
+                copy: None,
+                tab: None,
                 open: match str_of(i, "kind") {
                     "execution" => Some(Route::Execution(subject.to_owned())),
                     "task_inconsistency" => Some(Route::Task(subject.to_owned())),
@@ -2458,8 +2634,27 @@ fn inbox(app: &App) -> Screen {
         empty: ("Inbox is clear.".into(), "Attention items appear when executions fail, packs are quarantined or reviews go stale.".into()),
         chips: vec![],
     }));
+    let marked: Vec<String> = app
+        .collections
+        .get("inbox")
+        .map(|c| c.marked.iter().cloned().collect())
+        .unwrap_or_default();
+    if !marked.is_empty() {
+        // Bulk actions state their count (§16).
+        let mut args = vec!["inbox".to_owned(), "ack".to_owned()];
+        args.extend(marked.iter().cloned());
+        screen.actions.push(item(
+            &format!("Acknowledge {} selected", marked.len()),
+            "inbox ack (marked items)",
+            Target::Run {
+                args,
+                confirm: false,
+                label: format!("Acknowledge {} items", marked.len()),
+            },
+        ));
+    }
     if let Some(key) = selected_row_id(app, "inbox") {
-        screen.actions = vec![
+        screen.actions.extend([
             item(
                 "Acknowledge",
                 "inbox ack",
@@ -2491,7 +2686,7 @@ fn inbox(app: &App) -> Screen {
                 "inbox clear-resolved",
                 run("Clear resolved", &["inbox", "clear-resolved"], true),
             ),
-        ];
+        ]);
     }
     screen.hints = vec![
         ("↑↓", "navigate"),
@@ -2551,6 +2746,8 @@ fn doctor(app: &App) -> Screen {
                 state_cell(app, state),
                 muted(app, detail),
             ],
+            copy: None,
+            tab: None,
             open: None,
             search: search(&[("text", name), ("status", state)]),
         })
@@ -2660,6 +2857,8 @@ fn extensions(app: &App) -> Screen {
                 state_cell(app, state),
                 muted(app, scalar(&entry["granted_host_capabilities"])),
             ],
+            copy: None,
+            tab: None,
             open: None,
             search: search(&[("text", id), ("status", state)]),
         });
@@ -2679,6 +2878,8 @@ fn extensions(app: &App) -> Screen {
                     muted(app, format!("○ {}", str_of(p, "catalog"))),
                     muted(app, p["summary"].as_str().unwrap_or("")),
                 ],
+                copy: None,
+                tab: None,
                 open: None,
                 search: search(&[("text", id), ("status", "available")]),
             }
@@ -2874,6 +3075,8 @@ mod tests {
             let row = Row {
                 id: "r".into(),
                 cells: vec![],
+                copy: None,
+                tab: None,
                 open: None,
                 search: vec![("state", state.clone()), ("text", text.clone())],
             };
@@ -2894,6 +3097,8 @@ mod tests {
         let row = Row {
             id: "a".into(),
             cells: vec![],
+            copy: None,
+            tab: None,
             open: None,
             search: vec![("state", "sealed".into()), ("text", "add runner".into())],
         };

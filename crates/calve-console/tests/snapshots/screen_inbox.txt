@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Inbox   ✓ healthy                                                                       v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Inbox   ● healthy                                                                       v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Inbox ────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Severity    Type               Message                                              Age    ││Select an item to inspect it.              │
 │  Overview        5 ││× danger    Execution          Execution FAILED                                     1m     ││                                           │

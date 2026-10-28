@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Extensions   ✓ healthy                                                                  v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Extensions   ● healthy                                                                  v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Extensions ───────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Enabled in this Project ───────────────────────────────────────────────────────────────────││org.langs.rust                             │
 │  Overview        5 ││Extension                                        Version   Status       Granted            ││                                           │

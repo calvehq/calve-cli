@@ -30,6 +30,15 @@ pub fn sync(app: &mut App) {
     let screen = screens::build(app);
     match &screen.body {
         Body::Table(table) => {
+            if app.route == Route::Events
+                && app.events_live
+                && let Some(first) = visible_rows(app, table).first()
+            {
+                let id = first.id.clone();
+                let state = app.collection(&table.key);
+                state.selected_id = Some(id);
+                state.selected_index = 0;
+            }
             if let Some(index) = selection(app, table) {
                 let id = visible_rows(app, table)[index].id.clone();
                 let state = app.collection(&table.key);
@@ -251,6 +260,10 @@ fn run_target(app: &mut App, target: Target) {
             error: None,
             term: None,
         }),
+        Target::OpenProject { root, route } => {
+            app.switch_project(root);
+            app.navigate(route);
+        }
     }
     sync(app);
 }
@@ -878,13 +891,21 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
     }
 }
 
+/// Hands `text` to the runtime, which reports whether the clipboard took it (§52).
 fn copy(app: &mut App, text: String, what: &str) {
     app.clipboard = Some(text);
-    app.notify(Tone::Success, format!("Copied {what}"));
+    app.clipboard_label = what.to_owned();
 }
 
 /// Moves the selection of the current collection by `delta` rows (identity preserved).
 fn move_selection(app: &mut App, delta: isize) {
+    // Scrolling away from the newest entry pauses following (§42.3, §28).
+    if app.route == Route::Events {
+        app.events_live = false;
+    }
+    if matches!(app.route, Route::Execution(_)) && delta < 0 {
+        app.log_follow = false;
+    }
     let screen = screens::build(app);
     match &screen.body {
         Body::Table(table) => {
@@ -945,10 +966,41 @@ fn move_graph(app: &mut App, graph: &screens::Graph, direction: Direction) {
 
 fn open_selected(app: &mut App) {
     let screen = screens::build(app);
-    let route = match &screen.body {
-        Body::Table(table) => {
-            selection(app, table).and_then(|i| visible_rows(app, table)[i].open.clone())
+    let row = match &screen.body {
+        Body::Table(table) => selection(app, table).map(|i| visible_rows(app, table)[i].clone()),
+        _ => None,
+    };
+    if let Some(row) = row {
+        if app.route == Route::Projects
+            && let Some(Target::OpenProject { .. }) = screen.actions.first().map(|a| &a.target)
+        {
+            let target = screen.actions[0].target.clone();
+            run_target(app, target);
+            return;
         }
+        if let Some(route) = row.open {
+            app.navigate(route.clone());
+            // The row's native context: a tab, an intent's tasks, or the event itself (§25.2).
+            if let Some(tab) = row.tab
+                && let Some(index) = app.route.tabs().iter().position(|t| *t == tab)
+            {
+                app.set_tab(index);
+            }
+            if route == Route::Work
+                && let Some(intent) = row.id.strip_prefix("intent:")
+            {
+                app.collection("work").filter = format!("intent:{intent}");
+            }
+            if route == Route::Events {
+                app.collection("events").selected_id = Some(row.id.clone());
+            }
+        } else if app.width() != Width::Wide && app.focus == Focus::Workspace {
+            app.focus = Focus::Inspector;
+        }
+        sync(app);
+        return;
+    }
+    let route = match &screen.body {
         Body::Graph(graph) => app
             .collections
             .get(&graph.key)
@@ -965,9 +1017,14 @@ fn open_selected(app: &mut App) {
     sync(app);
 }
 
+/// The user-facing reference of the selection: what `y` copies and actions are titled with.
 fn selected_id(app: &App, screen: &Screen) -> Option<String> {
     match &screen.body {
-        Body::Table(table) => selection(app, table).map(|i| visible_rows(app, table)[i].id.clone()),
+        Body::Table(table) => selection(app, table).map(|i| {
+            let row = visible_rows(app, table)[i];
+            row.copy.clone().unwrap_or_else(|| row.id.clone())
+        }),
+        Body::Diff => diff_path(app),
         Body::Graph(graph) => app
             .collections
             .get(&graph.key)
@@ -980,6 +1037,21 @@ fn selected_id(app: &App, screen: &Screen) -> Option<String> {
             _ => None,
         },
     }
+}
+
+/// The selected file of the Diff tab.
+fn diff_path(app: &App) -> Option<String> {
+    let Route::ChangePack(id) = &app.route else {
+        return None;
+    };
+    let files = app.value(&format!("pack:{id}"))?["files"].as_array()?;
+    let index = app
+        .collections
+        .get(&format!("diff-files:{id}"))
+        .map_or(0, |c| c.selected_index);
+    files.get(index.min(files.len().saturating_sub(1)))?["path"]
+        .as_str()
+        .map(str::to_owned)
 }
 
 fn jump_hunk(app: &mut App, forward: bool) {
@@ -1122,7 +1194,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 selected: 0,
             });
         }
-        KeyCode::Char('l') if ctrl => app.drawer = !app.drawer,
+        KeyCode::Char('l') if ctrl => {
+            app.drawer = !app.drawer;
+            // The drawer shows recent daemon events next to console actions (§43).
+            if app.drawer {
+                app.request(
+                    "events",
+                    parse_action(&strings(&["activity"])).expect("valid"),
+                );
+            }
+        }
         KeyCode::Char(':') => app.overlays.push(Overlay::Command {
             input: String::new(),
             history: None,
@@ -1189,16 +1270,12 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             sync(app);
         }
         KeyCode::Char('w') if diff => app.diff_wrap = !app.diff_wrap,
-        KeyCode::Char('f') => {
+        KeyCode::Char('f') if app.route == Route::Events => {
+            app.events_live = !app.events_live;
+            sync(app);
+        }
+        KeyCode::Char('f') if matches!(app.route, Route::Execution(_)) => {
             app.log_follow = !app.log_follow;
-            app.notify(
-                Tone::Neutral,
-                if app.log_follow {
-                    "Following"
-                } else {
-                    "Follow paused"
-                },
-            );
         }
         KeyCode::Char(']') | KeyCode::Char('[') if diff => {
             app.pending_key = Some(if key.code == KeyCode::Char(']') {
@@ -1359,6 +1436,31 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         _ => {}
     }
+}
+
+/// Bracketed paste (§72): text lands in the focused field as one line and never submits.
+pub fn handle_paste(app: &mut App, pasted: &str) {
+    let text = crate::text::line(pasted);
+    let field = match app.overlays.last_mut() {
+        Some(Overlay::Command { input, .. })
+        | Some(Overlay::Prompt { input, .. })
+        | Some(Overlay::Palette { query: input, .. })
+        | Some(Overlay::Actions { query: input, .. })
+        | Some(Overlay::Navigation { query: input, .. }) => Some(input),
+        Some(Overlay::Review(form)) if form.field == 1 => Some(&mut form.comment),
+        Some(_) => None,
+        None if app.filter_editing => {
+            let screen = screens::build(app);
+            crate::render::table_key(&screen)
+                .map(str::to_owned)
+                .map(|key| &mut app.collection(&key).filter)
+        }
+        None => None,
+    };
+    if let Some(field) = field {
+        field.push_str(&text);
+    }
+    sync(app);
 }
 
 pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {

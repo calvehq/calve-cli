@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Work   ✓ healthy                                                                        v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Work   ● healthy                                                                        v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Work ─────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││HTTP conformance  1/4 · ! BLOCKED ─────────────────────────────────────────────────────────││Write transport spec                       │
 │  Overview        5 ││Task                                        Actor        Priority  State          Updated  ││tsk_01a0ef14-0332-7631-a8b7-39ea36f9d120   │

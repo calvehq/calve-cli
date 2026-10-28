@@ -1758,7 +1758,9 @@ async fn dispatch(request: Request) -> Result<Value> {
             ViewQuery::Overview => project.view_overview().await,
             ViewQuery::Packs => project.view_packs().await,
             ViewQuery::Pack { id } => project.view_pack(&id).await,
-            ViewQuery::PackDiff { id, path } => project.view_pack_diff(&id, &path).await,
+            ViewQuery::PackDiff { id, path, context } => {
+                project.view_pack_diff(&id, &path, context).await
+            }
             ViewQuery::ChangeGraph { intent } => project.view_change_graph(intent.as_deref()).await,
             ViewQuery::Baseline { id } => project.view_baseline(&id).await,
             ViewQuery::Execution { id } => project.view_execution(&id).await,

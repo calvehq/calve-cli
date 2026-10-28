@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Baseline bsl_agqo6fba3f6shn4crvzah4boca   ✓ healthy
+ Calve  project: openaevc  workspace: main  Baseline bsl_agqo6fba3f6shn4crvzah4boca   ● healthy
 ┌ Navigation ────────┐┌ Baseline bsl_agqo6fba3f6shn4crvzah4boca ─────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Graph  Packs  Relations  History  Explain  Raw                   ││Baseline                    │
 │  Overview        5 ││                                                                  ││bsl_…shn4crvzah4boca        │

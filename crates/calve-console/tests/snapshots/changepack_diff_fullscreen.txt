@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ✓ healthy                                   v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ● healthy                                   v0.1.0  ^P Commands  ? Help
 ┌ Calve / ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa / Diff ────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                                                                                         │
 │                                                                                                                                                              │

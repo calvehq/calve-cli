@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ✓ healthy
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ● healthy
 ┌ Navigation ────────┐┌ ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…fbv2tzhmigx2ltg27pa    │
 │  Overview        5 ││                                                                  ││Add remote conformance      │

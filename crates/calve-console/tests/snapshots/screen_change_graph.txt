@@ -1,4 +1,4 @@
- Calve  project: openaevc  workspace: main  Change Graph   ✓ healthy                                                                v0.1.0  ^P Commands  ? Help
+ Calve  project: openaevc  workspace: main  Change Graph   ● healthy                                                                v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Change Graph ─────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││[✓ Write transport …] ─────▶[● Runtime HTTP sup…] ───┬─▶[! Daemon hardening]  ─────▶[◆ Fix ││Write transport spec                       │
 │  Overview        5 ││                                                     │                                     ││tsk_01a0ef14-0332-7631-a8b7-39ea36f9d120   │

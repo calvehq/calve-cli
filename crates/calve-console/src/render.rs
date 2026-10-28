@@ -119,11 +119,7 @@ fn span(text: impl Into<String>, style: Style) -> Span<'static> {
 
 fn top_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let theme = &app.theme;
-    let (tone, health) = match app.connection {
-        Connection::Daemon => (Tone::Success, "healthy"),
-        Connection::Local => (Tone::Success, "local"),
-        Connection::Offline => (Tone::Danger, "offline"),
-    };
+    let (glyph, tone, health) = health(app);
     let mut spans = vec![
         span(" Calve ", theme.accent().add_modifier(Modifier::BOLD)),
         span(" project: ", theme.muted()),
@@ -141,10 +137,7 @@ fn top_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
         spans.push(span(line(&app.workspace), theme.text()));
     }
     spans.push(span(format!("  {} ", app.route.title()), theme.heading()));
-    spans.push(span(
-        format!("  {} {health}", app.symbols.tone(tone)),
-        theme.tone(tone),
-    ));
+    spans.push(span(format!("  {glyph} {health}"), theme.tone(tone)));
     let right = format!("v{}  ^P Commands  ? Help ", app.version);
     let used: usize = spans.iter().map(|s| text::width(&s.content)).sum();
     let pad = (area.width as usize).saturating_sub(used + text::width(&right));
@@ -153,6 +146,24 @@ fn top_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {
         spans.push(span(right, theme.muted()));
     }
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// Health indicator (§6.1): symbol and text, never color alone.
+pub fn health(app: &App) -> (&'static str, Tone, &'static str) {
+    let s = &app.symbols;
+    let degraded = app.value("status").is_some_and(|status| {
+        ["recovery", "extension_problems", "provider_problems"]
+            .iter()
+            .any(|key| status[*key].as_array().is_some_and(|a| !a.is_empty()))
+    });
+    match app.connection {
+        Connection::Connecting => (s.tone(Tone::Neutral), Tone::Neutral, "connecting"),
+        Connection::Offline => (s.tone(Tone::Danger), Tone::Danger, "offline"),
+        Connection::Disconnected => (s.tone(Tone::Warning), Tone::Warning, "daemon disconnected"),
+        _ if degraded => (s.tone(Tone::Warning), Tone::Warning, "degraded"),
+        Connection::Daemon => (s.tone(Tone::Running), Tone::Success, "healthy"),
+        Connection::Local => (s.tone(Tone::Running), Tone::Success, "healthy · in-process"),
+    }
 }
 
 fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
@@ -171,15 +182,36 @@ fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
             theme.muted(),
         ));
     }
-    let stale = current_keys(app).iter().any(|key| {
-        app.loaded(key)
-            .is_some_and(|l| l.error.is_some() && l.value.is_some())
-    }) || app.connection == Connection::Offline;
-    if stale {
+    let shown: Vec<&crate::model::Loaded> = current_keys(app)
+        .iter()
+        .filter_map(|key| app.loaded(key))
+        .filter(|l| l.value.is_some())
+        .collect();
+    let stale = shown.iter().any(|l| l.error.is_some()) || !app.can_act();
+    if stale && let Some(at) = shown.iter().map(|l| l.at).min() {
+        // §6.2: cached content stays readable and says how old it is.
         spans.push(span(
-            " STALE · actions disabled  ",
+            format!(
+                " STALE · last update {} ago · actions disabled  ",
+                text::relative(at, app.now)
+            ),
             theme.tone(Tone::Warning),
         ));
+    }
+    if let Some(key) = table_key(screen)
+        && let Some(count) = app
+            .collections
+            .get(key)
+            .map(|c| c.marked.len())
+            .filter(|n| *n > 0)
+    {
+        spans.push(span(
+            format!(" {} {count} selected ", app.symbols.tone(Tone::Success)),
+            theme.tone(Tone::Success),
+        ));
+    }
+    if let Some(live) = live_marker(app) {
+        spans.push(live);
     }
     let loading = current_keys(app).iter().any(|key| {
         app.loaded(key)
@@ -191,11 +223,32 @@ fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
             theme.muted(),
         ));
     }
-    for (key, label) in screen.hints.iter().take(8) {
+    for (key, label) in screen
+        .hints
+        .iter()
+        .take(if app.show_footer { 8 } else { 0 })
+    {
         spans.push(span(format!(" {key} "), theme.accent()));
         spans.push(span(format!("{label} "), theme.muted()));
     }
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// `● LIVE` while following (§42.3, §28); `paused` once the user scrolled away.
+fn live_marker(app: &App) -> Option<Span<'static>> {
+    let following = match (&app.route, app.tab_name()) {
+        (Route::Events, _) => app.events_live,
+        (Route::Execution(_), Some("Output")) => app.log_follow,
+        _ => return None,
+    };
+    Some(if following {
+        span(
+            format!(" {} LIVE ", app.symbols.tone(Tone::Running)),
+            app.theme.tone(Tone::Running),
+        )
+    } else {
+        span(" paused · f follow ", app.theme.muted())
+    })
 }
 
 fn current_keys(app: &App) -> Vec<String> {
@@ -869,34 +922,73 @@ fn inspector_pane(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect)
     );
 }
 
+/// Recent console actions beside the newest daemon events (§43); not the audit stream.
 fn activity_drawer(frame: &mut Frame<'_>, app: &App, area: Rect) {
     let block = pane_block(app, "Activity".into(), false);
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let lines: Vec<Line<'static>> = app
-        .activity
-        .iter()
-        .rev()
-        .take(inner.height as usize)
-        .map(|(_, tone, text)| {
-            Line::from(vec![
-                span(
-                    format!("{} ", app.symbols.tone(*tone)),
-                    app.theme.tone(*tone),
-                ),
-                span(line(text), app.theme.text()),
-            ])
-        })
-        .collect();
-    let lines = if lines.is_empty() {
-        vec![Line::from(span(
+    let [left, right] =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(inner);
+    let mut actions: Vec<Line<'static>> = vec![Line::from(span("Console", app.theme.heading()))];
+    actions.extend(
+        app.activity
+            .iter()
+            .rev()
+            .take((inner.height as usize).saturating_sub(1))
+            .map(|(_, tone, text)| {
+                Line::from(vec![
+                    span(
+                        format!("{} ", app.symbols.tone(*tone)),
+                        app.theme.tone(*tone),
+                    ),
+                    span(line(text), app.theme.text()),
+                ])
+            }),
+    );
+    if actions.len() == 1 {
+        actions.push(Line::from(span(
             "No console actions yet.",
             app.theme.muted(),
-        ))]
-    } else {
-        lines
-    };
-    frame.render_widget(Paragraph::new(lines), inner);
+        )));
+    }
+    frame.render_widget(Paragraph::new(actions), left);
+    let mut events: Vec<Line<'static>> =
+        vec![Line::from(span("Daemon events", app.theme.heading()))];
+    match app.value("events").and_then(Value::as_array) {
+        Some(list) if !list.is_empty() => events.extend(
+            list.iter()
+                .take((inner.height as usize).saturating_sub(1))
+                .map(|e| {
+                    let time = e["timestamp"]
+                        .as_str()
+                        .or(e["created_at"].as_str())
+                        .and_then(|t| text::unix_seconds(&Value::from(t)))
+                        .map(|t| text::clock(t, app.now))
+                        .unwrap_or_default();
+                    Line::from(vec![
+                        span(format!("{time:<10}"), app.theme.muted()),
+                        span(line(e["kind"].as_str().unwrap_or("")), app.theme.text()),
+                        span(
+                            format!(
+                                " {}",
+                                text::short_id(
+                                    e["subject"].as_str().unwrap_or(""),
+                                    16,
+                                    app.symbols.ellipsis()
+                                )
+                            ),
+                            app.theme.accent(),
+                        ),
+                    ])
+                }),
+        ),
+        Some(_) => events.push(Line::from(span("No events yet.", app.theme.muted()))),
+        None => events.push(Line::from(span(
+            format!("Loading{}", app.symbols.ellipsis()),
+            app.theme.muted(),
+        ))),
+    }
+    frame.render_widget(Paragraph::new(events), right);
 }
 
 fn notifications(frame: &mut Frame<'_>, app: &App, area: Rect) {

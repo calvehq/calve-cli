@@ -12,13 +12,17 @@ pub mod screens;
 pub mod text;
 pub mod theme;
 
+use std::cell::RefCell;
 use std::io::{self, IsTerminal, Write};
 use std::rc::Rc;
 use std::time::Duration;
 
 use calve_api::{Action, DaemonCommand, Outcome, Request, RequestScope};
-use calve_client::{Backend, Client, Error, Result};
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use calve_client::{Backend, Client, Result};
+use crossterm::event::{
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -39,7 +43,8 @@ impl TerminalGuard {
     fn enter(mouse: bool) -> Result<Self> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        // Bracketed paste: pasted newlines never submit a command (§72).
+        execute!(stdout, EnterAlternateScreen, EnableBracketedPaste)?;
         if mouse {
             execute!(stdout, EnableMouseCapture)?;
         }
@@ -57,7 +62,12 @@ fn restore(mouse: bool) {
     if mouse {
         let _ = execute!(stdout, DisableMouseCapture);
     }
-    let _ = execute!(stdout, LeaveAlternateScreen, crossterm::cursor::Show);
+    let _ = execute!(
+        stdout,
+        DisableBracketedPaste,
+        LeaveAlternateScreen,
+        crossterm::cursor::Show
+    );
     let _ = disable_raw_mode();
 }
 
@@ -80,6 +90,64 @@ fn osc52(text: &str) {
     let mut stdout = io::stdout();
     let _ = write!(stdout, "\u{1b}]52;c;{encoded}\u{7}");
     let _ = stdout.flush();
+}
+
+/// The system clipboard through the platform's copy tool; `false` when none took the text.
+fn system_clipboard(text: &str) -> bool {
+    let tools: &[&[&str]] = if cfg!(windows) {
+        &[&["clip"]]
+    } else if cfg!(target_os = "macos") {
+        &[&["pbcopy"]]
+    } else {
+        &[
+            &["wl-copy"],
+            &["xclip", "-selection", "clipboard"],
+            &["xsel", "--clipboard", "--input"],
+            &["clip.exe"],
+        ]
+    };
+    tools.iter().any(|tool| {
+        let Ok(mut child) = std::process::Command::new(tool[0])
+            .args(&tool[1..])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        else {
+            return false;
+        };
+        let wrote = child
+            .stdin
+            .take()
+            .is_some_and(|mut stdin| stdin.write_all(text.as_bytes()).is_ok());
+        // A copy tool that hangs must not freeze the console.
+        for _ in 0..20 {
+            if let Ok(Some(status)) = child.try_wait() {
+                return wrote && status.success();
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = child.kill();
+        false
+    })
+}
+
+/// Never fails silently (§52): the system clipboard, else OSC 52 plus a dialog to copy from.
+fn copy_out(app: &mut App, text: String) {
+    let what = std::mem::take(&mut app.clipboard_label);
+    if system_clipboard(&text) {
+        app.notify(theme::Tone::Success, format!("Copied {what}"));
+    } else {
+        osc52(&text);
+        app.notify(
+            theme::Tone::Warning,
+            "No system clipboard; sent to the terminal (OSC 52), which may ignore it",
+        );
+        app.overlays.push(model::Overlay::Result {
+            title: format!("Copy {what} (select the text)"),
+            value: Value::String(text),
+        });
+    }
 }
 
 type Reply = (String, std::result::Result<Value, String>, Option<Backend>);
@@ -128,10 +196,6 @@ fn preferences(config: &Value, no_color: bool) -> (Theme, Symbols, bool) {
 
 /// Starts or connects to calved, then runs the console until the user quits.
 pub async fn run(client: Client, scope: RequestScope, no_color: bool) -> Result<()> {
-    if !client.options().direct && !client.options().no_daemon_start {
-        // The console uses daemon mode; fall back to in-process if it cannot start.
-        let _ = client.daemon(DaemonCommand::Start).await;
-    }
     let config = client
         .call(
             scope.clone(),
@@ -142,28 +206,31 @@ pub async fn run(client: Client, scope: RequestScope, no_color: bool) -> Result<
         .await
         .unwrap_or(Value::Null);
     let (theme, symbols, mouse) = preferences(&config, no_color);
-    let (status, backend) = call(&client, &scope, Action::Status).await;
-    if let Err(error) = &status
-        && backend.is_some()
-    {
-        return Err(Error::Message(format!(
-            "{error}\n\nNo Calve project is open here. Run `calve init`, or pass --project <path>."
-        )));
-    }
-    let connection = match backend {
-        Some(Backend::Daemon) => Connection::Daemon,
-        Some(Backend::Embedded) => Connection::Local,
-        None => Connection::Offline,
-    };
-    let mut app = App::new(theme, symbols, connection, now());
-    if let Some(keys) = config["console"]["keys"].as_object() {
+    // The shell renders at once and says it is connecting (§88); status arrives as a reply.
+    let mut app = App::new(theme, symbols, Connection::Connecting, now());
+    let console = &config["console"];
+    if let Some(keys) = console["keys"].as_object() {
         app.set_keymap(keys);
     }
-    app.respond("status", status);
+    app.time = match console["time"].as_str() {
+        Some("absolute") => model::TimeStyle::Absolute,
+        Some("both") => model::TimeStyle::Both,
+        _ => model::TimeStyle::Relative,
+    };
+    app.show_footer = console["show_footer"].as_bool().unwrap_or(true);
+    app.wrap_logs = console["wrap_logs"].as_bool().unwrap_or(false);
+    app.diff_context = console["diff_context"].as_u64().map(|n| n as u32);
     app.workspace = scope.workspace.clone().unwrap_or_default();
     let client = Rc::new(client);
     let local = tokio::task::LocalSet::new();
     local.run_until(event_loop(app, client, scope, mouse)).await
+}
+
+fn connection(backend: Option<Backend>) -> Option<Connection> {
+    backend.map(|b| match b {
+        Backend::Daemon => Connection::Daemon,
+        Backend::Embedded => Connection::Local,
+    })
 }
 
 async fn event_loop(
@@ -175,6 +242,17 @@ async fn event_loop(
     // Concurrent embedded requests must share one runtime per Project.
     calve_client::share_embedded_projects();
     let _guard = TerminalGuard::enter(mouse)?;
+    let scope = Rc::new(RefCell::new(scope));
+    // The console uses daemon mode; until the daemon has started (or failed to), requests wait.
+    let (ready_tx, mut ready_rx) = tokio::sync::oneshot::channel::<()>();
+    let mut ready = client.options().direct || client.options().no_daemon_start;
+    if !ready {
+        let client = client.clone();
+        tokio::task::spawn_local(async move {
+            let _ = client.daemon(DaemonCommand::Start).await;
+            let _ = ready_tx.send(());
+        });
+    }
     // Change feed: one long-poll at a time; a change triggers a refresh of the visible route.
     // Bounded queues (R16). Changes coalesce: one pending refresh is enough.
     let (change_tx, mut changes) = tokio::sync::mpsc::channel::<()>(1);
@@ -183,7 +261,14 @@ async fn event_loop(
         let scope = scope.clone();
         tokio::task::spawn_local(async move {
             let mut cursor: Option<(u64, i64)> = None;
+            let mut watching = scope.borrow().project.clone();
             loop {
+                let current = scope.borrow().clone();
+                if current.project != watching {
+                    // Another Project's cursor means nothing here.
+                    watching = current.project.clone();
+                    cursor = None;
+                }
                 let (protocol, product) = cursor.unwrap_or((0, 0));
                 let action = Action::View {
                     view: calve_api::ViewQuery::Changes {
@@ -192,7 +277,7 @@ async fn event_loop(
                         wait_ms: 25_000,
                     },
                 };
-                match call(&client, &scope, action).await.0 {
+                match call(&client, &current, action).await.0 {
                     Ok(value) => {
                         let next = (
                             value["protocol"].as_u64().unwrap_or(protocol),
@@ -221,23 +306,29 @@ async fn event_loop(
             }
         }
     });
-    let (reply_tx, mut replies) = tokio::sync::mpsc::channel::<Reply>(64);
+    let (reply_tx, mut replies) = tokio::sync::mpsc::channel::<(u64, Reply)>(64);
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     let size = terminal.size()?;
     app.size = (size.width, size.height);
     input::sync(&mut app);
     loop {
-        for request in app.take_requests() {
-            let client = client.clone();
-            let scope = scope.clone();
-            let reply = reply_tx.clone();
-            tokio::task::spawn_local(async move {
-                let (result, backend) = call(&client, &scope, request.action).await;
-                let _ = reply.send((request.key, result, backend)).await;
-            });
+        if let Some(root) = app.open_project.take() {
+            scope.borrow_mut().project = Some(root.into());
+        }
+        if ready {
+            for request in app.take_requests() {
+                let client = client.clone();
+                let scope = scope.borrow().clone();
+                let reply = reply_tx.clone();
+                let epoch = app.epoch;
+                tokio::task::spawn_local(async move {
+                    let (result, backend) = call(&client, &scope, request.action).await;
+                    let _ = reply.send((epoch, (request.key, result, backend))).await;
+                });
+            }
         }
         if let Some(text) = app.clipboard.take() {
-            osc52(&text);
+            copy_out(&mut app, text);
         }
         app.hits.borrow_mut().clear();
         terminal.draw(|frame| render::draw(frame, &app))?;
@@ -245,9 +336,11 @@ async fn event_loop(
             break;
         }
         tokio::select! {
+            Ok(()) = &mut ready_rx, if !ready => ready = true,
             Some(event) = keys.recv() => match event {
                 Event::Key(key) if key.kind == event::KeyEventKind::Press => input::handle_key(&mut app, key),
                 Event::Mouse(mouse) => input::handle_mouse(&mut app, mouse),
+                Event::Paste(text) => input::handle_paste(&mut app, &text),
                 Event::Resize(width, height) => {
                     app.size = (width, height);
                     input::sync(&mut app);
@@ -255,13 +348,14 @@ async fn event_loop(
                 _ => {}
             },
             Some(()) = changes.recv() => app.refresh(),
-            Some((key, result, backend)) = replies.recv() => {
-                app.connection = match backend {
-                    Some(Backend::Daemon) => Connection::Daemon,
-                    Some(Backend::Embedded) => Connection::Local,
-                    None => Connection::Offline,
-                };
-                input::on_response(&mut app, &key, result);
+            Some((epoch, (key, result, backend))) = replies.recv() => {
+                // A reply for the Project the console left behind is not this Project's data.
+                if epoch == app.epoch {
+                    app.connection = app.connection.after(connection(backend));
+                    input::on_response(&mut app, &key, result);
+                } else if key.starts_with("cmd:") {
+                    input::on_response(&mut app, &key, result);
+                }
             }
             _ = tick.tick() => {
                 app.now = now();
