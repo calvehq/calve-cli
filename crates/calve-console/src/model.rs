@@ -232,6 +232,8 @@ pub enum Target {
         root: String,
         route: Route,
     },
+    /// Open `route` on one of its tabs (palette "Review CP-…", §10.2).
+    OpenTab(Route, &'static str),
     /// Select `id` in collection `key` (graph go-to-node, §29.1).
     Select {
         key: String,
@@ -256,6 +258,8 @@ pub enum Overlay {
     Palette {
         query: String,
         selected: usize,
+        /// 0 All, 1 Objects, 2 Actions, 3 Commands (§10.2).
+        tab: usize,
     },
     Command {
         input: String,
@@ -394,6 +398,14 @@ pub struct App {
     pub open_project: Option<String>,
     /// Bumped on every Project switch; replies from an older epoch are dropped.
     pub epoch: u64,
+    /// Objects opened recently, newest last; the palette ranks them up (§10.2).
+    pub recent: Vec<String>,
+    /// Commands sent and not answered yet; q and Ctrl+C say so before quitting (§9.2).
+    pub in_flight: BTreeSet<String>,
+    /// The next q / Ctrl+C quits even with commands in flight.
+    pub quit_armed: bool,
+    /// Ctrl+B: hide the navigation (wide) or inspector (medium) pane (§5.1).
+    pub panes_hidden: bool,
 }
 
 impl App {
@@ -450,6 +462,10 @@ impl App {
             welcome: None,
             open_project: None,
             epoch: 0,
+            recent: Vec::new(),
+            in_flight: BTreeSet::new(),
+            quit_armed: false,
+            panes_hidden: false,
         };
         app.load_route();
         app.request("status", status_action());
@@ -666,6 +682,17 @@ impl App {
     pub fn navigate(&mut self, route: Route) {
         if route == self.route {
             return;
+        }
+        if let Route::ChangePack(id)
+        | Route::Baseline(id)
+        | Route::Task(id)
+        | Route::Execution(id) = &route
+        {
+            self.recent.retain(|r| r != id);
+            self.recent.push(id.clone());
+            if self.recent.len() > 20 {
+                self.recent.remove(0);
+            }
         }
         let previous = std::mem::replace(&mut self.route, route);
         self.back.push(previous);

@@ -1,8 +1,8 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4ntr7snpiayi56xooe5y   ● healthy
-┌ Navigation ────────┐┌ ┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y shortcuts ─────────────────┐ector ─────────────────┐
-│ PROJECT            ││ │NAVIGATION                                                            │ntr7snpiayi56xooe5y    │
-│  Overview        5 ││ │  j / ↓       next                                                    │tor verification rules │
-│  Work              ││c│  k / ↑       previous                                                │                       │
+ Calve  project: openaev┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y shortcuts ─────────────────┐y
+┌ Navigation ────────┐┌ │NAVIGATION                                                            │ector ─────────────────┐
+│ PROJECT            ││ │  j / ↓       next                                                    │ntr7snpiayi56xooe5y    │
+│  Overview        5 ││ │  k / ↑       previous                                                │tor verification rules │
+│  Work              ││c│  gg / G      first / last                                            │                       │
 │  Change Graph      ││ │  h l         outward / inward                                        │       ○ OPEN          │
 │› ChangePacks       ││C│  enter       open                                                    │ation  2               │
 │  Baselines         ││ │  esc         back / close                                            │ed     1m ago          │
@@ -17,19 +17,19 @@
 │                    ││ │  esc         back                                                    │l candidate            │
 │                    ││ │  a           contextual actions                                      │ndon                   │
 │                    ││ │  x           explain state                                           │rantine                │
-│                    ││ │                                                                      │ll actions             │
+│                    ││ │  e           evidence                                                │ll actions             │
+│                    ││ │  A           abandon                                                 │                       │
+│                    ││ │  Q           quarantine                                              │                       │
+│                    ││ │                                                                      │                       │
 │                    ││ │GLOBAL                                                                │                       │
 │                    ││ │  ctrl+p      commands and objects                                    │                       │
-│                    ││ │  /           filter (field:value)                                    │                       │
+│                    ││ │  /           filter (field:value, updated:<1h)                       │                       │
 │                    ││ │  :           command mode                                            │                       │
-│                    ││ │  z           fullscreen                                              │                       │
-│                    ││ │  r           refresh                                                 │                       │
-│                    ││ │  y           copy ID                                                 │                       │
-│                    ││ │  ctrl+l      activity      ┌────────────────────────────────────────────────────────────────┐│
-│                    ││ │  q           quit          │ ● :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2… ││
-│                    ││ │  ?           this help     └────────────────────────────────────────────────────────────────┘│
-│                    ││ │                             ┌───────────────────────────────────────────────────────────────┐│
-│                    ││ │esc close                    │ ✓ :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2 ││
+│                    ││ │  z           fullscreen    ┌────────────────────────────────────────────────────────────────┐│
+│                    ││ │  r           refresh (also │ ● :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2… ││
+│                    ││ │  y           copy reference└────────────────────────────────────────────────────────────────┘│
+│                    ││ │  ctrl+l      activity       ┌───────────────────────────────────────────────────────────────┐│
+│                    ││ │  ctrl+b      hide side pane │ ✓ :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2 ││
 │                    ││ └─────────────────────────────└───────────────────────────────────────────────────────────────┘│
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

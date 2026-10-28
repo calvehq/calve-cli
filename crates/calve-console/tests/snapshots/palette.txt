@@ -3,24 +3,24 @@
 │ PROJECT            ││Needs attention ──────────────────────────────────────────────────││openaevc                    │
 │› Overview        5 ││    Subject                                                       ││prj_01a1844b-73fe-743f-a1c8-│
 │  Work              ││×   exe_…2wi6nclki   Execution FAILED                      1m     ││6ecf760e529e                │
-│  Change Graph      ││!   tsk_…3dcf1367f   Daemon hardening is blocked           1m     ││                            │
-│  ChangePacks     6 ││◆   cpk_…4sw3z77ba   Fix daemon race condition awaits ver… 1m     ││ChangePacks 6               │
-│  Baselines       1 ││◆   cpk_…7ztd5yoxq   Add remote conformance runner awaits… 1m     ││Intents     2               │
-│  Evidence          ││!   cpk_…6ociavur4   Pack is quarantined                   1m     ││Baselines   1               │
-│  Events            ││ ┌ Command Palette ─────────────────────────────────────────────────────┐tion   5               │
-│                    ││A│> cpk_agqyis4ntr7snpiayi56xooe5y▏                                     │                       │
-│ SYSTEM             ││I│                                                                      │                       │
-│  Projects          ││S│Objects                                                               │                       │
-│  Inbox           2 ││H│  cpk_…ayi56xooe5y · ChangePack   Refactor verification rules         │                       │
-│  Doctor            ││ │                                                                      │                       │
-│  Extensions        ││R│↑↓ select  enter run  esc close                                       │                       │
-│                    ││T└──────────────────────────────────────────────────────────────────────┘                       │
-│                    ││20:55:13Z pri_…ps7jbym7u execution.finished      exe_…2wi6nclki   ││                            │
-│                    ││20:55:13Z pri_…ps7jbym7u execution.failed        exe_…2wi6nclki   ││                            │
-│                    ││20:55:07Z pri_…ps7jbym7u object.imported         sha256:…693a1b   ││                            │
-│                    ││20:55:07Z pri_…ps7jbym7u pack.created            cpk_…ktjashkqa   ││                            │
-│                    ││20:55:07Z pri_…ps7jbym7u changepack.created      cpk_…ktjashkqa   ││                            │
-│                    ││20:55:07Z pri_…ps7jbym7u changepack.quarantined  cpk_…6ociavur4   ││                            │
+│  Change Graph      ││!┌ Command Palette ─────────────────────────────────────────────────────┐                       │
+│  ChangePacks     6 ││◆│ All  Objects  Actions  Commands                                      │ePacks 6               │
+│  Baselines       1 ││◆│> cpk_agqyis4ntr7snpiayi56xooe5y▏                                     │ts     2               │
+│  Evidence          ││!│                                                                      │ines   1               │
+│  Events            ││ │Objects                                                               │tion   5               │
+│                    ││A│  cpk_…ayi56xooe5y · ChangePack   Refactor verification rules         │                       │
+│ SYSTEM             ││I│  openaevc:evt_…zi · Event        workunit.added cpk_agqyis4ntr7sn…   │                       │
+│  Projects          ││S│  calve:34 · Event                pack.created cpk_agqyis4ntr7snpi…   │                       │
+│  Inbox           2 ││H│  openaevc:evt_…ty · Event        changepack.created cpk_agqyis4nt…   │                       │
+│  Doctor            ││ │Actions                                                               │                       │
+│  Extensions        ││R│  Open cpk_…ayi56xooe5y           Refactor verification rules         │                       │
+│                    ││T│  Review cpk_…ayi56xooe5y         Refactor verification rules         │                       │
+│                    ││2│  Verify cpk_…ayi56xooe5y         Refactor verification rules         │                       │
+│                    ││2│  Show evidence for cpk_…ayi56xoo…Refactor verification rules         │                       │
+│                    ││2│  Diff cpk_…ayi56xooe5y           Refactor verification rules         │                       │
+│                    ││2│                                                                      │                       │
+│                    ││2│↑↓ select  enter run  tab group  esc close                            │                       │
+│                    ││2└──────────────────────────────────────────────────────────────────────┘                       │
 │                    ││20:55:07Z pri_…ps7jbym7u pack.created            cpk_…6ociavur4   ││                            │
 │                    ││20:55:07Z pri_…ps7jbym7u changepack.created      cpk_…6ociavur4   ││                            │
 │                    ││20:55:07Z pri_…ps7jbym7u file.captured           rules.txt        ││                            │

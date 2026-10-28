@@ -149,6 +149,7 @@ fn issue_with(app: &mut App, label: &str, args: &[String], show_result: bool, co
             }
             app.commands += 1;
             let key = format!("cmd:{}:{}:{label}", app.commands, u8::from(show_result));
+            app.in_flight.insert(key.clone());
             app.outbox.push(Request { key, action });
             app.notify(Tone::Running, format!("{label}…"));
         }
@@ -163,6 +164,7 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
         sync(app);
         return;
     };
+    app.in_flight.remove(key);
     let mut parts = rest.splitn(3, ':');
     let (_, show, label) = (
         parts.next(),
@@ -276,6 +278,12 @@ fn run_target(app: &mut App, target: Target) {
             app.switch_project(root);
             app.navigate(route);
         }
+        Target::OpenTab(route, tab) => {
+            app.navigate(route);
+            if let Some(index) = app.route.tabs().iter().position(|t| *t == tab) {
+                app.set_tab(index);
+            }
+        }
         Target::Select { key, id } => {
             app.collection(&key).selected_id = Some(id);
             app.graph_edge = None;
@@ -334,84 +342,220 @@ pub fn filter_items(items: &[PaletteItem], query: &str) -> Vec<PaletteItem> {
     scored.into_iter().map(|(_, _, item)| item).collect()
 }
 
-/// Objects, actions, destinations and commands; groups ordered by their best match.
-pub fn palette_items(app: &App, screen: &Screen, query: &str) -> Vec<PaletteItem> {
-    let mut all: Vec<(usize, PaletteItem)> = Vec::new();
-    let mut push = |fields: &[&str], item: PaletteItem| {
-        if let Some(s) = score(query, fields) {
-            all.push((s, item));
-        }
-    };
+/// The palette's searchable objects (§10.2): projects, ChangePacks, Baselines, intents, tasks,
+/// executions, evidence and events from the loaded read models.
+fn palette_objects(app: &App) -> Vec<(Vec<String>, PaletteItem)> {
     let str_of = |v: &Value, k: &str| v[k].as_str().unwrap_or("").to_owned();
-    for pack in app.pages("packs").items {
-        let id = str_of(&pack, "id");
-        push(
-            &[&id, &str_of(&pack, "title")],
+    let short = |id: &str| crate::text::short_id(id, 16, app.symbols.ellipsis());
+    let list = |key: &str| {
+        app.value(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let object = |id: String, title: String, kind: &str, target: Target| {
+        (
+            vec![id.clone(), title.clone()],
             PaletteItem {
                 group: "Objects",
-                label: format!(
-                    "{} · ChangePack",
-                    crate::text::short_id(&id, 16, app.symbols.ellipsis())
-                ),
-                detail: str_of(&pack, "title"),
-                target: Target::Open(Route::ChangePack(id.clone())),
+                label: format!("{} · {kind}", short(&id)),
+                detail: title,
+                target,
             },
-        );
+        )
+    };
+    let mut out = Vec::new();
+    for p in list("projects") {
+        let (id, name) = (str_of(&p, "project_id"), str_of(&p, "name"));
+        out.push(object(
+            id,
+            name,
+            "Project",
+            Target::OpenProject {
+                root: str_of(&p, "path"),
+                route: Route::Overview,
+            },
+        ));
     }
-    for baseline in app
-        .value("baselines")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-    {
-        let id = str_of(&baseline, "id");
-        push(
-            &[&id, &str_of(&baseline, "label")],
-            PaletteItem {
-                group: "Objects",
-                label: format!(
-                    "{} · Baseline",
-                    crate::text::short_id(&id, 16, app.symbols.ellipsis())
-                ),
-                detail: str_of(&baseline, "label"),
-                target: Target::Open(Route::Baseline(id.clone())),
-            },
-        );
+    for p in app.pages("packs").items {
+        let id = str_of(&p, "id");
+        out.push(object(
+            id.clone(),
+            str_of(&p, "title"),
+            "ChangePack",
+            Target::Open(Route::ChangePack(id)),
+        ));
     }
-    for task in app
-        .value("tasks")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-    {
-        let id = str_of(&task, "id");
-        push(
-            &[&id, &str_of(&task, "title")],
-            PaletteItem {
-                group: "Objects",
-                label: format!(
-                    "{} · Task",
-                    crate::text::short_id(&id, 16, app.symbols.ellipsis())
-                ),
-                detail: str_of(&task, "title"),
-                target: Target::Open(Route::Task(id.clone())),
+    for b in list("baselines") {
+        let id = str_of(&b, "id");
+        out.push(object(
+            id.clone(),
+            str_of(&b, "label"),
+            "Baseline",
+            Target::Open(Route::Baseline(id)),
+        ));
+    }
+    for i in list("intents") {
+        out.push(object(
+            str_of(&i, "id"),
+            str_of(&i, "title"),
+            "Intent",
+            Target::Open(Route::Work),
+        ));
+    }
+    for t in list("tasks") {
+        let id = str_of(&t, "id");
+        out.push(object(
+            id.clone(),
+            str_of(&t, "title"),
+            "Task",
+            Target::Open(Route::Task(id)),
+        ));
+        for e in t["linked_executions"].as_array().into_iter().flatten() {
+            let e = e.as_str().unwrap_or_default().to_owned();
+            out.push(object(
+                e.clone(),
+                format!("execution of {}", str_of(&t, "title")),
+                "Execution",
+                Target::Open(Route::Execution(e)),
+            ));
+        }
+    }
+    if let Some(status) = app.value("status") {
+        for e in status["active_executions"].as_array().into_iter().flatten() {
+            let id = str_of(e, "id");
+            out.push(object(
+                id.clone(),
+                format!("{} {}", str_of(e, "state"), str_of(e, "harness")),
+                "Execution",
+                Target::Open(Route::Execution(id)),
+            ));
+        }
+    }
+    for e in app.pages("evidence").items {
+        let pack = str_of(&e, "pack");
+        out.push(object(
+            str_of(&e["evidence"], "id"),
+            format!(
+                "{} for {}",
+                crate::text::label(&str_of(&e["evidence"], "kind")),
+                str_of(&e, "pack_title")
+            ),
+            "Evidence",
+            Target::OpenTab(Route::ChangePack(pack), "Evidence"),
+        ));
+    }
+    for e in list("events").into_iter().take(200) {
+        out.push(object(
+            crate::screens::event_id(&e),
+            format!("{} {}", str_of(&e, "kind"), str_of(&e, "subject")),
+            "Event",
+            Target::Select {
+                key: "events".into(),
+                id: crate::screens::event_id(&e),
             },
-        );
+        ));
+    }
+    out
+}
+
+/// Actions on the object a query found (§10.2: "Open / Review / Compare CP-0184").
+fn object_actions(item: &PaletteItem) -> Vec<PaletteItem> {
+    let act = |label: String, target: Target| PaletteItem {
+        group: "Actions",
+        label,
+        detail: item.detail.clone(),
+        target,
+    };
+    let name = item
+        .label
+        .split(" · ")
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    match &item.target {
+        Target::Open(Route::ChangePack(id)) => vec![
+            act(format!("Open {name}"), item.target.clone()),
+            act(
+                format!("Review {name}"),
+                Target::OpenTab(Route::ChangePack(id.clone()), "Review"),
+            ),
+            act(
+                format!("Verify {name}"),
+                Target::OpenTab(Route::ChangePack(id.clone()), "Verify"),
+            ),
+            act(
+                format!("Show evidence for {name}"),
+                Target::OpenTab(Route::ChangePack(id.clone()), "Evidence"),
+            ),
+            act(
+                format!("Diff {name}"),
+                Target::OpenTab(Route::ChangePack(id.clone()), "Diff"),
+            ),
+        ],
+        Target::Open(Route::Baseline(id)) => vec![
+            act(format!("Open {name}"), item.target.clone()),
+            act(
+                format!("Compare {name}…"),
+                Target::Prompt {
+                    args: vec!["baseline".into(), "compare".into(), id.clone()],
+                    suffix: vec![],
+                    field: "Compare with Baseline".into(),
+                    confirm: false,
+                    label: format!("Compare {name}"),
+                },
+            ),
+            act(
+                format!("Explain {name}"),
+                Target::OpenTab(Route::Baseline(id.clone()), "Explain"),
+            ),
+        ],
+        Target::Select { .. } => vec![act(format!("Show event {name}"), item.target.clone())],
+        _ => vec![act(format!("Open {name}"), item.target.clone())],
+    }
+}
+
+/// Objects, actions, destinations and commands; groups ordered by their best match. `tab`
+/// keeps one group family (§10.2: All / Objects / Actions / Commands).
+pub fn palette_items(app: &App, screen: &Screen, query: &str, tab: usize) -> Vec<PaletteItem> {
+    // (score, not recently used, insertion order) — recency never outranks identity.
+    let mut all: Vec<((usize, bool, usize), PaletteItem)> = Vec::new();
+    let recent = |id: &str| app.recent.iter().any(|r| r == id);
+    let mut best: Option<((usize, bool, usize), PaletteItem)> = None;
+    for (fields, item) in palette_objects(app) {
+        let refs: Vec<&str> = fields.iter().map(String::as_str).collect();
+        if let Some(score) = score(query, &refs) {
+            let key = (score, !recent(&fields[0]), all.len());
+            if !query.is_empty() && best.as_ref().is_none_or(|(k, _)| key < *k) {
+                best = Some((key, item.clone()));
+            }
+            all.push((key, item));
+        }
+    }
+    // The best-matching object's own actions come first among actions.
+    if let Some((key, object)) = best {
+        for action in object_actions(&object) {
+            all.push(((key.0, key.1, all.len()), action));
+        }
     }
     for action in &screen.actions {
-        push(&[&action.label, &action.detail], action.clone());
+        if let Some(s) = score(query, &[&action.label, &action.detail]) {
+            all.push(((s + 1, true, all.len()), action.clone()));
+        }
     }
     for route in nav_routes() {
         let title = route.title();
-        push(
-            &[&title],
-            PaletteItem {
-                group: "Go to",
-                label: title.clone(),
-                detail: String::new(),
-                target: Target::Open(route),
-            },
-        );
+        if let Some(s) = score(query, &[&title]) {
+            all.push((
+                (s, true, all.len()),
+                PaletteItem {
+                    group: "Go to",
+                    label: title.clone(),
+                    detail: String::new(),
+                    target: Target::Open(route),
+                },
+            ));
+        }
     }
     for (label, command) in [
         ("New intent", "intent create "),
@@ -420,33 +564,45 @@ pub fn palette_items(app: &App, screen: &Screen, query: &str) -> Vec<PaletteItem
         ("Doctor", "doctor"),
         ("Maintenance check", "maintenance check"),
     ] {
-        push(
-            &[label, command],
-            PaletteItem {
-                group: "Commands",
-                label: format!(":{command}"),
-                detail: label.to_owned(),
-                target: Target::Command(command.to_owned()),
-            },
-        );
+        if let Some(s) = score(query, &[label, command]) {
+            all.push((
+                (s, true, all.len()),
+                PaletteItem {
+                    group: "Commands",
+                    label: format!(":{command}"),
+                    detail: label.to_owned(),
+                    target: Target::Command(command.to_owned()),
+                },
+            ));
+        }
     }
-    let group_rank = |group: &str, all: &[(usize, PaletteItem)]| {
+    let family = |group: &str| match group {
+        "Objects" => 1,
+        "Actions" | "Unavailable" => 2,
+        _ => 3,
+    };
+    all.retain(|(_, item)| tab == 0 || family(item.group) == tab);
+    let group_rank = |group: &str| {
         all.iter()
             .filter(|(_, i)| i.group == group)
-            .map(|(s, _)| *s)
+            .map(|(k, _)| *k)
             .min()
-            .unwrap_or(usize::MAX)
     };
     let order = ["Objects", "Actions", "Unavailable", "Go to", "Commands"];
     let mut groups: Vec<&str> = order.to_vec();
     if !query.is_empty() {
-        groups.sort_by_key(|g| (group_rank(g, &all), order.iter().position(|o| o == g)));
+        groups.sort_by_key(|g| {
+            (
+                group_rank(g).unwrap_or((usize::MAX, true, 0)),
+                order.iter().position(|o| o == g),
+            )
+        });
     }
     let mut out = Vec::new();
     for group in groups {
-        let mut items: Vec<&(usize, PaletteItem)> =
+        let mut items: Vec<&((usize, bool, usize), PaletteItem)> =
             all.iter().filter(|(_, i)| i.group == group).collect();
-        items.sort_by_key(|(s, _)| *s);
+        items.sort_by_key(|(k, _)| *k);
         out.extend(
             items
                 .into_iter()
@@ -547,6 +703,53 @@ fn run_command_line(app: &mut App, input: &str) -> Result<(), String> {
     }
     app.command_history.push(input.to_owned());
     let first = words[0].as_str();
+    // `:task blocked`: a task state, not an id, filters Work (§10.3).
+    if first == "task"
+        && words.len() == 2
+        && !words[1].contains('_')
+        && parse_action(&words).is_err()
+    {
+        app.navigate(Route::Work);
+        app.collection("work").filter = format!("state:{}", words[1]);
+        return Ok(());
+    }
+    // `:verify <pack>` opens the pack's Verify tab.
+    if first == "verify" && words.len() == 2 {
+        run_target(
+            app,
+            Target::OpenTab(Route::ChangePack(words[1].clone()), "Verify"),
+        );
+        return Ok(());
+    }
+    // `:project <name or id>` switches Projects (§44).
+    if first == "project" && words.len() == 2 && parse_action(&words).is_err() {
+        let wanted = words[1].to_lowercase();
+        let found = app
+            .value("projects")
+            .and_then(Value::as_array)
+            .and_then(|list| {
+                list.iter().find(|p| {
+                    p["name"]
+                        .as_str()
+                        .is_some_and(|n| n.to_lowercase() == wanted)
+                        || p["project_id"] == words[1].as_str()
+                })
+            });
+        match found.and_then(|p| p["path"].as_str()).map(str::to_owned) {
+            Some(root) => run_target(
+                app,
+                Target::OpenProject {
+                    root,
+                    route: Route::Overview,
+                },
+            ),
+            None => {
+                app.navigate(Route::Projects);
+                app.collection("projects").filter = words[1].clone();
+            }
+        }
+        return Ok(());
+    }
     if words.len() == 2 && parse_action(&words).is_err() {
         let id = words[1].clone();
         let route = match first {
@@ -628,6 +831,7 @@ enum Then {
     CommandLine(String),
     Navigate(Route),
     Copy(String),
+    First,
 }
 
 fn handle_overlay(app: &mut App, key: KeyEvent) {
@@ -644,10 +848,21 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
     let mut keep = true;
     let mut then = Then::Nothing;
     match &mut overlay {
-        Overlay::Palette { query, selected } => {
-            let items = palette_items(app, &screen, query);
+        Overlay::Palette {
+            query,
+            selected,
+            tab,
+        } => {
+            let items = palette_items(app, &screen, query, *tab);
             if esc {
                 keep = false;
+            } else if matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
+                *tab = if key.code == KeyCode::Tab {
+                    (*tab + 1) % 4
+                } else {
+                    (*tab + 3) % 4
+                };
+                *selected = 0;
             } else if up {
                 *selected = selected.saturating_sub(1);
             } else if down {
@@ -751,7 +966,11 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
         }
         Overlay::Navigation { query, selected } => {
             let matches = nav_matches(query);
-            if esc {
+            if key.code == KeyCode::Char('g') && query.is_empty() {
+                // `gg`: first row (§51).
+                keep = false;
+                then = Then::First;
+            } else if esc {
                 keep = false;
             } else if up {
                 *selected = selected.saturating_sub(1);
@@ -899,6 +1118,24 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
             sync(app);
         }
         Then::Copy(text) => copy(app, text, "result"),
+        Then::First => move_selection(app, -100_000),
+    }
+}
+
+/// Quits, unless commands are still in flight: then it says so and quits on the next q or
+/// Ctrl+C (§9.2: no accidental exit while a process is active).
+fn request_quit(app: &mut App) {
+    if app.in_flight.is_empty() || app.quit_armed {
+        app.quit = true;
+    } else {
+        app.quit_armed = true;
+        app.notify(
+            Tone::Warning,
+            format!(
+                "{} command(s) still running; they cannot be cancelled mid-flight. Press q again to quit",
+                app.in_flight.len()
+            ),
+        );
     }
 }
 
@@ -1200,13 +1437,17 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let alt = key.modifiers.contains(KeyModifiers::ALT);
     if ctrl && key.code == KeyCode::Char('c') {
-        if app.overlays.is_empty() && !app.filter_editing {
-            app.quit = true;
-        } else {
+        // Terminal convention (§9.2): cancel what is active, otherwise exit.
+        if !app.overlays.is_empty() || app.filter_editing {
             app.overlays.clear();
             app.filter_editing = false;
+        } else {
+            request_quit(app);
         }
         return;
+    }
+    if key.code != KeyCode::Char('q') {
+        app.quit_armed = false;
     }
     if !app.overlays.is_empty() {
         handle_overlay(app, key);
@@ -1279,19 +1520,29 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     let on_tabs = !app.route.tabs().is_empty();
     let diff = matches!(screen.body, Body::Diff(_));
     match key.code {
+        // q closes the innermost transient layer first; it quits only from the main shell.
         KeyCode::Char('q') => {
-            if app.fullscreen {
+            if app.drawer {
+                app.drawer = false;
+            } else if app.fullscreen {
                 app.fullscreen = false;
+            } else if app.focus == Focus::Inspector {
+                app.focus = Focus::Workspace;
             } else {
-                app.quit = true;
+                request_quit(app);
             }
         }
+        KeyCode::Char('b') if ctrl => app.panes_hidden = !app.panes_hidden,
         KeyCode::Char('?') => app.overlays.push(Overlay::Help),
         KeyCode::Char('p') if ctrl => {
             for (key, action) in [
                 ("packs", &["view", "packs"][..]),
                 ("baselines", &["baseline", "list"][..]),
                 ("tasks", &["task", "list"][..]),
+                ("intents", &["intent", "list"][..]),
+                ("projects", &["project", "list"][..]),
+                ("evidence", &["view", "evidence"][..]),
+                ("events", &["activity"][..]),
             ] {
                 if app.value(key).is_none() {
                     app.request(
@@ -1303,6 +1554,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.overlays.push(Overlay::Palette {
                 query: String::new(),
                 selected: 0,
+                tab: 0,
             });
         }
         KeyCode::Char('l') if ctrl => {
@@ -1409,6 +1661,28 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             if let Some(index) = app.route.tabs().iter().position(|t| *t == "Evidence") {
                 app.set_tab(index);
                 sync(app);
+            }
+        }
+        // ChangePack keys (§51): e evidence; r review when a review can be recorded.
+        KeyCode::Char('e') if matches!(app.route, Route::ChangePack(_)) => {
+            if let Some(index) = app.route.tabs().iter().position(|t| *t == "Evidence") {
+                app.set_tab(index);
+                sync(app);
+            }
+        }
+        KeyCode::Char('r')
+            if matches!(app.route, Route::ChangePack(_))
+                && screen
+                    .actions
+                    .iter()
+                    .any(|a| matches!(a.target, Target::Review { .. })) =>
+        {
+            if let Some(item) = screen
+                .actions
+                .iter()
+                .find(|a| matches!(a.target, Target::Review { .. }))
+            {
+                run_target(app, item.target.clone());
             }
         }
         KeyCode::Char('r') if app.tab_name() == Some("Review") => {
@@ -1581,6 +1855,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 && !app.collection(&key).filter.is_empty()
             {
                 app.collection(&key).filter.clear();
+            } else if app.drawer {
+                app.drawer = false;
             } else if app.fullscreen {
                 app.fullscreen = false;
             } else if diff && app.diff_lines {
@@ -1599,6 +1875,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.focus = Focus::Navigation;
             }
             sync(app);
+        }
+        // Direct object shortcuts (§51): a key no binding above claims runs the backend action
+        // listed under it (`a` shows every action with its key).
+        KeyCode::Char(c) if !ctrl && !alt => {
+            match screen.actions.iter().find(|a| a.detail == format!("key {c}")) {
+                Some(item) if app.can_act() => run_target(app, item.target.clone()),
+                Some(_) => app.notify(Tone::Warning, "Offline: actions are disabled"),
+                None => {}
+            }
         }
         _ => {}
     }

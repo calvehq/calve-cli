@@ -729,13 +729,17 @@ fn activity_row(app: &App, entry: &Value, open_subject: bool) -> Row {
         } else {
             None
         },
-        search: search(&[
-            ("type", kind),
-            ("actor", actor),
-            ("object", subject),
-            ("source", str_of(entry, "source")),
-            ("id", &id),
-        ]),
+        search: [
+            search(&[
+                ("type", kind),
+                ("actor", actor),
+                ("object", subject),
+                ("source", str_of(entry, "source")),
+                ("id", &id),
+            ]),
+            time_search(app, "time", event_time(entry)),
+        ]
+        .concat(),
         id,
     }
 }
@@ -784,7 +788,10 @@ fn work(app: &App) -> Screen {
                     ("actor", task["assignee"].as_str().unwrap_or("")),
                     ("id", str_of(task, "id")),
                     ("intent", intent_id),
-                ]),
+                ])
+                .into_iter()
+                .chain(time_search(app, "updated", &task["updated_at"]))
+                .collect(),
             })
             .collect();
         let done = tasks
@@ -1184,6 +1191,13 @@ fn table_body(
             search: fields
                 .iter()
                 .map(|(key, _)| (*key, scalar(&entry[*key]).to_lowercase()))
+                .chain(
+                    fields
+                        .iter()
+                        .find(|(key, _)| *key == "at" || *key == "timestamp")
+                        .map(|(key, _)| time_search(app, "time", &entry[*key]))
+                        .unwrap_or_default(),
+                )
                 .collect(),
         })
         .collect();
@@ -1374,12 +1388,17 @@ fn packs(app: &App) -> Screen {
                 copy: None,
                 tab: None,
                 open: Some(Route::ChangePack(id.to_owned())),
-                search: search(&[
-                    ("id", id),
-                    ("state", str_of(pack, "state")),
-                    ("text", str_of(pack, "title")),
-                    ("intent", pack["intent"].as_str().unwrap_or("")),
-                ]),
+                search: [
+                    search(&[
+                        ("id", id),
+                        ("state", str_of(pack, "state")),
+                        ("text", str_of(pack, "title")),
+                        ("intent", pack["intent"].as_str().unwrap_or("")),
+                    ]),
+                    time_search(app, "updated", &pack["updated_at"]),
+                    time_search(app, "created", &pack["created_at"]),
+                ]
+                .concat(),
             }
         })
         .collect();
@@ -2700,9 +2719,11 @@ fn evidence(app: &App) -> Screen {
                     ("producer", str_of(body, "producer")),
                     ("attached", &format!("{} {attached}", str_of(e, "pack"))),
                     ("status", status(e)),
-                    ("created", str_of(body, "created_at")),
                     ("text", attached),
-                ]),
+                ])
+                .into_iter()
+                .chain(time_search(app, "created", &body["created_at"]))
+                .collect(),
             }
         })
         .collect();
@@ -3523,16 +3544,131 @@ pub fn matches_filter(row: &Row, filter: &str) -> bool {
     matches_search(&row.search, filter)
 }
 
+/// One `/` token against a row's fields (§10.1, §41, §42.1):
+/// - `word`: any field contains it, or (3+ characters) holds its letters in order (fuzzy);
+/// - `field:value`: that field contains `value`; `*` is a wildcard (`type:verification.*`);
+/// - `field:<1h` / `field:>2d`: a time field's age is under / over the span;
+/// - `after:` / `before:`: the row's time is newer / older than a span or `YYYY-MM-DD`.
 pub fn matches_search(fields: &[(&'static str, String)], filter: &str) -> bool {
     filter.split_whitespace().all(|token| {
         let token = token.to_lowercase();
-        match token.split_once(':') {
-            Some((field, value)) if !field.is_empty() => fields
+        let field = |name: &'static str| {
+            fields
                 .iter()
-                .any(|(name, text)| *name == field && text.contains(value)),
-            _ => fields.iter().any(|(_, text)| text.contains(&token)),
+                .filter(move |(n, _)| *n == name)
+                .map(|(_, v)| v)
+        };
+        match token.split_once(':') {
+            Some((when @ ("after" | "before"), value)) => {
+                let Some(age) = field("age").next().and_then(|a| a.parse::<i64>().ok()) else {
+                    return false;
+                };
+                let at = field("instant").next().and_then(|a| a.parse::<i64>().ok());
+                let newer = match (span(value), date(value), at) {
+                    (Some(span), _, _) => Some(age <= span),
+                    (None, Some(day), Some(at)) => Some(at >= day),
+                    _ => None,
+                };
+                newer.is_some_and(|newer| newer == (when == "after"))
+            }
+            Some((name, value)) if !name.is_empty() => {
+                let named = fields.iter().filter(|(n, _)| *n == name).map(|(_, v)| v);
+                if let Some(limit) = value.strip_prefix('<').and_then(span) {
+                    return named
+                        .clone()
+                        .any(|v| v.parse::<i64>().is_ok_and(|age| age < limit));
+                }
+                if let Some(limit) = value.strip_prefix('>').and_then(span) {
+                    return named
+                        .clone()
+                        .any(|v| v.parse::<i64>().is_ok_and(|age| age > limit));
+                }
+                named.clone().any(|v| glob(v, value))
+            }
+            _ => fields.iter().any(|(name, text)| {
+                !TIME_FIELDS.contains(name)
+                    && (text.contains(&token) || token.len() >= 3 && subsequence(text, &token))
+            }),
         }
     })
+}
+
+/// The `field:` names a filter uses that no row of this list has (so an empty result can say
+/// why instead of silently showing nothing).
+pub fn unknown_fields(rows: &[&Row], filter: &str) -> Vec<String> {
+    filter
+        .split_whitespace()
+        .filter_map(|token| token.split_once(':').map(|(f, _)| f.to_lowercase()))
+        .filter(|f| !f.is_empty())
+        .filter(|f| {
+            let name = if matches!(f.as_str(), "after" | "before") {
+                "age"
+            } else {
+                f.as_str()
+            };
+            !rows
+                .iter()
+                .any(|r| r.search.iter().any(|(n, _)| *n == name))
+        })
+        .collect()
+}
+
+/// Search fields that hold ages or instants, never matched as text.
+const TIME_FIELDS: &[&str] = &["age", "instant", "updated", "created", "time"];
+
+fn glob(text: &str, pattern: &str) -> bool {
+    if !pattern.contains('*') {
+        return text.contains(pattern);
+    }
+    let parts: Vec<&str> = pattern.split('*').collect();
+    let mut rest = text;
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        match rest.find(part) {
+            Some(at) if i > 0 || at == 0 => rest = &rest[at + part.len()..],
+            _ => return false,
+        }
+    }
+    parts.last().is_some_and(|p| p.is_empty()) || rest.is_empty()
+}
+
+fn subsequence(text: &str, token: &str) -> bool {
+    let mut chars = text.chars();
+    token.chars().all(|c| chars.any(|t| t == c))
+}
+
+/// `30s`, `15m`, `1h`, `2d`, `1w` in seconds.
+fn span(value: &str) -> Option<i64> {
+    let unit = value.chars().last()?;
+    let n: i64 = value[..value.len() - unit.len_utf8()].parse().ok()?;
+    Some(
+        n * match unit {
+            's' => 1,
+            'm' => 60,
+            'h' => 3600,
+            'd' => 86_400,
+            'w' => 604_800,
+            _ => return None,
+        },
+    )
+}
+
+fn date(value: &str) -> Option<i64> {
+    unix_seconds(&Value::from(format!("{value}T00:00:00Z")))
+}
+
+/// Search fields for a row's time: its age in seconds and its instant (for `<1h`, `after:`).
+fn time_search(app: &App, name: &'static str, value: &Value) -> Vec<(&'static str, String)> {
+    match unix_seconds(value) {
+        Some(t) => vec![
+            (name, (app.now - t).to_string()),
+            ("age", (app.now - t).to_string()),
+            ("instant", t.to_string()),
+        ],
+        None => vec![],
+    }
 }
 
 #[cfg(test)]
@@ -3567,6 +3703,39 @@ mod tests {
             let field_token = format!("state:{}", &state[start..]);
             proptest::prop_assert!(matches_filter(&row, &field_token));
         }
+    }
+
+    #[test]
+    fn filter_syntax_time_glob_fuzzy() {
+        let fields = vec![
+            ("type", "verification.completed".to_owned()),
+            ("text", "add remote runner".to_owned()),
+            ("updated", "600".to_owned()),
+            ("age", "600".to_owned()),
+            ("instant", "1790000000".to_owned()),
+        ];
+        assert!(matches_search(&fields, "type:verification.*"));
+        assert!(!matches_search(&fields, "type:evidence.*"));
+        assert!(matches_search(&fields, "type:*completed"));
+        assert!(matches_search(&fields, "updated:<1h"));
+        assert!(!matches_search(&fields, "updated:>1h"));
+        assert!(matches_search(&fields, "after:1h") && !matches_search(&fields, "before:1h"));
+        assert!(matches_search(&fields, "after:2026-09-01"));
+        assert!(!matches_search(&fields, "after:2026-10-01"));
+        assert!(matches_search(&fields, "rmrun"), "fuzzy words");
+        assert!(!matches_search(&fields, "600"), "times are not text");
+        let row = Row {
+            id: "a".into(),
+            cells: vec![],
+            open: None,
+            copy: None,
+            tab: None,
+            search: fields,
+        };
+        assert_eq!(
+            unknown_fields(&[&row], "risk:high type:x after:1h"),
+            vec!["risk"]
+        );
     }
 
     #[test]

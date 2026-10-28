@@ -1056,3 +1056,162 @@ fn graph_navigation_filter_neighborhood_and_edges() {
     let screen = h.render();
     assert!(screen.contains("not drawn"), "{screen}");
 }
+
+/// §10.3 command mode: `:task blocked`, `:verify <pack>`, `:project <name>`.
+#[test]
+fn command_mode_routes() {
+    let mut h = Harness::new(160, 45);
+    let run = |h: &mut Harness, line: &str| {
+        h.key(KeyCode::Char(':')).keys(line).key(KeyCode::Enter);
+    };
+    run(&mut h, "task blocked");
+    assert_eq!(h.app.route, Route::Work);
+    assert_eq!(h.app.collections["work"].filter, "state:blocked");
+    assert!(h.render().contains("Daemon hardening"));
+    let runner = h.pack_id("Add remote conformance runner");
+    run(&mut h, &format!("verify {runner}"));
+    assert_eq!(h.app.route, Route::ChangePack(runner));
+    assert_eq!(h.app.tab_name(), Some("Verify"));
+    h.app.navigate(Route::Projects);
+    h.pump();
+    run(&mut h, "project openaevc");
+    assert_eq!(h.app.open_project.as_deref(), Some("/home/dev/openaevc"));
+}
+
+/// §10.2 palette: more object kinds, the found object's own actions, group tabs.
+#[test]
+fn palette_objects_actions_and_tabs() {
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.key_with(KeyCode::Char('p'), KeyModifiers::CONTROL);
+    h.keys("add remote");
+    let screen = h.render();
+    assert!(screen.contains("Review cpk_"), "{screen}");
+    // Objects only.
+    h.key(KeyCode::Tab);
+    let screen = h.render();
+    assert!(
+        !screen.contains("Review cpk_") && screen.contains("· ChangePack"),
+        "{screen}"
+    );
+    // Actions only: Review opens the Review tab of the found pack.
+    h.key(KeyCode::Tab);
+    let screen = h.render();
+    let review = screen
+        .lines()
+        .position(|l| l.contains("Review cpk_"))
+        .unwrap();
+    let first = screen
+        .lines()
+        .position(|l| l.contains("Open cpk_"))
+        .unwrap();
+    for _ in first..review {
+        h.key(KeyCode::Down);
+    }
+    h.key(KeyCode::Enter);
+    assert_eq!(h.app.route, Route::ChangePack(runner));
+    assert_eq!(h.app.tab_name(), Some("Review"));
+    // Intents and projects are searchable too.
+    h.key_with(KeyCode::Char('p'), KeyModifiers::CONTROL);
+    h.keys("SDK compat");
+    assert!(h.render().contains("· Intent"));
+    h.key(KeyCode::Esc);
+    h.key_with(KeyCode::Char('p'), KeyModifiers::CONTROL);
+    h.keys("openaevc");
+    assert!(h.render().contains("· Project"));
+}
+
+/// §10.1, §41, §42.1: time, glob and fuzzy filters; unknown fields are named.
+#[test]
+fn structured_filter_syntax() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::ChangePacks);
+    h.pump();
+    let filtered = |h: &mut Harness, filter: &str| {
+        h.app.collection("packs").filter = filter.into();
+        calve_console::input::sync(&mut h.app);
+        h.pump();
+        h.render()
+    };
+    assert!(filtered(&mut h, "updated:<1h").contains("Lint sweep"));
+    assert!(filtered(&mut h, "updated:>1d").contains("Nothing matches"));
+    assert!(
+        filtered(&mut h, "rmtrnsprt").contains("Experimental transport"),
+        "fuzzy"
+    );
+    let screen = filtered(&mut h, "risk:high");
+    assert!(
+        screen.contains("risk: not a field of this list"),
+        "{screen}"
+    );
+    h.app.navigate(Route::Events);
+    h.pump();
+    h.app.collection("events").filter = "type:execution.*".into();
+    let screen = h.render();
+    assert!(
+        screen.contains("execution.") && !screen.contains("pack.created"),
+        "{screen}"
+    );
+    h.app.collection("events").filter = "after:1h".into();
+    assert!(!h.render().contains("Nothing matches"));
+    h.app.collection("events").filter = "before:1h".into();
+    assert!(h.render().contains("Nothing matches"));
+}
+
+/// §51, §9.2, §5.1: direct action keys, gg/G, q closing layers first and guarding running
+/// commands, Esc closing the drawer, Ctrl+B hiding a pane, contextual help.
+#[test]
+fn direct_keys_quit_and_panes() {
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner));
+    h.pump();
+    h.key(KeyCode::Char('v'));
+    assert!(
+        h.commands
+            .iter()
+            .any(|c| c.contains("Run snapshot verification")),
+        "{:?}",
+        h.commands
+    );
+    h.key(KeyCode::Char('r'));
+    assert!(
+        matches!(h.app.overlays.last(), Some(Overlay::Review(_))),
+        "r reviews a sealed pack"
+    );
+    h.key(KeyCode::Esc);
+    h.keys("3").key(KeyCode::Char('?'));
+    assert!(h.render().contains("rerun verification"));
+    h.key(KeyCode::Esc);
+    h.app.navigate(Route::ChangePacks);
+    h.pump();
+    h.key(KeyCode::Char('G'));
+    let last = h.app.collections["packs"].selected_index;
+    assert!(last > 0);
+    h.key(KeyCode::Char('g')).key(KeyCode::Char('g'));
+    assert_eq!(h.app.collections["packs"].selected_index, 0);
+    // q closes the drawer before quitting; Esc closes it too.
+    h.key_with(KeyCode::Char('l'), KeyModifiers::CONTROL);
+    h.key(KeyCode::Char('q'));
+    assert!(!h.app.drawer && !h.app.quit);
+    h.key_with(KeyCode::Char('l'), KeyModifiers::CONTROL);
+    h.key(KeyCode::Esc);
+    assert!(!h.app.drawer);
+    // Ctrl+B hides the navigation pane.
+    h.key_with(KeyCode::Char('b'), KeyModifiers::CONTROL);
+    assert!(!h.render().contains("Navigation"));
+    h.key_with(KeyCode::Char('b'), KeyModifiers::CONTROL);
+    assert!(h.render().contains("Navigation"));
+    // A command still in flight: the first q warns, the second quits.
+    h.app.in_flight.insert("cmd:99:0:test".into());
+    h.key(KeyCode::Char('q'));
+    assert!(!h.app.quit);
+    assert!(
+        h.app
+            .notifications
+            .iter()
+            .any(|n| n.text.contains("still running"))
+    );
+    h.key(KeyCode::Char('q'));
+    assert!(h.app.quit);
+}

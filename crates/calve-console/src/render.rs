@@ -38,6 +38,14 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
         workspace(frame, app, &screen, body, true);
     } else {
         match app.width() {
+            // Ctrl+B hides the navigation pane for room (§5.1).
+            Width::Wide if app.panes_hidden => {
+                let [main, inspector] =
+                    Layout::horizontal([Constraint::Percentage(68), Constraint::Min(30)])
+                        .areas(body);
+                workspace(frame, app, &screen, main, app.focus != Focus::Inspector);
+                inspector_pane(frame, app, &screen, inspector);
+            }
             Width::Wide => {
                 let [nav, main, inspector] = Layout::horizontal([
                     Constraint::Length(22),
@@ -48,6 +56,10 @@ pub fn draw(frame: &mut Frame<'_>, app: &App) {
                 navigation(frame, app, nav);
                 workspace(frame, app, &screen, main, app.focus == Focus::Workspace);
                 inspector_pane(frame, app, &screen, inspector);
+            }
+            // At medium width Ctrl+B hides the inspector instead.
+            Width::Medium if app.panes_hidden => {
+                workspace(frame, app, &screen, body, true);
             }
             Width::Medium => {
                 let [main, inspector] =
@@ -525,9 +537,28 @@ fn draw_table(frame: &mut Frame<'_>, app: &App, table: &Table, area: Rect, focus
         let (title, body) = if filter.is_empty() {
             table.empty.clone()
         } else {
+            // A field this list does not have is named, never answered with silence (§10.1).
+            let all: Vec<&screens::Row> =
+                table.sections.iter().flat_map(|s| s.rows.iter()).collect();
+            let unknown = screens::unknown_fields(&all, &filter);
+            let mut known: Vec<&str> = all
+                .iter()
+                .flat_map(|r| r.search.iter().map(|(n, _)| *n))
+                .filter(|n| !matches!(*n, "age" | "instant"))
+                .collect();
+            known.sort_unstable();
+            known.dedup();
             (
                 format!("Nothing matches “{}”.", line(&filter)),
-                "esc clear filter".into(),
+                if unknown.is_empty() {
+                    "esc clear filter".into()
+                } else {
+                    format!(
+                        "{}: not a field of this list. Fields: {}. esc clear filter",
+                        unknown.join(", "),
+                        known.join(", ")
+                    )
+                },
             )
         };
         lines.push(Line::from(""));
@@ -1206,11 +1237,30 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
     let theme = &app.theme;
     let width = 72.min(area.width.saturating_sub(4));
     match overlay {
-        Overlay::Palette { query, selected } => {
-            let items = palette_items(app, screen, query);
-            let visible = (area.height as usize).saturating_sub(8).max(4);
+        Overlay::Palette {
+            query,
+            selected,
+            tab,
+        } => {
+            let items = palette_items(app, screen, query, *tab);
+            let visible = (area.height as usize).saturating_sub(9).max(4);
             let start = selected.saturating_sub(visible.saturating_sub(1));
+            let tabs: Vec<Span<'static>> = ["All", "Objects", "Actions", "Commands"]
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    span(
+                        format!(" {name} "),
+                        if i == *tab {
+                            theme.selected(true)
+                        } else {
+                            theme.muted()
+                        },
+                    )
+                })
+                .collect();
             let mut lines = vec![
+                Line::from(tabs),
                 Line::from(vec![
                     span("> ", theme.accent()),
                     span(line(query), theme.text()),
@@ -1227,7 +1277,7 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
             ));
             lines.push(Line::from(""));
             lines.push(Line::from(span(
-                "↑↓ select  enter run  esc close",
+                "↑↓ select  enter run  tab group  esc close",
                 theme.muted(),
             )));
             modal(frame, app, "Command Palette", area, width, lines);
@@ -1501,45 +1551,78 @@ pub fn structured_lines(app: &App, value: &Value, max: usize) -> Vec<Line<'stati
     lines
 }
 
+/// Keys valid here plus global keys (§51): `r` says what it does on this screen, and direct
+/// action keys appear only when no other binding claims them.
 fn help_lines(app: &App, screen: &Screen) -> Vec<Line<'static>> {
     let theme = &app.theme;
-    let mut groups: Vec<(&str, Vec<(&str, &str)>)> = vec![(
+    let pack = matches!(app.route, Route::ChangePack(_));
+    let review = screen
+        .actions
+        .iter()
+        .any(|a| matches!(a.target, Target::Review { .. }));
+    let r = match app.tab_name() {
+        Some("Verify") => "rerun verification",
+        _ if pack && review => "review",
+        _ => "refresh (also F5)",
+    };
+    let mut groups: Vec<(&str, Vec<(String, String)>)> = vec![(
         "NAVIGATION",
-        vec![
+        [
             ("j / ↓", "next"),
             ("k / ↑", "previous"),
+            ("gg / G", "first / last"),
             ("h l", "outward / inward"),
             ("enter", "open"),
             ("esc", "back / close"),
             ("tab", "next pane or tab"),
             ("g", "go to"),
             ("alt+← →", "history"),
-        ],
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect(),
     )];
-    let mut contextual: Vec<(&str, &str)> = screen
+    let mut contextual: Vec<(String, String)> = screen
         .hints
         .iter()
-        .map(|(k, v)| (*k, *v))
         .filter(|(k, _)| !["^P", ":", "?"].contains(k))
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
         .collect();
-    contextual.push(("a", "contextual actions"));
+    contextual.push(("a".into(), "contextual actions".into()));
     if screen.explain.is_some() {
-        contextual.push(("x", "explain state"));
+        contextual.push(("x".into(), "explain state".into()));
+    }
+    if pack {
+        contextual.push(("e".into(), "evidence".into()));
+    }
+    // Direct action keys that nothing else on this screen uses.
+    let taken = "qjkhlgGzyxafwnNsre/:?";
+    for action in screen.actions.iter().filter(|a| a.group == "Actions") {
+        if let Some(key) = action.detail.strip_prefix("key ")
+            && !key.chars().all(|c| taken.contains(c))
+            && !contextual.iter().any(|(k, _)| k == key)
+        {
+            contextual.push((key.to_owned(), action.label.to_lowercase()));
+        }
     }
     groups.push(("THIS SCREEN", contextual));
     groups.push((
         "GLOBAL",
-        vec![
+        [
             ("ctrl+p", "commands and objects"),
-            ("/", "filter (field:value)"),
+            ("/", "filter (field:value, updated:<1h)"),
             (":", "command mode"),
             ("z", "fullscreen"),
-            ("r", "refresh"),
-            ("y", "copy ID"),
+            ("r", r),
+            ("y", "copy reference"),
             ("ctrl+l", "activity"),
-            ("q", "quit"),
+            ("ctrl+b", "hide side pane"),
+            ("q", "close / quit"),
             ("?", "this help"),
-        ],
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect(),
     ));
     let mut lines = Vec::new();
     for (title, keys) in groups {
@@ -1547,7 +1630,7 @@ fn help_lines(app: &App, screen: &Screen) -> Vec<Line<'static>> {
         for (key, meaning) in keys {
             lines.push(Line::from(vec![
                 span(format!("  {key:<12}"), theme.accent()),
-                span(meaning.to_owned(), theme.text()),
+                span(meaning, theme.text()),
             ]));
         }
         lines.push(Line::from(""));
