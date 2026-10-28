@@ -1,7 +1,7 @@
  Calve  project: openaevc  workspace: main  Baselines   ● healthy                           v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Baselines ───────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ID               Label                 Packs  State               ││Baseline                    │
-│  Overview        5 ││bsl_…fth57jjam   staging               1      ✓ VALID     active  ││bsl_…3lnykofth57jjam        │
+│  Overview        5 ││bsl_…4w3ucpqxq   staging               1      ✓ VALID     active  ││bsl_…ijf3eh4w3ucpqxq        │
 │  Work              ││                                                                  ││staging                     │
 │  Change Graph      ││                                                                  ││                            │
 │  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
@@ -15,8 +15,8 @@
 │  Doctor            ││                                                                  ││  Plan materialization      │
 │  Extensions        ││                                                                  ││  Set alias                 │
 │                    ││                                                                  ││  Graph                     │
+│                    ││                                                                  ││  Compare with…             │
 │                    ││                                                                  ││  a all actions             │
-│                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

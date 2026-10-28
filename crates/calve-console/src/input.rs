@@ -130,6 +130,153 @@ fn destructive(args: &[String]) -> bool {
         || words.first() == Some(&"recover") && words.get(1) == Some(&"apply")
 }
 
+/// Baseline comparison (§40.2): members only in each side and the shared count, named by
+/// pack title where a loaded Baseline view knows it.
+fn compare_view(app: &App, value: &Value) -> Overlay {
+    let name = |digest: &str| {
+        app.data
+            .iter()
+            .filter(|(k, _)| k.starts_with("baseline:"))
+            .filter_map(|(_, l)| l.value.as_ref())
+            .flat_map(|b| b["members"].as_array().into_iter().flatten())
+            .find(|m| m["digest"] == digest)
+            .and_then(|m| m["title"].as_str().map(str::to_owned))
+            .unwrap_or_else(|| crate::text::middle(digest, 24, app.symbols.ellipsis()))
+    };
+    let side = |key: &str| -> Vec<String> {
+        value[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(name)
+            .collect()
+    };
+    let left = value["left"].as_str().unwrap_or("left");
+    let right = value["right"].as_str().unwrap_or("right");
+    let mut lines = Vec::new();
+    for (title, key) in [(left, "only_left_members"), (right, "only_right_members")] {
+        lines.push((Tone::Neutral, format!("Only in {title}")));
+        let names = side(key);
+        if names.is_empty() {
+            lines.push((Tone::Neutral, "  none".into()));
+        }
+        lines.extend(names.into_iter().map(|n| (Tone::Review, n)));
+        lines.push((Tone::Neutral, String::new()));
+    }
+    let shared = value["shared_members"].as_array().map_or(0, Vec::len);
+    lines.push((Tone::Neutral, format!("Shared      {shared} ChangePacks")));
+    let edges = |key: &str| value[key].as_array().map_or(0, Vec::len);
+    lines.push((
+        Tone::Neutral,
+        format!(
+            "Relations   {} shared, {} only left, {} only right",
+            edges("shared_edges"),
+            edges("only_left_edges"),
+            edges("only_right_edges")
+        ),
+    ));
+    Overlay::Explain {
+        title: format!(
+            "Compare {} ↔ {}",
+            crate::text::short_id(left, 14, app.symbols.ellipsis()),
+            crate::text::short_id(right, 14, app.symbols.ellipsis())
+        ),
+        lines,
+    }
+}
+
+/// What a destructive command does (§60), by command.
+fn consequence(args: &[String]) -> &'static str {
+    let word = |i: usize| args.get(i).map(String::as_str).unwrap_or("");
+    match (word(0), word(1)) {
+        ("pack", "promote") => "Creates an immutable promoted ChangePack in accepted history.",
+        ("pack", "abandon") => "Closes the pack without promoting it; its history is kept.",
+        ("pack", "reject") => "Records a rejecting review of the sealed candidate.",
+        ("pack", "quarantine") => {
+            "Blocks every further transition until the quarantine is released."
+        }
+        ("pack", "reopen") => {
+            "Starts a new generation; checks, evaluations and reviews of this candidate become stale."
+        }
+        ("baseline", "activate") => {
+            "Moves the active Baseline pointer; the working tree is not written."
+        }
+        ("baseline", "materialize") => {
+            "Writes the Baseline's accepted files into the working tree."
+        }
+        ("execution", "cancel") => "Stops the execution; effects it has not applied are discarded.",
+        ("project", "unregister") => "Forgets the registration; the Project's files are kept.",
+        ("extension", "disable") => {
+            "The extension's tools and providers stop working in this Project."
+        }
+        ("extension", "enable") => {
+            "Enables the extension; it gets only the capabilities you grant."
+        }
+        ("extension", "update") => {
+            "Installs a newer version; any widened permission needs a grant."
+        }
+        ("inbox", "clear-resolved") => {
+            "Forgets resolved inbox items; the audit history is untouched."
+        }
+        ("recover", "apply") => "Applies the recovery plan to this Project.",
+        _ => "This changes authoritative state and cannot be silently undone.",
+    }
+}
+
+/// A confirmation that names the target, the consequence, eligibility and affected Baseline
+/// it knows of, and the backend's own preflight for a promotion (§21, §60).
+fn confirm_dialog(app: &mut App, title: String, args: Vec<String>, label: String) {
+    let mut lines = vec![consequence(&args).to_owned(), String::new()];
+    if let Some(target) = args.get(2).filter(|t| !t.starts_with('-')) {
+        lines.push(format!("Target      {target}"));
+    }
+    let word = |i: usize| args.get(i).map(String::as_str).unwrap_or("");
+    if (word(0), word(1)) == ("baseline", "activate") {
+        let active = app
+            .value("status")
+            .and_then(|s| s["active_baseline"]["id"].as_str())
+            .unwrap_or("none")
+            .to_owned();
+        lines.push(format!("Active      {active} → {}", word(2)));
+    }
+    if word(0) == "pack"
+        && let Some(pack) = app.value(&format!("pack:{}", word(2)))
+    {
+        for entry in pack["explain"]["satisfied"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            lines.push(format!("✓ {}", entry["condition"].as_str().unwrap_or("")));
+        }
+        for entry in pack["explain"]["missing"].as_array().into_iter().flatten() {
+            lines.push(format!("× {}", entry["condition"].as_str().unwrap_or("")));
+        }
+    }
+    let preflight = ((word(0), word(1)) == ("pack", "promote")).then(|| {
+        let key = format!("preflight:{}", args.join(" "));
+        let mut words = args.clone();
+        words.push("--preflight".into());
+        if let Ok(action) = parse_action(&words) {
+            if let Some(entry) = app.data.get_mut(&key) {
+                entry.loading = false;
+            }
+            app.request(&key, action);
+        }
+        key
+    });
+    lines.push(String::new());
+    lines.push(format!("calve {}", args.join(" ")));
+    app.overlays.push(Overlay::Confirm {
+        title,
+        lines,
+        args,
+        label,
+        preflight,
+    });
+}
+
 /// Queues a typed command; results come back through [`on_response`].
 pub fn issue(app: &mut App, label: &str, args: &[String], show_result: bool) {
     issue_with(app, label, args, show_result, false);
@@ -174,7 +321,27 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
     match result {
         Ok(value) => {
             app.notify(Tone::Success, label.to_owned());
-            if show {
+            // An operation with an execution identity links to it (§83–84).
+            let execution = [&value["execution"], &value["execution"]["id"], &value["id"]]
+                .into_iter()
+                .filter_map(Value::as_str)
+                .find(|id| id.starts_with("exe_"))
+                .map(str::to_owned);
+            if value.get("only_left_members").is_some() {
+                app.overlays.push(compare_view(app, &value));
+            } else if let Some(id) = execution {
+                app.overlays.push(Overlay::Actions {
+                    title: format!("{label} started"),
+                    items: vec![PaletteItem {
+                        group: "Actions",
+                        label: "Open execution".into(),
+                        detail: crate::text::short_id(&id, 24, app.symbols.ellipsis()),
+                        target: Target::Open(Route::Execution(id)),
+                    }],
+                    query: String::new(),
+                    selected: 0,
+                });
+            } else if show {
                 app.overlays.push(Overlay::Result {
                     title: label.to_owned(),
                     value,
@@ -230,16 +397,7 @@ fn run_target(app: &mut App, target: Target) {
             label,
         } => {
             if confirm {
-                app.overlays.push(Overlay::Confirm {
-                    title: format!("{label}?"),
-                    lines: vec![
-                        "This changes authoritative state and cannot be silently undone.".into(),
-                        String::new(),
-                        format!("calve {}", args.join(" ")),
-                    ],
-                    args,
-                    label,
-                });
+                confirm_dialog(app, format!("{label}?"), args, label);
             } else {
                 issue(app, &label, &args, false);
             }
@@ -783,16 +941,7 @@ fn run_command_line(app: &mut App, input: &str) -> Result<(), String> {
     parse_action(&words)?;
     let label = format!(":{}", words.join(" "));
     if destructive(&words) {
-        app.overlays.push(Overlay::Confirm {
-            title: "Run command?".into(),
-            lines: vec![
-                "This command changes authoritative state.".into(),
-                String::new(),
-                format!("calve {}", words.join(" ")),
-            ],
-            args: words,
-            label,
-        });
+        confirm_dialog(app, "Run command?".into(), words, label);
     } else {
         issue(app, &label, &words, true);
     }
@@ -1023,8 +1172,9 @@ fn handle_overlay(app: &mut App, key: KeyEvent) {
             }
         }
         Overlay::Review(form) => {
-            let submit = key.code == KeyCode::Char('s')
-                && key.modifiers.contains(KeyModifiers::CONTROL)
+            // Ctrl+Enter submits (§59); terminals without key reporting send it as Ctrl+J.
+            let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+            let submit = ctrl && matches!(key.code, KeyCode::Enter | KeyCode::Char('j' | 's'))
                 || enter && form.field == 1;
             if esc {
                 keep = false;
@@ -1189,6 +1339,14 @@ fn move_selection(app: &mut App, delta: isize) {
                 Direction::Up
             };
             move_graph(app, graph, direction);
+        }
+        Body::Log { key, lines, .. } => {
+            if delta < 0 {
+                app.log_follow = false;
+            }
+            let last = lines.len().saturating_sub(1) as isize;
+            let state = app.collection(key);
+            state.scroll = (state.scroll as isize + delta).clamp(0, last.max(0)) as usize;
         }
         Body::Text(_) | Body::Status { .. } => {
             let key = format!("text:{}", crate::model::tab_key(&app.route));
@@ -1365,6 +1523,37 @@ fn scroll_diff(app: &mut App, delta: isize) {
     app.diff_scroll = (app.diff_scroll as isize + delta).clamp(0, last.max(0)) as usize;
 }
 
+/// `/` search in output or raw text: scrolls to the next (or previous) matching line.
+fn jump_log(app: &mut App, key: &str, lines: &[screens::LogLine], forward: bool) {
+    let term = app
+        .collections
+        .get(key)
+        .map(|c| c.filter.to_lowercase())
+        .unwrap_or_default();
+    if term.is_empty() {
+        return;
+    }
+    let at = app.collections.get(key).map_or(0, |c| c.scroll);
+    let hits: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.text.to_lowercase().contains(&term))
+        .map(|(i, _)| i)
+        .collect();
+    let target = if forward {
+        hits.iter().find(|&&h| h > at).or(hits.first())
+    } else {
+        hits.iter().rev().find(|&&h| h < at).or(hits.last())
+    };
+    match target {
+        Some(&line) => {
+            app.log_follow = false;
+            app.collection(key).scroll = line;
+        }
+        None => app.notify(Tone::Neutral, format!("No matches for “{term}”")),
+    }
+}
+
 /// `/` search in the open diff: the next (or previous) matching line from the current one.
 fn jump_match(app: &mut App, forward: bool, include_current: bool) {
     let Some(term) = crate::render::table_key(&screens::build(app))
@@ -1468,6 +1657,13 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.filter_editing = false;
                 if matches!(screen.body, Body::Diff(_)) {
                     jump_match(app, true, true);
+                }
+                if let Body::Log {
+                    key: log, lines, ..
+                } = &screen.body
+                {
+                    app.collection(log).scroll = 0;
+                    jump_log(app, log, lines, true);
                 }
             }
             _ => {
@@ -1640,6 +1836,12 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             None => app.notify(Tone::Neutral, "Nothing to explain here"),
         },
         KeyCode::Char('z') => app.fullscreen = !app.fullscreen,
+        // y on output or raw text copies the text itself (§24, §28).
+        KeyCode::Char('y') if let Body::Log { key: log, lines, .. } = &screen.body => {
+            let text = lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join("\n");
+            let what = if log.starts_with("raw:") { "raw document" } else { "output" };
+            copy(app, text, what);
+        }
         KeyCode::Char('y') => match selected_id(app, &screen) {
             Some(id) => copy(
                 app,
@@ -1712,6 +1914,17 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('f') if matches!(app.route, Route::Execution(_)) => {
             app.log_follow = !app.log_follow;
         }
+        // `[` `]` switch the pack inspector's tabs (§30.2).
+        KeyCode::Char(']') | KeyCode::Char('[')
+            if !diff && matches!(app.route, Route::ChangePack(_) | Route::ChangePacks) =>
+        {
+            let n = crate::screens::PACK_INSPECTOR_TABS.len();
+            app.inspector_tab = if key.code == KeyCode::Char(']') {
+                (app.inspector_tab + 1) % n
+            } else {
+                (app.inspector_tab + n - 1) % n
+            };
+        }
         KeyCode::Char(']') | KeyCode::Char('[') if diff => {
             app.pending_key = Some(if key.code == KeyCode::Char(']') {
                 ']'
@@ -1725,6 +1938,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('u') if ctrl && diff => scroll_diff(app, -20),
         KeyCode::Char('n') if diff => jump_match(app, true, false),
         KeyCode::Char('N') if diff => jump_match(app, false, false),
+        KeyCode::Char('n' | 'N') if let Body::Log { key: log, lines, .. } = &screen.body => {
+            jump_log(app, log, lines, key.code == KeyCode::Char('n'));
+        }
+        KeyCode::Char('w') if matches!(screen.body, Body::Log { .. }) => {
+            app.wrap_logs = !app.wrap_logs;
+        }
+        KeyCode::Char('t') if matches!(screen.body, Body::Log { .. }) => {
+            app.log_timestamps = !app.log_timestamps;
+        }
         KeyCode::Enter if diff && app.focus == Focus::Workspace => app.diff_lines = true,
         KeyCode::Char(' ') => {
             if let Body::Table(table) = &screen.body

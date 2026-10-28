@@ -1,7 +1,7 @@
  Calve  project: openaevc  workspace: main  Projects   ● healthy                                                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Projects ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Project                   Path                               Health                        ││openaevc                                   │
-│  Overview        5 ││openaevc                  /home/dev/openaevc                 ✓ HEALTHY            current  ││prj_01a1844b-73fe-743f-a1c8-6ecf760e529e   │
+│  Overview        5 ││openaevc                  /home/dev/openaevc                 ✓ HEALTHY            current  ││prj_01a18476-eb57-769d-8864-970b09c914ad   │
 │  Work              ││                                                                                           ││/home/dev/openaevc                         │
 │  Change Graph      ││                                                                                           ││                                           │
 │  ChangePacks       ││                                                                                           ││Health      ✓ HEALTHY                      │

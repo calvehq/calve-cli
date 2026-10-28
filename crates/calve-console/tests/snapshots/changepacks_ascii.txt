@@ -1,28 +1,28 @@
  Calve  project: openaevc  workspace: main  ChangePacks   [*] healthy                       v0.1.0  ^P Commands  ? Help
 + Navigation --------++ ChangePacks -----------------------------------------------------++ Inspector -----------------+
-| PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  ||cpk_...r2nnozul6ociavur4    |
-|  Overview        5 ||                                                                  ||Experimental transport      |
-|  Work              ||ID               State           Title                   Updated  ||                            |
-|  Change Graph      ||cpk_...ciavur4   [!] QUARANTINED Experimental transport  1m       ||State       [!] QUARANTINED |
-|> ChangePacks     6 ||cpk_...jashkqa   [ ] OPEN        Lint sweep              1m       ||Generation  1               |
-|  Baselines         ||cpk_...6xooe5y   [ ] OPEN        Refactor verificatio... 1m       ||Created     1m ago          |
-|  Evidence          ||cpk_...w3z77ba   [?] SEALED      Fix daemon race cond... 1m       ||Changed     0 files  +0 -0  |
-|  Events            ||cpk_...td5yoxq   [?] SEALED      Add remote conforman... 1m       ||Evidence    0               |
-|                    ||cpk_...rqmyk7m   [ok] PROMOTED   Update protocol schemas 1m       ||                            |
-| SYSTEM             ||                                                                  ||[!] Promote: pack is        |
-|  Projects          ||                                                                  ||quarantined                 |
-|  Inbox           2 ||                                                                  ||x explain                   |
-|  Doctor            ||                                                                  ||                            |
-|  Extensions        ||                                                                  ||Actions                     |
-|                    ||                                                                  ||  Release quarantine        |
+| PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  || Summary  Relations         |
+|  Overview        5 ||                                                                  ||Eligibility  Raw  [ ]       |
+|  Work              ||ID               State           Title                   Updated  ||cpk_...r3urbmlxak6mqqmkm    |
+|  Change Graph      ||cpk_...6mqqmkm   [ ] OPEN        Lint sweep              1m       ||Lint sweep                  |
+|> ChangePacks     6 ||cpk_...4m3zu7q   [!] QUARANTINED Experimental transport  1m       ||                            |
+|  Baselines         ||cpk_...nhyhuxy   [ ] OPEN        Refactor verificatio... 1m       ||State       [ ] OPEN        |
+|  Evidence          ||cpk_...yx6w5aa   [?] SEALED      Fix daemon race cond... 1m       ||Risk        not evaluated   |
+|  Events            ||cpk_...jmmfudm   [?] SEALED      Add remote conforman... 1m       ||Generation  2               |
+|                    ||cpk_...5lmuhbm   [ok] PROMOTED   Update protocol schemas 1m       ||Created     1m ago -        |
+| SYSTEM             ||                                                                  ||2026-10-28 21:42:51 UTC by  |
+|  Projects          ||                                                                  ||pri_...jmva33cz5tu          |
+|  Inbox           2 ||                                                                  ||Changed     0 files  +0 -0  |
+|  Doctor            ||                                                                  ||Evidence    0               |
+|  Extensions        ||                                                                  ||                            |
+|                    ||                                                                  ||[!] Promote: pack is OPEN;  |
+|                    ||                                                                  ||seal and qualify it first   |
+|                    ||                                                                  ||x explain                   |
+|                    ||                                                                  ||                            |
+|                    ||                                                                  ||Actions                     |
+|                    ||                                                                  ||  Seal candidate            |
+|                    ||                                                                  ||  Abandon                   |
+|                    ||                                                                  ||  Quarantine                |
 |                    ||                                                                  ||  a all actions             |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||                            |
 |                    ||                                                                  ||                            |
 |                    ||                                                                  ||                            |
 |                    ||                                                                  ||                            |

@@ -1,19 +1,26 @@
- Calve  project: openaevc  workspace: main  Execution exe_agqyis4sgf62rnduh2wi6nclki   ● healthy                                    v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ Execution exe_agqyis4sgf62rnduh2wi6nclki ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqyis4sgf62rnduh2wi6nclki   │
+ Calve  project: openaevc  workspace: main  Execution exe_agqyi52fyf23pfvwj7flr6veqe   ● healthy                                    v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Execution exe_agqyi52fyf23pfvwj7flr6veqe ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqyi52fyf23pfvwj7flr6veqe   │
 │  Overview        5 ││                                                                                           ││                                           │
 │› Work              ││checking                                                                                   ││State       × FAILED                       │
-│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqyis4r654gziqv4ktjashkqa │
+│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqyi52frr3urbmlxak6mqqmkm │
 │  ChangePacks       ││                                                                                           ││Harness     org.calve.harness.lint         │
 │  Baselines         ││                                                                                           ││Provider    org.calve.provider.shell       │
-│  Evidence          ││                                                                                           ││Actor       pri_agqyis3t7r2jrbvjvps7jbym7u │
+│  Evidence          ││                                                                                           ││Actor       pri_agqyi5xlkb3lndtjmva33cz5tu │
 │  Events            ││                                                                                           ││Attempt     1 of 3                         │
 │                    ││                                                                                           ││Generation  2                              │
-│ SYSTEM             ││                                                                                           ││Retry of    —                              │
-│  Projects          ││                                                                                           ││Output      2 lines                        │
-│  Inbox           2 ││                                                                                           ││Effects     0                              │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││                                                                                           ││Actions                                    │
+│ SYSTEM             ││                                                                                           ││Task        —                              │
+│  Projects          ││                                                                                           ││Started     1m ago · 2026-10-28 21:42:51   │
+│  Inbox           2 ││                                                                                           ││UTC                                        │
+│  Doctor            ││                                                                                           ││Finished    1m ago · 2026-10-28 21:42:57   │
+│  Extensions        ││                                                                                           ││UTC                                        │
+│                    ││                                                                                           ││Duration    6.0s                           │
+│                    ││                                                                                           ││Result      worker exited with status 2    │
+│                    ││                                                                                           ││Retry of    —                              │
+│                    ││                                                                                           ││Output      2 lines                        │
+│                    ││                                                                                           ││Effects     0                              │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││Actions                                    │
 │                    ││                                                                                           ││  Retry                                    │
 │                    ││                                                                                           ││  Open ChangePack                          │
 │                    ││                                                                                           ││  a all actions                            │
@@ -34,12 +41,5 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- ● LIVE  tab tabs  f follow  a actions  esc back  ^P commands  : command  ? help
+ ● LIVE  f follow  / search  n/N matches  w wrap  t timestamps  y copy  ^P commands  : command

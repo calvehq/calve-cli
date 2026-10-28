@@ -1,5 +1,5 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││File                                       │
 │  Overview        5 ││                                                                                           ││crates/runner/http.rs                      │
 │  Work              ││2 files changed                crates/runner/http.rs  file 1/2                             ││                                           │

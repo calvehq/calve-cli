@@ -1,7 +1,7 @@
- Calve  project: openaevc  workspace: main  Baseline bsl_agqyis4aqz73lnykofth57jjam   ● healthy
-┌ Navigation ────────┐┌ Baseline bsl_agqyis4aqz73lnykofth57jjam ─────────────────────────┐┌ Inspector ─────────────────┐
+ Calve  project: openaevc  workspace: main  Baseline bsl_agqyi5zt657ijf3eh4w3ucpqxq   ● healthy
+┌ Navigation ────────┐┌ Baseline bsl_agqyi5zt657ijf3eh4w3ucpqxq ─────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Graph  Packs  Relations  History  Explain  Raw                   ││Baseline                    │
-│  Overview        5 ││                                                                  ││bsl_…3lnykofth57jjam        │
+│  Overview        5 ││                                                                  ││bsl_…ijf3eh4w3ucpqxq        │
 │  Work              ││[✓ Update protocol …]                                             ││staging                     │
 │  Change Graph      ││                                                                  ││                            │
 │  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
@@ -12,24 +12,24 @@
 │ SYSTEM             ││                                                                  ││Update protocol schemas     │
 │  Projects          ││                                                                  ││State       ✓ PROMOTED      │
 │  Inbox           2 ││                                                                  ││Pack                        │
-│  Doctor            ││                                                                  ││cpk_agqyis3z3nzllje45hdrqmyk│
-│  Extensions        ││                                                                  ││7m                          │
+│  Doctor            ││                                                                  ││cpk_agqyi5znjv4itbgzeni5lmuh│
+│  Extensions        ││                                                                  ││bm                          │
 │                    ││                                                                  ││Head        yes             │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Used by                     │
+│                    ││                                                                  ││  none                      │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Parents                     │
+│                    ││                                                                  ││  none                      │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Dependents                  │
+│                    ││                                                                  ││  none                      │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Intent                      │
+│                    ││                                                                  ││  SDK compatibility         │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││Actions                     │
 │                    ││                                                                  ││  Activate                  │
 │                    ││                                                                  ││  Validate                  │
-│                    ││                                                                  ││  Plan materialization      │
-│                    ││                                                                  ││  Set alias                 │
-│                    ││                                                                  ││  Graph                     │
-│                    ││                                                                  ││  a all actions             │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  tab tabs  hjkl navigate  v list  z fullscreen  x explain  ^P commands  : command  ? help

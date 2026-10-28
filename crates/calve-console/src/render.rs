@@ -183,7 +183,7 @@ fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
     let mut spans = Vec::new();
     if app.filter_editing || screen_filter(app, screen).is_some() {
         let filter = screen_filter(app, screen).unwrap_or_default();
-        let what = if matches!(screen.body, Body::Diff(_)) {
+        let what = if matches!(screen.body, Body::Diff(_) | Body::Log { .. }) {
             " /search: "
         } else {
             " /filter: "
@@ -288,6 +288,7 @@ pub fn table_key(screen: &Screen) -> Option<&str> {
         Body::Table(table) => Some(&table.key),
         Body::Graph(graph) => Some(&graph.key),
         Body::Diff(key) => Some(key),
+        Body::Log { key, .. } => Some(key),
         _ => None,
     }
 }
@@ -460,6 +461,12 @@ fn workspace(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect, focu
         }
         Body::Graph(graph) => draw_graph(frame, app, graph, inner),
         Body::Diff(_) => draw_diff(frame, app, inner, focused),
+        Body::Log {
+            key,
+            header,
+            lines,
+            follow,
+        } => draw_log(frame, app, key, header, lines, *follow, inner),
         Body::Status { tone, title, body } => {
             let mut lines = vec![
                 Line::from(""),
@@ -830,6 +837,75 @@ fn draw_graph(frame: &mut Frame<'_>, app: &App, graph_body: &screens::Graph, are
     lines.push(Line::from(""));
     lines.extend(footer);
     frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// Output and raw text (§28, §24): only the visible window is styled; `/` matches are marked;
+/// a following view stays on the newest line.
+fn draw_log(
+    frame: &mut Frame<'_>,
+    app: &App,
+    key: &str,
+    header: &[Line<'static>],
+    log: &[screens::LogLine],
+    follow: bool,
+    area: Rect,
+) {
+    let theme = &app.theme;
+    let state = app.collections.get(key);
+    let search = state.map(|c| c.filter.to_lowercase()).unwrap_or_default();
+    let mut lines: Vec<Line<'static>> = header.to_vec();
+    if !search.is_empty() {
+        let hits = log
+            .iter()
+            .filter(|l| l.text.to_lowercase().contains(&search))
+            .count();
+        lines.push(Line::from(span(
+            format!("/{search}: {hits} matches  n/N next/previous"),
+            theme.muted(),
+        )));
+    }
+    let wrap = app.wrap_logs && key.starts_with("output:");
+    let height = (area.height as usize).saturating_sub(lines.len());
+    let scroll = if follow && app.log_follow {
+        log.len().saturating_sub(height)
+    } else {
+        state
+            .map_or(0, |c| c.scroll)
+            .min(log.len().saturating_sub(1))
+    };
+    for entry in log.iter().skip(scroll).take(height) {
+        let hit = !search.is_empty() && entry.text.to_lowercase().contains(&search);
+        let mut spans = Vec::new();
+        if app.log_timestamps
+            && let Some(at) = entry.at
+        {
+            spans.push(span(
+                format!("{} ", text::clock(at, app.now)),
+                theme.muted(),
+            ));
+        }
+        let style = match (hit, entry.tone) {
+            (true, _) => theme.selected(true),
+            (false, Some(tone)) => theme.tone(tone),
+            (false, None) => theme.text(),
+        };
+        let body = if wrap {
+            entry.text.clone()
+        } else {
+            truncate(&entry.text, area.width as usize, app.symbols.ellipsis())
+        };
+        spans.push(span(body, style));
+        lines.push(Line::from(spans));
+    }
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(
+        if wrap {
+            paragraph.wrap(Wrap { trim: false })
+        } else {
+            paragraph
+        },
+        area,
+    );
 }
 
 fn draw_diff(frame: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
@@ -1376,12 +1452,54 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
             help_lines(app, screen),
         ),
         Overlay::Confirm {
-            title, lines: body, ..
+            title,
+            lines: body,
+            preflight,
+            ..
         } => {
             let mut lines: Vec<Line<'static>> = body
                 .iter()
                 .map(|l| Line::from(span(line(l), theme.text())))
                 .collect();
+            if let Some(key) = preflight {
+                lines.push(Line::from(""));
+                match app.loaded(key) {
+                    Some(l) if l.value.is_some() => {
+                        let p = l.value.as_ref().expect("checked");
+                        let blockers = p["blockers"].as_array().cloned().unwrap_or_default();
+                        if blockers.is_empty() {
+                            lines.push(Line::from(span(
+                                format!(
+                                    "{} Backend preflight: ready",
+                                    app.symbols.tone(Tone::Success)
+                                ),
+                                theme.tone(Tone::Success),
+                            )));
+                        }
+                        for b in blockers {
+                            lines.push(Line::from(span(
+                                format!(
+                                    "{} {}",
+                                    app.symbols.tone(Tone::Warning),
+                                    line(b["message"].as_str().unwrap_or(""))
+                                ),
+                                theme.tone(Tone::Warning),
+                            )));
+                        }
+                    }
+                    Some(l) if l.error.is_some() => lines.push(Line::from(span(
+                        format!(
+                            "Preflight failed: {}",
+                            line(l.error.as_deref().unwrap_or(""))
+                        ),
+                        theme.tone(Tone::Warning),
+                    ))),
+                    _ => lines.push(Line::from(span(
+                        format!("Checking with the backend{}", app.symbols.ellipsis()),
+                        theme.muted(),
+                    ))),
+                }
+            }
             lines.push(Line::from(""));
             lines.push(Line::from(vec![
                 span("Enter", theme.accent()),
@@ -1452,6 +1570,47 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
                     theme.tone(Tone::Warning),
                 )));
             }
+            // The review contract records the decision against the candidate; the evidence it
+            // covers is shown for context, never as selectable links the backend would ignore.
+            if let Some(pack) = app.value(&format!("pack:{}", form.pack)) {
+                lines.push(Line::from(""));
+                lines.push(Line::from(span(
+                    "Evidence on this candidate",
+                    theme.muted(),
+                )));
+                let current: Vec<&Value> = pack["evidence"]["items"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|e| e["stale"] != true)
+                    .collect();
+                if current.is_empty() {
+                    lines.push(Line::from(span("  none", theme.muted())));
+                }
+                for e in current.iter().take(6) {
+                    lines.push(Line::from(span(
+                        format!(
+                            "  {} {}  {}",
+                            app.symbols.tone(Tone::Success),
+                            text::short_id(
+                                e["evidence"]["id"].as_str().unwrap_or(""),
+                                16,
+                                app.symbols.ellipsis()
+                            ),
+                            text::label(e["evidence"]["kind"].as_str().unwrap_or(""))
+                        ),
+                        theme.text(),
+                    )));
+                }
+                lines.push(Line::from(span(
+                    if pack["requires_review"] == true {
+                        "Required reviewers: one approval by a principal with review authority (pack policy)"
+                    } else {
+                        "No review is required by this pack's policy"
+                    },
+                    theme.muted(),
+                )));
+            }
             lines.push(Line::from(""));
             lines.push(Line::from(span(
                 format!(
@@ -1462,7 +1621,7 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
                 theme.muted(),
             )));
             lines.push(Line::from(span(
-                "tab field  ↑↓/space choose  ctrl+s or enter (on comment) submit  esc cancel",
+                "tab field  ↑↓/space choose  ctrl+enter submit  esc cancel",
                 theme.muted(),
             )));
             modal(frame, app, "Review", area, width, lines);

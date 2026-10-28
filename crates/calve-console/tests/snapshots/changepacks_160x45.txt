@@ -1,26 +1,26 @@
  Calve  project: openaevc  workspace: main  ChangePacks   ● healthy                                                                 v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ ChangePacks ──────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1                           ││cpk_…rpr2nnozul6ociavur4                   │
-│  Overview        5 ││                                                                                           ││Experimental transport                     │
-│  Work              ││ID               State           Title                                 Changed    Updated  ││                                           │
-│  Change Graph      ││cpk_…6ociavur4   ! QUARANTINED   Experimental transport                0 files    1m       ││State       ! QUARANTINED                  │
-│› ChangePacks     6 ││cpk_…ktjashkqa   ○ OPEN          Lint sweep                            0 files    1m       ││Generation  1                              │
-│  Baselines         ││cpk_…i56xooe5y   ○ OPEN          Refactor verification rules           1 files    1m       ││Created     1m ago                         │
-│  Evidence          ││cpk_…4sw3z77ba   ◆ SEALED        Fix daemon race condition             1 files    1m       ││Changed     0 files  +0 -0                 │
-│  Events            ││cpk_…7ztd5yoxq   ◆ SEALED        Add remote conformance runner         2 files    1m       ││Evidence    0                              │
-│                    ││cpk_…hdrqmyk7m   ✓ PROMOTED      Update protocol schemas               2 files    1m       ││                                           │
-│ SYSTEM             ││                                                                                           ││! Promote: pack is quarantined             │
-│  Projects          ││                                                                                           ││x explain                                  │
+│ PROJECT            ││ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1                           ││ Summary  Relations  Eligibility  Raw  [ ] │
+│  Overview        5 ││                                                                                           ││cpk_…frr3urbmlxak6mqqmkm                   │
+│  Work              ││ID               State           Title                                 Changed    Updated  ││Lint sweep                                 │
+│  Change Graph      ││cpk_…ak6mqqmkm   ○ OPEN          Lint sweep                            0 files    1m       ││                                           │
+│› ChangePacks     6 ││cpk_…wj4m3zu7q   ! QUARANTINED   Experimental transport                0 files    1m       ││State       ○ OPEN                         │
+│  Baselines         ││cpk_…ahnhyhuxy   ○ OPEN          Refactor verification rules           1 files    1m       ││Risk        not evaluated                  │
+│  Evidence          ││cpk_…fwyx6w5aa   ◆ SEALED        Fix daemon race condition             1 files    1m       ││Generation  2                              │
+│  Events            ││cpk_…dhjmmfudm   ◆ SEALED        Add remote conformance runner         2 files    1m       ││Created     1m ago · 2026-10-28 21:42:51   │
+│                    ││cpk_…ni5lmuhbm   ✓ PROMOTED      Update protocol schemas               2 files    1m       ││UTC by pri_…dtjmva33cz5tu                  │
+│ SYSTEM             ││                                                                                           ││Changed     0 files  +0 -0                 │
+│  Projects          ││                                                                                           ││Evidence    0                              │
 │  Inbox           2 ││                                                                                           ││                                           │
-│  Doctor            ││                                                                                           ││Actions                                    │
-│  Extensions        ││                                                                                           ││  Release quarantine                       │
+│  Doctor            ││                                                                                           ││! Promote: pack is OPEN; seal and qualify  │
+│  Extensions        ││                                                                                           ││it first                                   │
+│                    ││                                                                                           ││x explain                                  │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Seal candidate                           │
+│                    ││                                                                                           ││  Abandon                                  │
+│                    ││                                                                                           ││  Quarantine                               │
 │                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

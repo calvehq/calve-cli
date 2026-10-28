@@ -799,6 +799,28 @@ impl Project {
             .filter_map(|p| p["promoted_digest"].as_str().map(|d| (d.to_owned(), p)))
             .collect();
         let heads: BTreeSet<String> = baseline.heads.iter().map(ToString::to_string).collect();
+        // Other Baselines composing each member (§40 "Used by"); Baselines are few objects.
+        let mut used_by: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (_, other) in self.protocol_baselines().await? {
+            if other.id == baseline.id {
+                continue;
+            }
+            for digest in &other.members {
+                used_by.entry(digest.to_string()).or_default().push(
+                    self.baseline_label(&other)
+                        .unwrap_or_else(|| other.id.to_string()),
+                );
+            }
+        }
+        let intent_title = |intent: &Value| -> Option<String> {
+            self.db
+                .query_row(
+                    "SELECT title FROM intents WHERE id=?1",
+                    [intent.as_str()?],
+                    |r| r.get(0),
+                )
+                .ok()
+        };
         let members: Vec<Value> = baseline
             .members
             .iter()
@@ -806,7 +828,9 @@ impl Project {
                 let pack = by_digest.get(&digest.to_string());
                 json!({"digest":digest,"pack":pack.map(|p| p["id"].clone()),
                     "title":pack.map(|p| p["title"].clone()),"state":pack.map(|p| p["state"].clone()),
-                    "head":heads.contains(&digest.to_string())})
+                    "head":heads.contains(&digest.to_string()),
+                    "used_by":used_by.get(&digest.to_string()).cloned().unwrap_or_default(),
+                    "intent":pack.and_then(|p| intent_title(&p["intent"]))})
             })
             .collect();
         let aliases: Vec<Value> = self
@@ -866,9 +890,20 @@ impl Project {
                 .collect(),
             None => vec![],
         };
+        // The Calve task that links this execution, if any (indexed by task_links_object).
+        let task: Option<(String, String)> = self
+            .db
+            .query_row(
+                "SELECT t.id, t.title FROM task_links l JOIN tasks t ON t.id=l.task_id
+                 WHERE l.kind='execution' AND l.object_id=?1 LIMIT 1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
         Ok(
             json!({"execution":execution,"events":logs["events"],"observations":observations,
-            "output":output,"effects":effects}),
+            "output":output,"effects":effects,
+            "task":task.map(|(id, title)| json!({"id":id,"title":title}))}),
         )
     }
 

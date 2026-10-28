@@ -1,22 +1,27 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ───────────────────────┐┌ Inspector ─────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││cpk_…a7b5ylj3hs7ztd5yoxq    │
-│  Overview        5 ││                                                                  ││Add remote conformance      │
-│  Work              ││Review      ◆ WAITING                                             ││runner                      │
-│  Change Graph      ││Required    yes, by pack policy                                   ││                            │
-│› ChangePacks       ││                                                                  ││State       ◆ SEALED        │
-│  Baselines         ││D┌ Review ──────────────────────────────────────────────────────────────┐ation  2               │
-│  Evidence          ││N│Decision                                                              │ed     1m ago          │
-│  Events            ││ │  (•) Approve                                                         │ed     2 files  +7 -2  │
-│                    ││E│  ( ) Reject                                                          │s      1/1             │
-│ SYSTEM             ││✓│  ( ) Comment                                                         │nce    0               │
-│  Projects          ││✓│                                                                      │w      ◆ WAITING       │
-│  Inbox           2 ││×│Comment                                                               │                       │
-│  Doctor            ││ │>                                                                     │t                      │
-│  Extensions        ││r│                                                                      │conformance            │
-│                    ││ │Binds to generation 2 of cpk_…ylj3hs7ztd5yoxq                         │                       │
-│                    ││ │tab field  ↑↓/space choose  ctrl+s or enter (on comment) submit  esc  │mote: missing: approved│
-│                    ││ └──────────────────────────────────────────────────────────────────────┘w                      │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
+│  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
+│  Work              ││Review      ◆ WAITING                                             ││cpk_…um57xdbljgdhjmmfudm    │
+│  Change Graph      ││Required    yes, by pack policy                                   ││Add remote conformance      │
+│› ChangePacks       ││ ┌ Review ──────────────────────────────────────────────────────────────┐r                      │
+│  Baselines         ││D│Decision                                                              │                       │
+│  Evidence          ││N│  (•) Approve                                                         │       ◆ SEALED        │
+│  Events            ││ │  ( ) Reject                                                          │       ✓ ALLOW         │
+│                    ││E│  ( ) Comment                                                         │ation  2               │
+│ SYSTEM             ││✓│                                                                      │ed     1m ago ·        │
+│  Projects          ││✓│Comment                                                               │10-28 21:42:47 UTC by  │
+│  Inbox           2 ││×│>                                                                     │dtjmva33cz5tu          │
+│  Doctor            ││ │                                                                      │ed     2 files  +7 -2  │
+│  Extensions        ││r│Evidence on this candidate                                            │s      1/1             │
+│                    ││ │  none                                                                │nce    0               │
+│                    ││ │Required reviewers: one approval by a principal with review authority │w      ◆ WAITING       │
+│                    ││ │(pack policy)                                                         │                       │
+│                    ││ │                                                                      │t                      │
+│                    ││ │Binds to generation 2 of cpk_…xdbljgdhjmmfudm                         │conformance            │
+│                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
+│                    ││                                                                  ││! Promote: missing: approved│
+│                    ││                                                                  ││review                      │
 │                    ││                                                                  ││x explain                   │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││Actions                     │
@@ -26,10 +31,5 @@
 │                    ││                                                                  ││  Approve                   │
 │                    ││                                                                  ││  Reject                    │
 │                    ││                                                                  ││  Refresh qualification     │
-│                    ││                                                                  ││  a all actions             │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  r review  x explain  a actions  tab tabs  ^P commands  : command  ? help

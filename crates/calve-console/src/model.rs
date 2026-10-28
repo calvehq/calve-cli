@@ -284,6 +284,8 @@ pub enum Overlay {
         lines: Vec<String>,
         args: Vec<String>,
         label: String,
+        /// Read-model key of the backend preflight shown in the dialog (promotion).
+        preflight: Option<String>,
     },
     Prompt {
         title: String,
@@ -406,6 +408,8 @@ pub struct App {
     pub quit_armed: bool,
     /// Ctrl+B: hide the navigation (wide) or inspector (medium) pane (§5.1).
     pub panes_hidden: bool,
+    /// The pack inspector's tab: Summary, Relations, Eligibility, Raw (§30.2); `[` `]`.
+    pub inspector_tab: usize,
 }
 
 impl App {
@@ -466,6 +470,7 @@ impl App {
             in_flight: BTreeSet::new(),
             quit_armed: false,
             panes_hidden: false,
+            inspector_tab: 0,
         };
         app.load_route();
         app.request("status", status_action());

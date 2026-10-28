@@ -1,28 +1,28 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4ntr7snpiayi56xooe5y   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y ───────────────────────┐┌ Inspector ─────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││cpk_…ntr7snpiayi56xooe5y    │
-│  Overview        5 ││                                                                  ││Refactor verification rules │
-│  Work              ││cpk_…r7snpiayi56xooe5y · Refactor verification rules   ○ OPEN     ││                            │
-│  Change Graph      ││                                                                  ││State       ○ OPEN          │
-│› ChangePacks       ││Changes                                                           ││Generation  2               │
-│  Baselines         ││  1 files   +1 -0                                                 ││Created     1m ago          │
-│  Evidence          ││                                                                  ││Changed     1 files  +1 -0  │
-│  Events            ││ ┌ Run command? ────────────────────────────────────────────────────────┐nce    0               │
-│                    ││ │This command changes authoritative state.                             │                       │
-│ SYSTEM             ││ │                                                                      │mote: pack is OPEN;    │
-│  Projects          ││ │calve pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2      │and qualify it first   │
-│  Inbox           2 ││ │                                                                      │lain                   │
-│  Doctor            ││ │Enter confirm     Esc cancel                                          │                       │
-│  Extensions        ││ └──────────────────────────────────────────────────────────────────────┘ns                     │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyi52bez3vdapulahnhyhuxy   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqyi52bez3vdapulahnhyhuxy ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
+│  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
+│  Work              ││cpk_…z3vdapulahnhyhuxy · Refactor verification rules   ○ OPEN     ││cpk_…bez3vdapulahnhyhuxy    │
+│  Change Graph      ││                                                                  ││Refactor verification rules │
+│› ChangePacks       ││Changes                                                           ││                            │
+│  Baselines         ││  1 files   +1 -0                                                 ││State       ○ OPEN          │
+│  Evidence          ││ ┌ Run command? ────────────────────────────────────────────────────────┐       not evaluated   │
+│  Events            ││ │Closes the pack without promoting it; its history is kept.            │ation  2               │
+│                    ││ │                                                                      │ed     1m ago ·        │
+│ SYSTEM             ││ │Target      cpk_agqyi52bez3vdapulahnhyhuxy                            │10-28 21:42:50 UTC by  │
+│  Projects          ││ │× sealed candidate                                                    │dtjmva33cz5tu          │
+│  Inbox           2 ││ │                                                                      │ed     1 files  +1 -0  │
+│  Doctor            ││ │calve pack abandon cpk_agqyi52bez3vdapulahnhyhuxy --generation 2      │nce    0               │
+│  Extensions        ││ │                                                                      │                       │
+│                    ││ │Enter confirm     Esc cancel                                          │mote: pack is OPEN;    │
+│                    ││ └──────────────────────────────────────────────────────────────────────┘and qualify it first   │
+│                    ││                                                                  ││x explain                   │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Actions                     │
 │                    ││                                                                  ││  Seal candidate            │
 │                    ││                                                                  ││  Abandon                   │
 │                    ││                                                                  ││  Quarantine                │
 │                    ││                                                                  ││  a all actions             │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

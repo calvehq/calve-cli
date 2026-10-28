@@ -165,11 +165,26 @@ pub enum Body {
     Graph(Graph),
     /// The Diff workstation; the key holds its file selection and `/` search term.
     Diff(String),
+    /// Searchable, scrollable text (execution output §28, raw view §24); the key holds the
+    /// `/` term and scroll; `follow` keeps the newest line in view while `app.log_follow`.
+    Log {
+        key: String,
+        header: Vec<Line<'static>>,
+        lines: Vec<LogLine>,
+        follow: bool,
+    },
     Status {
         tone: Tone,
         title: String,
         body: String,
     },
+}
+
+pub struct LogLine {
+    /// Unix seconds, shown when timestamps are on.
+    pub at: Option<i64>,
+    pub tone: Option<Tone>,
+    pub text: String,
 }
 
 pub struct Screen {
@@ -990,7 +1005,7 @@ fn task(app: &App, id: &str) -> Screen {
                 total: None,
             })
         }
-        Some("Raw") => Body::Text(raw_lines(app, value)),
+        Some("Raw") => raw_body(app, format!("raw:task:{id}"), value),
         _ => Body::Text(task_inspector(app, value)),
     };
     let mut screen = Screen::new(body);
@@ -1033,6 +1048,28 @@ fn execution(app: &App, id: &str) -> Screen {
             format!("{} of {}", exec["attempt"], exec["max_attempts"]),
         ),
         field(app, "Generation", exec["generation"].to_string()),
+        field(app, "Task", value["task"]["title"].as_str().unwrap_or("—")),
+        field(app, "Started", exact(app, &exec["created_at"])),
+        field(app, "Finished", exact(app, &exec["finished_at"])),
+        field(
+            app,
+            "Duration",
+            match (
+                unix_seconds(&exec["created_at"]),
+                unix_seconds(&exec["finished_at"]),
+            ) {
+                (Some(a), Some(b)) => duration((b - a).max(0) as f64),
+                (Some(a), None) => format!("{} so far", duration((app.now - a).max(0) as f64)),
+                _ => "—".into(),
+            },
+        ),
+        // The worker's exit status is not a structured field; the recorded failure is shown
+        // verbatim rather than parsed (§28).
+        field(
+            app,
+            "Result",
+            exec["failure"].as_str().unwrap_or(str_of(exec, "state")),
+        ),
         field(app, "Retry of", exec["retry_of"].as_str().unwrap_or("—")),
         field(
             app,
@@ -1047,19 +1084,16 @@ fn execution(app: &App, id: &str) -> Screen {
     ];
     let body = match app.tab_name() {
         Some("Output") => {
-            let lines = value["output"]
+            let lines: Vec<LogLine> = value["output"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .map(|entry| {
-                    let style = if entry["stream"] == "stderr" {
-                        app.theme.tone(Tone::Warning)
-                    } else {
-                        app.theme.text()
-                    };
-                    Line::from(Span::styled(line(str_of(entry, "text")), style))
+                .map(|entry| LogLine {
+                    at: unix_seconds(&entry["at"]),
+                    tone: (entry["stream"] == "stderr").then_some(Tone::Warning),
+                    text: line(str_of(entry, "text")),
                 })
-                .collect::<Vec<_>>();
+                .collect();
             if lines.is_empty() {
                 Body::Status {
                     tone: Tone::Neutral,
@@ -1067,7 +1101,15 @@ fn execution(app: &App, id: &str) -> Screen {
                     body: "Workers record output as observations.".into(),
                 }
             } else {
-                Body::Text(lines)
+                Body::Log {
+                    key: format!("output:{id}"),
+                    header: vec![],
+                    lines,
+                    follow: matches!(
+                        str_of(exec, "state"),
+                        "RUNNING" | "STARTING" | "ADMITTED" | "PENDING"
+                    ),
+                }
             }
         }
         Some("Observations") => table_body(
@@ -1095,7 +1137,7 @@ fn execution(app: &App, id: &str) -> Screen {
             &[("kind", "Event"), ("timestamp", "Time")],
             "No events.",
         ),
-        Some("Raw") => Body::Text(raw_lines(app, value)),
+        Some("Raw") => raw_body(app, format!("raw:execution:{id}"), value),
         _ => Body::Text(summary.clone()),
     };
     let mut screen = Screen::new(body);
@@ -1122,12 +1164,29 @@ fn execution(app: &App, id: &str) -> Screen {
             Target::Open(Route::ChangePack(pack.to_owned())),
         ));
     }
-    screen.hints = vec![
-        ("tab", "tabs"),
-        ("f", "follow"),
-        ("a", "actions"),
-        ("esc", "back"),
-    ];
+    if let Some(task) = value["task"]["id"].as_str() {
+        screen.actions.push(item(
+            "Open task",
+            task,
+            Target::Open(Route::Task(task.to_owned())),
+        ));
+    }
+    screen.hints = match app.tab_name() {
+        Some("Output") => vec![
+            ("f", "follow"),
+            ("/", "search"),
+            ("n/N", "matches"),
+            ("w", "wrap"),
+            ("t", "timestamps"),
+            ("y", "copy"),
+        ],
+        _ => vec![
+            ("tab", "tabs"),
+            ("f", "follow"),
+            ("a", "actions"),
+            ("esc", "back"),
+        ],
+    };
     screen
 }
 
@@ -1448,7 +1507,100 @@ fn packs(app: &App) -> Screen {
     screen
 }
 
+/// Pack inspector tabs (§30.2).
+pub const PACK_INSPECTOR_TABS: [&str; 4] = ["Summary", "Relations", "Eligibility", "Raw"];
+
 fn pack_inspector(app: &App, pack: &Value) -> Vec<Line<'static>> {
+    let tab = app.inspector_tab % PACK_INSPECTOR_TABS.len();
+    let mut lines = vec![Line::from(
+        PACK_INSPECTOR_TABS
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                Span::styled(
+                    format!(" {name} "),
+                    if i == tab {
+                        app.theme.selected(false)
+                    } else {
+                        app.theme.muted()
+                    },
+                )
+            })
+            .chain([Span::styled(" [ ]", app.theme.muted())])
+            .collect::<Vec<_>>(),
+    )];
+    lines.extend(match PACK_INSPECTOR_TABS[tab] {
+        "Relations" => pack_relations(app, pack),
+        "Eligibility" => pack_eligibility(app, pack),
+        "Raw" => raw_lines(app, &pack["raw"]).into_iter().take(60).collect(),
+        _ => pack_summary_inspector(app, pack),
+    });
+    lines
+}
+
+fn pack_relations(app: &App, pack: &Value) -> Vec<Line<'static>> {
+    let mut lines = vec![heading(app, "Intent")];
+    lines.push(match pack["intent"].as_object() {
+        Some(intent) => text_line(
+            app,
+            intent.get("title").and_then(Value::as_str).unwrap_or(""),
+        ),
+        None => muted_line(app, "none"),
+    });
+    lines.push(blank());
+    lines.push(heading(app, "Dependencies"));
+    let deps = pack["dependencies"].as_array().cloned().unwrap_or_default();
+    if deps.is_empty() {
+        lines.push(muted_line(app, "none recorded"));
+    }
+    for dep in deps {
+        lines.push(muted_line(
+            app,
+            format!(
+                "  {} {} {}",
+                str_of(&dep, "from"),
+                app.symbols.arrow(),
+                str_of(&dep, "to")
+            ),
+        ));
+    }
+    if pack["revision"].is_object() {
+        lines.push(blank());
+        lines.push(heading(app, "Revision"));
+        lines.push(muted_line(
+            app,
+            format!("  {}", scalar(&pack["revision"]["relation"])),
+        ));
+    }
+    lines
+}
+
+fn pack_eligibility(app: &App, pack: &Value) -> Vec<Line<'static>> {
+    let explain = &pack["explain"];
+    let mut lines = vec![heading(app, "Satisfied")];
+    for entry in explain["satisfied"].as_array().into_iter().flatten() {
+        lines.push(toned(app, Tone::Success, str_of(entry, "condition")));
+    }
+    lines.push(blank());
+    lines.push(heading(app, "Missing"));
+    let missing = explain["missing"].as_array().cloned().unwrap_or_default();
+    if missing.is_empty() {
+        lines.push(muted_line(app, "nothing"));
+    }
+    for entry in missing {
+        lines.push(toned(app, Tone::Danger, str_of(&entry, "condition")));
+    }
+    for entry in pack["unavailable_actions"].as_array().into_iter().flatten() {
+        lines.push(toned(
+            app,
+            Tone::Warning,
+            format!("{}: {}", str_of(entry, "label"), str_of(entry, "reason")),
+        ));
+    }
+    lines
+}
+
+fn pack_summary_inspector(app: &App, pack: &Value) -> Vec<Line<'static>> {
     let summary = &pack["summary"];
     let mut lines = vec![
         heading(
@@ -1458,11 +1610,23 @@ fn pack_inspector(app: &App, pack: &Value) -> Vec<Line<'static>> {
         text_line(app, str_of(pack, "title")),
         blank(),
         field_state(app, "State", str_of(pack, "state")),
+        // Risk is the latest evaluator verdict; none is said, never guessed (§35).
+        match pack["evaluations"].as_array().and_then(|e| e.last()) {
+            Some(latest) => field_state(app, "Risk", str_of(latest, "verdict")),
+            None => field(app, "Risk", "not evaluated"),
+        },
         field(app, "Generation", pack["generation"].to_string()),
         field(
             app,
             "Created",
-            format!("{} ago", age(app, &pack["created_at"])),
+            match pack["created_by"].as_str() {
+                Some(by) => format!(
+                    "{} by {}",
+                    exact(app, &pack["created_at"]),
+                    text::short_id(by, 18, app.symbols.ellipsis())
+                ),
+                None => exact(app, &pack["created_at"]),
+            },
         ),
         Line::from(vec![
             Span::styled(format!("{:<12}", "Changed"), app.theme.muted()),
@@ -1680,7 +1844,7 @@ fn pack(app: &App, id: &str) -> Screen {
             &[("kind", "Event"), ("actor", "Actor"), ("at", "When")],
             "No events.",
         ),
-        "Raw" => Body::Text(raw_lines(app, &value["raw"])),
+        "Raw" => raw_body(app, format!("raw:pack:{id}"), &value["raw"]),
         _ => Body::Text(pack_summary(app, value)),
     };
     let mut screen = Screen::new(body);
@@ -2437,6 +2601,17 @@ fn baseline_actions(id: &str) -> Vec<PaletteItem> {
             "baseline graph closure",
             run("Baseline closure", &["baseline", "graph", id], false),
         ),
+        item(
+            "Compare with…",
+            "baseline compare (only in each, shared)",
+            Target::Prompt {
+                args: vec!["baseline".into(), "compare".into(), id.into()],
+                suffix: vec![],
+                field: "Other Baseline (id or alias)".into(),
+                confirm: false,
+                label: "Compare Baselines".into(),
+            },
+        ),
     ]
 }
 
@@ -2542,7 +2717,7 @@ fn baseline(app: &App, id: &str) -> Screen {
                 })
                 .collect(),
         ),
-        "Raw" => Body::Text(raw_lines(app, &value["raw"])),
+        "Raw" => raw_body(app, format!("raw:baseline:{id}"), &value["raw"]),
         _ => {
             let digest_index = |digest: &Value| members.iter().position(|m| m["digest"] == *digest);
             let nodes = members
@@ -2604,6 +2779,54 @@ fn baseline(app: &App, id: &str) -> Screen {
             "Head",
             if member["head"] == true { "yes" } else { "no" },
         ));
+        let titled = |digest: &Value| {
+            members
+                .iter()
+                .find(|m| m["digest"] == *digest)
+                .and_then(|m| m["title"].as_str())
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    text::middle(digest.as_str().unwrap_or(""), 18, app.symbols.ellipsis())
+                })
+        };
+        let edges = value["edges"].as_array().cloned().unwrap_or_default();
+        // A member's parents are what it requires; its dependents require it (§40).
+        let parents: Vec<String> = edges
+            .iter()
+            .filter(|e| e["from"] == selected.as_str())
+            .map(|e| titled(&e["to"]))
+            .collect();
+        let dependents: Vec<String> = edges
+            .iter()
+            .filter(|e| e["to"] == selected.as_str())
+            .map(|e| titled(&e["from"]))
+            .collect();
+        let used_by: Vec<String> = member["used_by"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(scalar)
+            .collect();
+        for (title, list) in [
+            ("Used by", used_by),
+            ("Parents", parents),
+            ("Dependents", dependents),
+        ] {
+            screen.inspector.push(blank());
+            screen.inspector.push(heading(app, title));
+            if list.is_empty() {
+                screen.inspector.push(muted_line(app, "  none"));
+            }
+            for entry in list {
+                screen.inspector.push(muted_line(app, format!("  {entry}")));
+            }
+        }
+        screen.inspector.push(blank());
+        screen.inspector.push(heading(app, "Intent"));
+        screen.inspector.push(muted_line(
+            app,
+            format!("  {}", member["intent"].as_str().unwrap_or("none")),
+        ));
         let name = |digest: &str| {
             members
                 .iter()
@@ -2631,18 +2854,74 @@ fn baseline(app: &App, id: &str) -> Screen {
 }
 
 fn baseline_list_fallback(app: &App, id: &str, value: &Value) -> Screen {
-    let mut screen = Screen::new(table_body(
-        app,
-        format!("baseline-graph:{id}"),
-        &value["members"],
-        &[
-            ("title", "Pack"),
-            ("state", "State"),
-            ("head", "Head"),
-            ("digest", "Digest"),
-        ],
-        "This Baseline has no members.",
-    ));
+    let members = value["members"].as_array().cloned().unwrap_or_default();
+    let edges = value["edges"].as_array().cloned().unwrap_or_default();
+    let index = |d: &Value| members.iter().position(|m| m["digest"] == *d);
+    let pairs: Vec<(usize, usize)> = edges
+        .iter()
+        .filter_map(|e| Some((index(&e["to"])?, index(&e["from"])?)))
+        .collect();
+    // Order: a member comes after everything it requires (layered order, §40.1).
+    let order = crate::graph::traversal(&crate::graph::layout(members.len(), &pairs));
+    let name = |d: &Value| {
+        members
+            .iter()
+            .find(|m| m["digest"] == *d)
+            .and_then(|m| m["title"].as_str())
+            .unwrap_or("—")
+            .to_owned()
+    };
+    let rows = order
+        .iter()
+        .enumerate()
+        .map(|(position, &i)| {
+            let m = &members[i];
+            let parents: Vec<String> = edges
+                .iter()
+                .filter(|e| e["from"] == m["digest"])
+                .map(|e| name(&e["to"]))
+                .collect();
+            Row {
+                id: str_of(m, "digest").to_owned(),
+                cells: vec![
+                    plain(app, m["title"].as_str().unwrap_or("(not in this Project)")),
+                    muted(
+                        app,
+                        if parents.is_empty() {
+                            "—".to_owned()
+                        } else {
+                            parents.join(", ")
+                        },
+                    ),
+                    state_cell(app, m["state"].as_str().unwrap_or("UNKNOWN")),
+                    muted(app, (position + 1).to_string()),
+                ],
+                copy: None,
+                tab: None,
+                open: m["pack"].as_str().map(|p| Route::ChangePack(p.to_owned())),
+                search: search(&[
+                    ("text", m["title"].as_str().unwrap_or("")),
+                    ("state", m["state"].as_str().unwrap_or("")),
+                ]),
+            }
+        })
+        .collect();
+    let mut screen = Screen::new(Body::Table(Table {
+        key: format!("baseline-graph:{id}"),
+        sections: vec![Section {
+            title: None,
+            columns: vec![
+                fill("Pack", 18, 1),
+                col("Parents", 18, 2),
+                col("State", 14, 1),
+                col("Order", 6, 3),
+            ],
+            rows,
+        }],
+        empty: ("This Baseline has no members.".into(), String::new()),
+        chips: vec![],
+        total: None,
+    }));
     screen.inspector = baseline_inspector(app, value);
     screen.actions = baseline_actions(id);
     screen
@@ -3471,6 +3750,49 @@ fn extensions(app: &App) -> Screen {
         }
     }
     screen
+}
+
+/// Raw view (§24): exact field names, searchable with `/`, `y` copies it; the revision is
+/// stated and a cut is announced, never silent.
+pub fn raw_body(app: &App, key: String, value: &Value) -> Body {
+    const MAX: usize = 5000;
+    let text = serde_json::to_string_pretty(value).unwrap_or_default();
+    let total = text.lines().count();
+    let lines = text
+        .lines()
+        .take(MAX)
+        .map(|raw| LogLine {
+            at: None,
+            tone: None,
+            text: sanitize_raw(raw),
+        })
+        .collect();
+    let revision = ["generation", "revision", "digest"]
+        .iter()
+        .find_map(|field| {
+            value
+                .get(*field)
+                .filter(|v| !v.is_null() && !v.is_object())
+                .map(|v| format!("{field} {}", scalar(v)))
+        })
+        .unwrap_or_else(|| "no revision field".into());
+    let mut header = vec![muted_line(
+        app,
+        format!("Raw · {revision} · {total} lines · / search  y copy"),
+    )];
+    if total > MAX {
+        header.push(toned(
+            app,
+            Tone::Warning,
+            format!("Truncated: showing {MAX} of {total} lines; the CLI's --json has all of it."),
+        ));
+    }
+    Body::Log {
+        key,
+        header,
+        lines,
+        follow: false,
+    }
 }
 
 /// JSON with key/value coloring; the escape hatch, never the primary view (§24).

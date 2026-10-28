@@ -1,33 +1,33 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││cpk_…a7b5ylj3hs7ztd5yoxq                   │
-│  Overview        5 ││                                                                                           ││Add remote conformance runner              │
-│  Work              ││cpk_…b5ylj3hs7ztd5yoxq · Add remote conformance runner   ◆ SEALED                          ││                                           │
-│  Change Graph      ││                                                                                           ││State       ◆ SEALED                       │
-│› ChangePacks       ││Intent                                                                                     ││Generation  2                              │
-│  Baselines         ││  HTTP conformance                                                                         ││Created     1m ago                         │
-│  Evidence          ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Changed     2 files  +7 -2                 │
-│  Events            ││                                                                                           ││Checks      1/1                            │
-│                    ││Changes                                                                                    ││Evidence    0                              │
-│ SYSTEM             ││  2 files   +7 -2    ┌ Why is cpk_…j3hs7ztd5yoxq SEALED? ───────────────────────────────────┐Review      ◆ WAITING                      │
-│  Projects          ││                     │State: SEALED                                                         │                                           │
-│  Inbox           2 ││Verification         │                                                                      │Intent                                     │
-│  Doctor            ││  ✓ Verify           │Satisfied                                                             │HTTP conformance                           │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqyi5zum57xdbljgdhjmmfudm ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
+│  Overview        5 ││                                                                                           ││cpk_…um57xdbljgdhjmmfudm                   │
+│  Work              ││cpk_…57xdbljgdhjmmfudm · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
+│  Change Graph      ││                                                                                           ││                                           │
+│› ChangePacks       ││Intent                                                                                     ││State       ◆ SEALED                       │
+│  Baselines         ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
+│  Evidence          ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
+│  Events            ││                                                                                           ││Created     1m ago · 2026-10-28 21:42:47   │
+│                    ││Changes                                                                                    ││UTC by pri_…dtjmva33cz5tu                  │
+│ SYSTEM             ││  2 files   +7 -2    ┌ Why is cpk_…bljgdhjmmfudm SEALED? ───────────────────────────────────┐Changed     2 files  +7 -2                 │
+│  Projects          ││                     │State: SEALED                                                         │Checks      1/1                            │
+│  Inbox           2 ││Verification         │                                                                      │Evidence    0                              │
+│  Doctor            ││  ✓ Verify           │Satisfied                                                             │Review      ◆ WAITING                      │
 │  Extensions        ││                     │  ✓ sealed candidate                                                  │                                           │
-│                    ││Risk                 │  ✓ org.calve.software.snapshot.verify is PASS                        │! Promote: missing: approved review        │
-│                    ││✓ Change size  ALLOW │(org.calve.software.snapshot-required)                                │x explain                                  │
+│                    ││Risk                 │  ✓ org.calve.software.snapshot.verify is PASS                        │Intent                                     │
+│                    ││✓ Change size  ALLOW │(org.calve.software.snapshot-required)                                │HTTP conformance                           │
 │                    ││                     │                                                                      │                                           │
-│                    ││                     │Missing                                                               │Actions                                    │
-│                    ││                     │  × approved review — no approval for the current candidate           │  Run snapshot verification                │
-│                    ││                     │                                                                      │  Run language checks                      │
-│                    ││                     └──────────────────────────────────────────────────────────────────────┘  Evaluate change size                     │
+│                    ││                     │Missing                                                               │! Promote: missing: approved review        │
+│                    ││                     │  × approved review — no approval for the current candidate           │x explain                                  │
+│                    ││                     │                                                                      │                                           │
+│                    ││                     └──────────────────────────────────────────────────────────────────────┘Actions                                    │
+│                    ││                                                                                           ││  Run snapshot verification                │
+│                    ││                                                                                           ││  Run language checks                      │
+│                    ││                                                                                           ││  Evaluate change size                     │
 │                    ││                                                                                           ││  Approve                                  │
 │                    ││                                                                                           ││  Reject                                   │
 │                    ││                                                                                           ││  Refresh qualification                    │
 │                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

@@ -1,22 +1,22 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4r654gziqv4ktjashkqa   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyis4r654gziqv4ktjashkqa ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││cpk_…r654gziqv4ktjashkqa                   │
-│  Overview        5 ││                                                                                           ││Lint sweep                                 │
-│  Work              ││cpk_…54gziqv4ktjashkqa · Lint sweep   ○ OPEN                                               ││                                           │
-│  Change Graph      ││                                                                                           ││State       ○ OPEN                         │
-│› ChangePacks     6 ││Changes                                                                                    ││Generation  2                              │
-│  Baselines         ││  0 files   +0 -0                                                                          ││Created     1m ago                         │
-│  Evidence          ││                                                                                           ││Changed     0 files  +0 -0                 │
-│  Events            ││                                                                                           ││Evidence    0                              │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyi52fdf32jck4awj4m3zu7q   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqyi52fdf32jck4awj4m3zu7q ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
+│  Overview        5 ││                                                                                           ││cpk_…fdf32jck4awj4m3zu7q                   │
+│  Work              ││cpk_…f32jck4awj4m3zu7q · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
+│  Change Graph      ││                                                                                           ││                                           │
+│› ChangePacks     6 ││Changes                                                                                    ││State       ! QUARANTINED                  │
+│  Baselines         ││  0 files   +0 -0                                                                          ││Risk        not evaluated                  │
+│  Evidence          ││                                                                                           ││Generation  1                              │
+│  Events            ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-28 21:42:51   │
+│                    ││                                                                                           ││UTC by pri_…dtjmva33cz5tu                  │
+│ SYSTEM             ││                                                                                           ││Changed     0 files  +0 -0                 │
+│  Projects          ││                                                                                           ││Evidence    0                              │
+│  Inbox           2 ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││! Promote: pack is quarantined             │
+│  Extensions        ││                                                                                           ││x explain                                  │
 │                    ││                                                                                           ││                                           │
-│ SYSTEM             ││                                                                                           ││! Promote: pack is OPEN; seal and qualify  │
-│  Projects          ││                                                                                           ││it first                                   │
-│  Inbox           2 ││                                                                                           ││x explain                                  │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││                                                                                           ││Actions                                    │
-│                    ││                                                                                           ││  Seal candidate                           │
-│                    ││                                                                                           ││  Abandon                                  │
-│                    ││                                                                                           ││  Quarantine                               │
+│                    ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Release quarantine                       │
 │                    ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

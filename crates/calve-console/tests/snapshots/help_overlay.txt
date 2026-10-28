@@ -1,35 +1,35 @@
- Calve  project: openaev┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y shortcuts ─────────────────┐y
+ Calve  project: openaev┌ ChangePack cpk_agqyi52bez3vdapulahnhyhuxy shortcuts ─────────────────┐y
 ┌ Navigation ────────┐┌ │NAVIGATION                                                            │ector ─────────────────┐
-│ PROJECT            ││ │  j / ↓       next                                                    │ntr7snpiayi56xooe5y    │
-│  Overview        5 ││ │  k / ↑       previous                                                │tor verification rules │
-│  Work              ││c│  gg / G      first / last                                            │                       │
-│  Change Graph      ││ │  h l         outward / inward                                        │       ○ OPEN          │
-│› ChangePacks       ││C│  enter       open                                                    │ation  2               │
-│  Baselines         ││ │  esc         back / close                                            │ed     1m ago          │
-│  Evidence          ││ │  tab         next pane or tab                                        │ed     1 files  +1 -0  │
-│  Events            ││ │  g           go to                                                   │nce    0               │
-│                    ││ │  alt+← →     history                                                 │                       │
-│ SYSTEM             ││ │                                                                      │mote: pack is OPEN;    │
-│  Projects          ││ │THIS SCREEN                                                           │and qualify it first   │
-│  Inbox           2 ││ │  tab         tabs                                                    │lain                   │
-│  Doctor            ││ │  a           actions                                                 │                       │
-│  Extensions        ││ │  x           explain                                                 │ns                     │
-│                    ││ │  esc         back                                                    │l candidate            │
-│                    ││ │  a           contextual actions                                      │ndon                   │
-│                    ││ │  x           explain state                                           │rantine                │
-│                    ││ │  e           evidence                                                │ll actions             │
-│                    ││ │  A           abandon                                                 │                       │
-│                    ││ │  Q           quarantine                                              │                       │
-│                    ││ │                                                                      │                       │
-│                    ││ │GLOBAL                                                                │                       │
-│                    ││ │  ctrl+p      commands and objects                                    │                       │
+│ PROJECT            ││ │  j / ↓       next                                                    │ary  Relations         │
+│  Overview        5 ││ │  k / ↑       previous                                                │bility  Raw  [ ]       │
+│  Work              ││c│  gg / G      first / last                                            │bez3vdapulahnhyhuxy    │
+│  Change Graph      ││ │  h l         outward / inward                                        │tor verification rules │
+│› ChangePacks       ││C│  enter       open                                                    │                       │
+│  Baselines         ││ │  esc         back / close                                            │       ○ OPEN          │
+│  Evidence          ││ │  tab         next pane or tab                                        │       not evaluated   │
+│  Events            ││ │  g           go to                                                   │ation  2               │
+│                    ││ │  alt+← →     history                                                 │ed     1m ago ·        │
+│ SYSTEM             ││ │                                                                      │10-28 21:42:50 UTC by  │
+│  Projects          ││ │THIS SCREEN                                                           │dtjmva33cz5tu          │
+│  Inbox           2 ││ │  tab         tabs                                                    │ed     1 files  +1 -0  │
+│  Doctor            ││ │  a           actions                                                 │nce    0               │
+│  Extensions        ││ │  x           explain                                                 │                       │
+│                    ││ │  esc         back                                                    │mote: pack is OPEN;    │
+│                    ││ │  a           contextual actions                                      │and qualify it first   │
+│                    ││ │  x           explain state                                           │lain                   │
+│                    ││ │  e           evidence                                                │                       │
+│                    ││ │  A           abandon                                                 │ns                     │
+│                    ││ │  Q           quarantine                                              │l candidate            │
+│                    ││ │                                                                      │ndon                   │
+│                    ││ │GLOBAL                                                                │rantine                │
+│                    ││ │  ctrl+p      commands and objects                                    │ll actions             │
 │                    ││ │  /           filter (field:value, updated:<1h)                       │                       │
 │                    ││ │  :           command mode                                            │                       │
 │                    ││ │  z           fullscreen    ┌────────────────────────────────────────────────────────────────┐│
-│                    ││ │  r           refresh (also │ ● :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2… ││
+│                    ││ │  r           refresh (also │ ● :pack abandon cpk_agqyi52bez3vdapulahnhyhuxy --generation 2… ││
 │                    ││ │  y           copy reference└────────────────────────────────────────────────────────────────┘│
 │                    ││ │  ctrl+l      activity       ┌───────────────────────────────────────────────────────────────┐│
-│                    ││ │  ctrl+b      hide side pane │ ✓ :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2 ││
+│                    ││ │  ctrl+b      hide side pane │ ✓ :pack abandon cpk_agqyi52bez3vdapulahnhyhuxy --generation 2 ││
 │                    ││ └─────────────────────────────└───────────────────────────────────────────────────────────────┘│
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

@@ -1215,3 +1215,155 @@ fn direct_keys_quit_and_panes() {
     h.key(KeyCode::Char('q'));
     assert!(h.app.quit);
 }
+
+/// §28, §24: output follows, searches, wraps, shows timestamps and copies; raw states its
+/// revision, searches and copies the document.
+#[test]
+fn output_viewer_and_raw_view() {
+    let mut h = Harness::new(160, 45);
+    let execution = h
+        .data
+        .keys()
+        .find(|k| k.starts_with("execution:"))
+        .unwrap()
+        .trim_start_matches("execution:")
+        .to_owned();
+    h.app.navigate(Route::Execution(execution.clone()));
+    h.pump();
+    h.keys("2");
+    h.key(KeyCode::Char('t'));
+    let screen = h.render();
+    assert!(screen.contains("Z checking"), "timestamps on:\n{screen}");
+    h.key(KeyCode::Char('/'))
+        .keys("problems")
+        .key(KeyCode::Enter);
+    assert!(h.render().contains("/problems: 1 matches"));
+    h.key(KeyCode::Char('w'));
+    assert!(h.app.wrap_logs);
+    h.key(KeyCode::Char('y'));
+    assert_eq!(
+        h.app.clipboard.take().as_deref(),
+        Some("checking\nlint: 2 problems")
+    );
+    let screen = h.render();
+    assert!(screen.contains("Duration") && screen.contains("Started") && screen.contains("Result"));
+    // Raw: revision line, search and copy of the exact document.
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner.clone()));
+    h.pump();
+    h.keys("9");
+    let screen = h.render();
+    assert!(screen.contains("Raw · generation 2"), "{screen}");
+    h.key(KeyCode::Char('/')).keys("sealed").key(KeyCode::Enter);
+    assert!(h.render().contains("/sealed:"));
+    h.key(KeyCode::Char('y'));
+    let copied = h.app.clipboard.take().unwrap();
+    let parsed: Value = serde_json::from_str(&copied).unwrap();
+    assert_eq!(parsed["id"], runner.as_str());
+}
+
+/// §30.2, §37/§59, §21/§60, §83–84: inspector tabs and risk; the review form's context and
+/// Ctrl+Enter; confirmations that state the consequence and the backend preflight; a started
+/// execution offers to open it.
+#[test]
+fn inspector_tabs_review_confirm_and_execution_link() {
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner.clone()));
+    h.pump();
+    let screen = h.render();
+    assert!(
+        screen.contains("Risk") && screen.contains("Summary  Relations"),
+        "{screen}"
+    );
+    h.key(KeyCode::Char(']')).key(KeyCode::Char(']'));
+    assert!(h.render().contains("Satisfied"), "Eligibility tab");
+    h.key(KeyCode::Char('['));
+    assert!(h.render().contains("Dependencies"), "Relations tab");
+    // Review: the candidate's evidence is shown; Ctrl+Enter submits.
+    h.key(KeyCode::Char('r'));
+    assert!(h.render().contains("Required reviewers"));
+    h.key(KeyCode::Tab).keys("looks good");
+    let before = h.commands.len();
+    h.key_with(KeyCode::Enter, KeyModifiers::CONTROL);
+    assert_eq!(h.commands.len(), before + 1, "{:?}", h.commands);
+    // Abandon states what it does; promote also shows the backend preflight.
+    h.key(KeyCode::Char('A'));
+    let screen = h.render();
+    assert!(
+        screen.contains("Closes the pack without promoting it"),
+        "{screen}"
+    );
+    h.key(KeyCode::Esc);
+    let generation = h.data[&format!("pack:{runner}")]["generation"].to_string();
+    let args: Vec<String> = ["pack", "promote", &runner, "--generation", &generation]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    h.data.insert(
+        format!("preflight:{}", args.join(" ")),
+        json!({"blockers":[{"code":"OPENAEVC_OPERATION_REJECTED","message":"the pack is SEALED, not QUALIFIED; run `pack qualify`"}],"ready":false}),
+    );
+    h.key(KeyCode::Char(':'))
+        .keys(&args.join(" "))
+        .key(KeyCode::Enter);
+    let screen = h.render();
+    assert!(
+        screen.contains("Creates an immutable promoted ChangePack"),
+        "{screen}"
+    );
+    assert!(
+        screen.contains("not QUALIFIED"),
+        "backend preflight shown:\n{screen}"
+    );
+    h.key(KeyCode::Esc);
+    // A command that started an execution links to it.
+    calve_console::input::on_response(
+        &mut h.app,
+        "cmd:77:0:Run language checks",
+        Ok(json!({"execution":"exe_bbbbbbbbbbbbbbbbbbbbbbbbbb"})),
+    );
+    assert!(h.render().contains("Open execution"));
+    h.key(KeyCode::Enter);
+    assert_eq!(
+        h.app.route,
+        Route::Execution("exe_bbbbbbbbbbbbbbbbbbbbbbbbbb".into())
+    );
+}
+
+/// §40: a member's Used by / Parents / Dependents / Intent, the list fallback's Parents and
+/// Order, and Baseline comparison as Only-in / Shared.
+#[test]
+fn baseline_inspector_list_and_compare() {
+    let mut h = Harness::new(160, 45);
+    let id = h.data["baselines"][0]["id"].as_str().unwrap().to_owned();
+    h.app.navigate(Route::Baseline(id.clone()));
+    h.pump();
+    let screen = h.render();
+    for heading in ["Used by", "Parents", "Dependents", "Intent"] {
+        assert!(screen.contains(heading), "{heading}:\n{screen}");
+    }
+    h.key(KeyCode::Char('v'));
+    let screen = h.render();
+    assert!(
+        screen.contains("Parents") && screen.contains("Order"),
+        "{screen}"
+    );
+    h.key(KeyCode::Char('v'));
+    let member = h.data[&format!("baseline:{id}")]["members"][0]["digest"].clone();
+    calve_console::input::on_response(
+        &mut h.app,
+        "cmd:78:0:Compare Baselines",
+        Ok(
+            json!({"left":id,"right":"bsl_other","only_left_members":[member],
+            "only_right_members":[],"shared_members":[],"shared_edges":[],
+            "only_left_edges":[],"only_right_edges":[]}),
+        ),
+    );
+    let screen = h.render();
+    assert!(
+        screen.contains("Only in") && screen.contains("Update protocol schemas"),
+        "{screen}"
+    );
+    assert!(screen.contains("Shared      0 ChangePacks"), "{screen}");
+}

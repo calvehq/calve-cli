@@ -1,12 +1,12 @@
  Calve  project: openaevc  workspace: main  Overview   ● healthy        v0.1.0  ^P Commands  ? Help
 ┌ Overview ──────────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
 │Needs attention ────────────────────────────────────────────││openaevc                            │
-│    Subject                                                 ││prj_01a1844b-73fe-743f-a1c8-6ecf760e│
-│×   exe_…2wi6nclki   Execution FAILED                1m     ││529e                                │
-│!   tsk_…3dcf1367f   Daemon hardening is blocked     1m     ││                                    │
-│◆   cpk_…4sw3z77ba   Fix daemon race condition awai… 1m     ││ChangePacks 6                       │
-│◆   cpk_…7ztd5yoxq   Add remote conformance runner … 1m     ││Intents     2                       │
-│!   cpk_…6ociavur4   Pack is quarantined             1m     ││Baselines   1                       │
+│    Subject                                                 ││prj_01a18476-eb57-769d-8864-970b09c9│
+│×   exe_…7flr6veqe   Execution FAILED                1m     ││14ad                                │
+│!   tsk_…3f92defed   Daemon hardening is blocked     1m     ││                                    │
+│◆   cpk_…fwyx6w5aa   Fix daemon race condition awai… 1m     ││ChangePacks 6                       │
+│◆   cpk_…dhjmmfudm   Add remote conformance runner … 1m     ││Intents     2                       │
+│!   cpk_…wj4m3zu7q   Pack is quarantined             1m     ││Baselines   1                       │
 │                                                            ││Attention   5                       │
 │Active work ────────────────────────────────────────────────││                                    │
 │Intent                         Tasks   Packs  State         ││                                    │
@@ -15,16 +15,16 @@
 │                                                            ││                                    │
 │Recent activity ────────────────────────────────────────────││                                    │
 │Time      Actor          Event                              ││                                    │
-│20:55:13Z pri_…ps7jbym7u execution.finished                 ││                                    │
-│20:55:13Z pri_…ps7jbym7u execution.failed                   ││                                    │
-│20:55:07Z pri_…ps7jbym7u object.imported                    ││                                    │
-│20:55:07Z pri_…ps7jbym7u pack.created                       ││                                    │
-│20:55:07Z pri_…ps7jbym7u changepack.created                 ││                                    │
-│20:55:07Z pri_…ps7jbym7u changepack.quarantined             ││                                    │
-│20:55:07Z pri_…ps7jbym7u pack.created                       ││                                    │
-│20:55:07Z pri_…ps7jbym7u changepack.created                 ││                                    │
-│20:55:07Z pri_…ps7jbym7u file.captured                      ││                                    │
-│20:55:07Z pri_…ps7jbym7u execution.succeeded                ││                                    │
-│20:55:07Z pri_…ps7jbym7u effect.applied                 1/19││                                    │
+│21:42:57Z pri_…va33cz5tu execution.finished                 ││                                    │
+│21:42:57Z pri_…va33cz5tu execution.failed                   ││                                    │
+│21:42:51Z pri_…va33cz5tu object.imported                    ││                                    │
+│21:42:51Z pri_…va33cz5tu pack.created                       ││                                    │
+│21:42:51Z pri_…va33cz5tu changepack.created                 ││                                    │
+│21:42:51Z pri_…va33cz5tu changepack.quarantined             ││                                    │
+│21:42:51Z pri_…va33cz5tu pack.created                       ││                                    │
+│21:42:51Z pri_…va33cz5tu changepack.created                 ││                                    │
+│21:42:51Z pri_…va33cz5tu file.captured                      ││                                    │
+│21:42:51Z pri_…va33cz5tu execution.succeeded                ││                                    │
+│21:42:51Z pri_…va33cz5tu effect.applied                 1/19││                                    │
 └────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

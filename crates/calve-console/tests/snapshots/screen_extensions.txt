@@ -3,7 +3,7 @@
 │ PROJECT            ││Enabled in this Project ───────────────────────────────────────────────────────────────────││org.calve.rust                             │
 │  Overview        5 ││Extension                                        Version   Status       Granted            ││                                           │
 │  Work              ││org.calve.rust                                   0.1.0     ✓ ACTIVE                        ││Version     0.1.0                          │
-│  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Manifest    sha256:bce13d…2b3a4b9ff28c     │
+│  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Manifest    sha256:6ce666…9d2b4cad60b0     │
 │  ChangePacks       ││                                                                                           ││Granted                                    │
 │  Baselines         ││Available ─────────────────────────────────────────────────────────────────────────────────││Active      yes                            │
 │  Evidence          ││Extension                                        Version   Source       Summary            ││                                           │
