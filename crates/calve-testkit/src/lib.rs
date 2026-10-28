@@ -34,31 +34,35 @@ pub struct Env {
     pub vars: Vec<(String, std::ffi::OsString)>,
 }
 
-/// Installed packages are read-only by design (immutable digest paths), so the temp dir could
-/// not remove them and every test leaked its fixture build; make the tree writable first.
-impl Drop for Env {
-    fn drop(&mut self) {
-        let mut stack = vec![self.temp.path().to_path_buf()];
-        while let Some(dir) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&dir) else {
+/// Makes every entry under `root` writable so a temp dir holding installed packages (read-only
+/// by design, at immutable digest paths) can be removed; otherwise each test leaks them.
+pub fn make_writable(root: &Path) {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for path in entries.flatten().map(|e| e.path()) {
+            let Ok(md) = std::fs::symlink_metadata(&path) else {
                 continue;
             };
-            for path in entries.flatten().map(|e| e.path()) {
-                let Ok(md) = std::fs::symlink_metadata(&path) else {
-                    continue;
-                };
-                if md.is_symlink() {
-                    continue;
-                }
-                let mut perm = md.permissions();
-                #[allow(clippy::permissions_set_readonly_false)]
-                perm.set_readonly(false);
-                let _ = std::fs::set_permissions(&path, perm);
-                if md.is_dir() {
-                    stack.push(path);
-                }
+            if md.is_symlink() {
+                continue;
+            }
+            let mut perm = md.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            perm.set_readonly(false);
+            let _ = std::fs::set_permissions(&path, perm);
+            if md.is_dir() {
+                stack.push(path);
             }
         }
+    }
+}
+
+impl Drop for Env {
+    fn drop(&mut self) {
+        make_writable(self.temp.path());
     }
 }
 

@@ -12,6 +12,12 @@ struct Machine {
     paths: Paths,
 }
 
+impl Drop for Machine {
+    fn drop(&mut self) {
+        calve_testkit::make_writable(self._t.path());
+    }
+}
+
 fn machine() -> Machine {
     let t = tempfile::tempdir().unwrap();
     let paths = Paths {
