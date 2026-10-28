@@ -95,6 +95,7 @@
         "type": "object",
         "properties": {
           "open": {
+            "description": "Exact counts.",
             "type": "integer",
             "format": "uint64",
             "minimum": 0
@@ -110,7 +111,7 @@
             "minimum": 0
           },
           "items": {
-            "description": "By lowercase state (`open`, `sealed`, `qualified`).",
+            "description": "By lowercase state (`open`, `sealed`, `qualified`): the most recently updated packs,\nat most `items_limit` per state (`pack list --after/--limit` pages through all of them).",
             "type": "object",
             "additionalProperties": {
               "type": "array",
@@ -118,6 +119,12 @@
                 "$ref": "#/$defs/StatusPack"
               }
             }
+          },
+          "items_limit": {
+            "description": "The per-state bound on `items`.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
           }
         },
         "additionalProperties": false,
@@ -125,7 +132,8 @@
           "open",
           "sealed",
           "qualified",
-          "items"
+          "items",
+          "items_limit"
         ]
       },
       "StatusPack": {
