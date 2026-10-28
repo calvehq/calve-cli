@@ -15,6 +15,7 @@ use calve_integration_contract::wire::{
 };
 use openaevc::crypto::sha256;
 use openaevc::protocol::{AppliedEffect, Digest, b64};
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 use crate::domains::{FileDomain, FileOp, cic_error, open_session};
@@ -323,22 +324,77 @@ impl Project {
         self.root.join(".calve/run")
     }
 
-    /// Accepted file state: promoted packs in creation order, stopping before `until`.
-    pub(crate) async fn accepted_state(&self, until: Option<&str>) -> Result<FileState> {
+    /// Accepted file state restricted to `paths` (the paths a diff reads), from the pack index:
+    /// for each path the last effect of a promoted pack created before `until` that writes it
+    /// or moves away from it decides, exactly as a full replay would; content is loaded only for
+    /// the effects that end up holding a path, never for every pack.
+    pub(crate) async fn accepted_state_for(
+        &self,
+        paths: &BTreeSet<String>,
+        until: Option<&str>,
+    ) -> Result<FileState> {
         let mut state = FileState::default();
         let Ok(d) = self.file_domain().await else {
             return Ok(state);
         };
-        for summary in self.list_packs().await? {
-            let id = summary["id"].as_str().unwrap_or_default();
-            if Some(id) == until {
-                break;
+        self.refresh_pack_index().await?;
+        // path → (pack, position) of the effect whose content it ends with.
+        let mut holders: BTreeMap<String, (String, i64)> = BTreeMap::new();
+        {
+            let mut q = self.db.prepare(
+                "SELECT f.pack, f.position, f.path, f.change, f.from_path FROM pack_files f
+                 JOIN pack_metadata m ON m.id=f.pack JOIN pack_summaries s ON s.id=f.pack
+                 WHERE s.state='PROMOTED' AND (f.path=?1 OR f.from_path=?1)
+                   AND (?2 IS NULL OR (m.created_at, m.id) <
+                        (SELECT created_at, id FROM pack_metadata WHERE id=?2))
+                   AND NOT EXISTS (SELECT 1 FROM pack_commitments c
+                                   WHERE c.pack_id=f.pack AND c.state='replacement_pending')
+                 ORDER BY m.created_at DESC, m.id DESC, f.position DESC LIMIT 1",
+            )?;
+            for p in paths {
+                let last = q
+                    .query_row(params![p, until], |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, i64>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                        ))
+                    })
+                    .optional()?;
+                match last {
+                    None => {}
+                    // A move away from `p`, or a delete of it.
+                    Some((_, _, to, change, _)) if to != *p || change == "delete" => {
+                        state.removed.insert(p.clone());
+                    }
+                    Some((pack, position, ..)) => {
+                        holders.insert(p.clone(), (pack, position));
+                    }
+                }
             }
-            if summary["state"] != "PROMOTED" {
-                continue;
-            }
-            for effect in &self.pack(id).await?.candidate_effects {
-                state.apply(&d, effect)?;
+        }
+        // Content of the holding effects, one pack read per distinct pack.
+        let mut by_pack: BTreeMap<String, Vec<(i64, String)>> = BTreeMap::new();
+        for (path, (pack, position)) in holders {
+            by_pack.entry(pack).or_default().push((position, path));
+        }
+        for (pack, wanted) in by_pack {
+            let pack = self.pack(&pack).await?;
+            // Positions count file effects only, as the pack index numbers them.
+            let file_effects: Vec<&AppliedEffect> = pack
+                .candidate_effects
+                .iter()
+                .filter(|e| d.is_file_effect(e) && change_label(&d, &e.kind).is_some())
+                .collect();
+            for (position, path) in wanted {
+                let effect = file_effects
+                    .get(usize::try_from(position).unwrap_or(usize::MAX))
+                    .ok_or_else(|| invalid("pack index is out of date with its pack"))?;
+                let content = effect_file_content(&d, effect)
+                    .ok_or_else(|| invalid(format!("snapshot of {path} fails its digest")))?;
+                state.files.insert(path, content);
             }
         }
         Ok(state)

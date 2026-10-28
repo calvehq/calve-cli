@@ -50,3 +50,44 @@ fn intents_and_packs_page_without_gaps_or_repeats() {
         assert!(missing.stderr.contains("NOT_FOUND"), "{}", missing.stderr);
     }
 }
+
+/// Filtered activity over OpenAEVC events goes through the event index (M6): it must return
+/// exactly the events a full scan would: only the named pack's, only the object kind, nothing
+/// outside the time bounds.
+#[test]
+fn indexed_activity_filters_match_their_definitions() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("p");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let a = env.ok(&["--project", p, "pack", "create", "A"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let b = env.ok(&["--project", p, "pack", "create", "B"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let rows = |extra: &[&str]| -> Vec<Value> {
+        let mut args = vec!["--project", p, "activity", "--source", "openaevc"];
+        args.extend_from_slice(extra);
+        env.ok(&args).as_array().unwrap().clone()
+    };
+    let for_a = rows(&["--pack", &a]);
+    assert!(!for_a.is_empty());
+    assert!(for_a.iter().any(|r| r["kind"] == "changepack.created"));
+    assert!(
+        for_a
+            .iter()
+            .all(|r| r.to_string().contains(&a) && !r["subjects"].to_string().contains(&b)),
+        "{for_a:?}"
+    );
+    let kinds = rows(&["--object-kind", "changepack"]);
+    assert!(kinds.len() >= 2);
+    assert!(
+        kinds
+            .iter()
+            .all(|r| r["kind"].as_str().unwrap().starts_with("changepack."))
+    );
+    assert!(rows(&["--since", "2999-01-01T00:00:00Z"]).is_empty());
+}

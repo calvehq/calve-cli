@@ -180,13 +180,25 @@ impl Project {
         let execution = self.execution(id).await?;
         let id = execution["id"].as_str().unwrap_or(id).to_owned();
         let mut events: Vec<Event> = Vec::new();
-        self.scan_protocol_events(0, |item| {
-            if value_contains_exact(&serde_json::to_value(&item)?, &id) {
-                events.push(item);
+        // The event index narrows the candidates; the predicate is unchanged.
+        match self.events_referencing(&id).await? {
+            Some(candidates) => {
+                for item in candidates {
+                    if value_contains_exact(&serde_json::to_value(&item)?, &id) {
+                        events.push(item);
+                    }
+                }
             }
-            Ok(())
-        })
-        .await?;
+            None => {
+                self.scan_protocol_events(0, |item| {
+                    if value_contains_exact(&serde_json::to_value(&item)?, &id) {
+                        events.push(item);
+                    }
+                    Ok(())
+                })
+                .await?;
+            }
+        }
         Ok(json!({"execution":id,"state":execution["state"],"events":events}))
     }
 
@@ -200,30 +212,44 @@ impl Project {
             return Err(invalid("resource path must be relative"));
         }
         let locator = path.to_string_lossy().replace('\\', "/");
-        let d = self.file_domain().await?;
+        self.file_domain().await?;
+        self.refresh_pack_index().await?;
+        // The last effect touching the path in each pack, oldest pack first (pack index).
+        let mut q = self.db.prepare(
+            "SELECT f.pack, m.title, s.state, s.generation, f.change, f.digest, f.size,
+                    f.from_path, f.path
+             FROM pack_files f
+             JOIN pack_metadata m ON m.id=f.pack JOIN pack_summaries s ON s.id=f.pack
+             WHERE f.position = (SELECT MAX(g.position) FROM pack_files g
+                                 WHERE g.pack=f.pack AND (g.path=?1 OR g.from_path=?1))
+               AND NOT EXISTS (SELECT 1 FROM pack_commitments c
+                               WHERE c.pack_id=f.pack AND c.state='replacement_pending')
+             ORDER BY m.created_at, m.id",
+        )?;
         let mut history = Vec::new();
-        for summary in self.list_packs().await? {
-            let Some(id) = summary["id"].as_str() else {
-                continue;
+        for row in q.query_map([&locator], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, u64>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, Option<String>>(5)?,
+                r.get::<_, Option<i64>>(6)?,
+                r.get::<_, Option<String>>(7)?,
+                r.get::<_, String>(8)?,
+            ))
+        })? {
+            let (pack, title, state, generation, change, digest, size, from, to) = row?;
+            let change = match change.as_str() {
+                "delete" => "deleted",
+                "rename" if to == locator => "renamed_here",
+                "rename" => "renamed_away",
+                _ => "snapshot",
             };
-            let pack = self.pack(id).await?;
-            let touches = |effect: &&openaevc::protocol::AppliedEffect| {
-                d.is_file_effect(effect)
-                    && (effect.target.locator == locator
-                        || effect.payload["from"] == locator.as_str())
-            };
-            if let Some(effect) = pack.candidate_effects.iter().rev().find(touches) {
-                use crate::domains::FileOp;
-                let change = match d.op(&effect.kind) {
-                    Some(FileOp::Delete) => "deleted",
-                    Some(FileOp::Move) if effect.target.locator == locator => "renamed_here",
-                    Some(FileOp::Move) => "renamed_away",
-                    _ => "snapshot",
-                };
-                history.push(json!({"pack":pack.id,"title":summary["title"],"state":pack.state,
-                    "generation":pack.generation,"change":change,"digest":effect.payload["digest"],
-                    "size":effect.payload["size"],"from":effect.payload.get("from"),"to":effect.target.locator}));
-            }
+            history.push(json!({"pack":pack,"title":title,"state":state,
+                "generation":generation,"change":change,"digest":digest,
+                "size":size,"from":from,"to":to}));
         }
         Ok(json!({"path":locator,"history":history}))
     }

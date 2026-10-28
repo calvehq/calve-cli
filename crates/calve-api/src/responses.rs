@@ -222,11 +222,15 @@ pub struct StatusPack {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StatusPacks {
+    /// Exact counts.
     pub open: u64,
     pub sealed: u64,
     pub qualified: u64,
-    /// By lowercase state (`open`, `sealed`, `qualified`).
+    /// By lowercase state (`open`, `sealed`, `qualified`): the most recently updated packs,
+    /// at most `items_limit` per state (`pack list --after/--limit` pages through all of them).
     pub items: BTreeMap<String, Vec<StatusPack>>,
+    /// The per-state bound on `items`.
+    pub items_limit: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

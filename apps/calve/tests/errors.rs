@@ -346,7 +346,7 @@ fn m4_outcomes_are_typed_in_json_and_human_output() {
         c.execute_batch(
             "DROP TRIGGER IF EXISTS pack_link_added; DROP TRIGGER IF EXISTS pack_link_removed;
              DROP TRIGGER IF EXISTS pack_link_moved; DROP TRIGGER IF EXISTS pack_metadata_changed;
-             DROP TABLE IF EXISTS pack_commitments; DELETE FROM schema_migrations WHERE version=15;
+             DROP TABLE IF EXISTS pack_commitments; DELETE FROM schema_migrations WHERE version>=15;
              PRAGMA user_version=14;",
         )
         .unwrap();

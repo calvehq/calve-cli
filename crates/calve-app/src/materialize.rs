@@ -32,24 +32,20 @@ fn invalid(message: impl Into<String>) -> Error {
 type Desired = BTreeMap<String, Option<Vec<u8>>>;
 
 impl Project {
-    /// Every snapshot digest this Project has recorded for each path, from any pack.
+    /// Every snapshot digest this Project has recorded for each path, from any pack (the pack
+    /// index, one query; never a per-pack OpenAEVC read).
     async fn known_snapshots(&self) -> Result<BTreeMap<String, BTreeSet<String>>> {
+        self.file_domain().await?;
+        self.refresh_pack_index().await?;
         let mut known: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        let d = self.file_domain().await?;
-        for summary in self.list_packs().await? {
-            let Some(id) = summary["id"].as_str() else {
-                continue;
-            };
-            for effect in self.pack(id).await?.candidate_effects {
-                if d.is_file_effect(&effect)
-                    && let Some(digest) = effect.payload["digest"].as_str()
-                {
-                    known
-                        .entry(effect.target.locator)
-                        .or_default()
-                        .insert(digest.to_owned());
-                }
-            }
+        let mut q = self.db.prepare(
+            "SELECT f.path, f.digest FROM pack_files f WHERE f.digest IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM pack_commitments c
+                             WHERE c.pack_id=f.pack AND c.state='replacement_pending')",
+        )?;
+        for row in q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+            let (path, digest) = row?;
+            known.entry(path).or_default().insert(digest);
         }
         Ok(known)
     }
@@ -67,14 +63,24 @@ impl Project {
         let members: BTreeSet<String> = baseline.members.iter().map(ToString::to_string).collect();
         let mut state = crate::resources::FileState::default();
         let d = self.file_domain().await?;
-        // list_packs is in creation order; promoted_digest ties packs to Baseline members.
-        for summary in self.list_packs().await? {
-            let Some(digest) = summary["promoted_digest"].as_str() else {
-                continue;
-            };
-            if !members.contains(digest) {
-                continue;
-            }
+        // Member packs (promoted_digest ties packs to Baseline members) in creation order, by
+        // the promoted-digest index rather than every pack.
+        self.refresh_pack_index().await?;
+        let member_packs: Vec<(String, String)> = {
+            let mut q = self.db.prepare(
+                "SELECT s.id, s.promoted_digest FROM pack_summaries s
+                 JOIN pack_metadata m ON m.id=s.id
+                 WHERE s.promoted_digest IN (SELECT value FROM json_each(?1))
+                   AND NOT EXISTS (SELECT 1 FROM pack_commitments c
+                                   WHERE c.pack_id=s.id AND c.state='replacement_pending')
+                 ORDER BY m.created_at, m.id",
+            )?;
+            q.query_map([serde_json::to_string(&members)?], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .collect::<std::result::Result<_, _>>()?
+        };
+        for (id, digest) in member_packs {
             let promoted: Digest = digest
                 .parse()
                 .map_err(|_| invalid("invalid promoted digest"))?;
@@ -84,8 +90,7 @@ impl Project {
                     digest: Some(promoted),
                 })
                 .await?;
-            let id = summary["id"].as_str().unwrap_or_default();
-            for effect in self.pack(id).await?.candidate_effects {
+            for effect in self.pack(&id).await?.candidate_effects {
                 if d.is_file_effect(&effect) {
                     crate::validate_locator(&effect.target.locator)?;
                     state.apply(&d, &effect)?;
@@ -101,9 +106,21 @@ impl Project {
         }
         // Paths other accepted packs introduced are absent from this composition, so a faithful
         // switch removes them too (still only when they hold recorded content).
-        let everything = self.accepted_state(None).await?;
-        for path in everything.files.keys().chain(everything.removed.iter()) {
-            desired.entry(path.clone()).or_insert(None);
+        // Every path accepted history wrote or removed (a full replay's files ∪ removed), from
+        // the pack index without loading any content.
+        self.refresh_pack_index().await?;
+        let touched: Vec<String> = {
+            let mut q = self.db.prepare(
+                "SELECT f.path FROM pack_files f JOIN pack_summaries s ON s.id=f.pack
+                 WHERE s.state='PROMOTED'
+                 UNION SELECT f.from_path FROM pack_files f JOIN pack_summaries s ON s.id=f.pack
+                 WHERE s.state='PROMOTED' AND f.from_path IS NOT NULL",
+            )?;
+            q.query_map([], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        for path in touched {
+            desired.entry(path).or_insert(None);
         }
         Ok((baseline.id.to_string(), desired))
     }

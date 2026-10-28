@@ -447,7 +447,7 @@ fn a_crash_during_migration_or_restore_converges() {
         db.execute_batch(
             "DROP TRIGGER pack_link_added; DROP TRIGGER pack_link_removed;
              DROP TRIGGER pack_link_moved; DROP TRIGGER pack_metadata_changed;
-             DROP TABLE pack_commitments; DELETE FROM schema_migrations WHERE version=15;
+             DROP TABLE pack_commitments; DELETE FROM schema_migrations WHERE version>=15;
              PRAGMA user_version=14;",
         )
         .unwrap();
@@ -461,11 +461,14 @@ fn a_crash_during_migration_or_restore_converges() {
     for point in ["migration.after_backup", "migration.step"] {
         downgrade();
         t.crash(point, &["intent", "create", "migrating"]);
-        // The step is one transaction: the database is at 14 or 15, never in between.
-        assert!(matches!(version(), 14 | 15), "{point}");
+        // Each step is one transaction: the database is at a step boundary, never in between.
+        assert!(
+            (14..=calve_app::PRODUCT_SCHEMA).contains(&version()),
+            "{point}"
+        );
         // Reads refuse an old schema (MIGRATION_REQUIRED); a write migrates.
         t.ok(&["intent", "create", "after the crash"]);
-        assert_eq!(version(), 15, "{point}");
+        assert_eq!(version(), calve_app::PRODUCT_SCHEMA, "{point}");
         assert_eq!(t.ok(&["pack", "show", &pack])["state"], "PROMOTED");
         assert!(t.ok(&["intent", "show", &intent])["id"].is_string());
     }

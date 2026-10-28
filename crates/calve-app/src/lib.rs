@@ -18,6 +18,7 @@ pub mod content;
 pub mod continuity;
 pub(crate) mod domains;
 pub mod envelope;
+mod event_index;
 pub mod extensions;
 pub mod extsort;
 pub mod gc;
@@ -596,7 +597,13 @@ const PROJECT_SCHEMA: &str = "
          );";
 
 /// Current product database schema.
-pub const PRODUCT_SCHEMA: u32 = 15;
+pub const PRODUCT_SCHEMA: u32 = 16;
+
+/// Exact counts and the most recent items per live pack state.
+type LiveSummary = (BTreeMap<String, u64>, BTreeMap<String, Vec<Value>>);
+
+/// Pack items per live state in `status` (counts stay exact).
+const STATUS_ITEMS: u64 = 50;
 
 /// Forward migrations: entry `i` takes version `i + 1` to `i + 2`.
 const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
@@ -614,6 +621,7 @@ const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
     migrate_pack_files,
     migrate_store_binding,
     migrate_pack_commitments,
+    migrate_read_model_indexes,
 ];
 
 /// How the product database is opened (§46.4: only a writer migrates, after the gate).
@@ -648,7 +656,8 @@ fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
             let tx = db.transaction()?;
             tx.execute_batch(PROJECT_SCHEMA)?;
             tx.execute_batch(PACK_COMMITMENTS_SCHEMA)?;
-            tx.execute_batch("INSERT INTO schema_migrations VALUES (15);")?;
+            read_model_schema(&tx)?;
+            tx.execute_batch("INSERT INTO schema_migrations VALUES (15); INSERT INTO schema_migrations VALUES (16);")?;
             tx.execute_batch(&format!("PRAGMA user_version={PRODUCT_SCHEMA}"))?;
             tx.commit()?;
             return Ok(db);
@@ -941,6 +950,52 @@ const STORE_BINDING_SCHEMA: &str = "CREATE TABLE store_binding (
          );";
 
 /// v14: the §11 store binding and checkpoint, and the actor of product activity (P18).
+/// Bounded read models (M6): keyset order of packs and Intents, state and promoted digest
+/// lookups, moves by source path, and the latest check result per pack generation (projected
+/// from the protocol journal with its own checkpoint). Status, the inbox and the console never
+/// enumerate the store or rescan the journal.
+const READ_MODEL_INDEXES: &str = "
+    CREATE TABLE IF NOT EXISTS pack_results (
+      key TEXT PRIMARY KEY, pack TEXT NOT NULL, generation INTEGER NOT NULL,
+      bad INTEGER NOT NULL, kind TEXT NOT NULL, summary TEXT NOT NULL, severity TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS pack_results_bad ON pack_results(bad, pack, generation);
+    CREATE INDEX IF NOT EXISTS pack_metadata_order ON pack_metadata(created_at, id);
+    CREATE INDEX IF NOT EXISTS pack_summaries_state ON pack_summaries(state);
+    CREATE INDEX IF NOT EXISTS pack_summaries_promoted ON pack_summaries(promoted_digest);
+    CREATE INDEX IF NOT EXISTS pack_files_from ON pack_files(from_path);
+    CREATE INDEX IF NOT EXISTS intents_order ON intents(created_at, id);";
+
+/// The read-model schema; idempotent, so a database whose version was lowered (tests, a
+/// partial run) migrates again cleanly.
+fn read_model_schema(tx: &rusqlite::Transaction) -> Result<()> {
+    tx.execute_batch(READ_MODEL_INDEXES)?;
+    tx.execute_batch(event_index::SCHEMA)?;
+    let has_size: bool = tx.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('pack_files') WHERE name='size'",
+        [],
+        |r| r.get(0),
+    )?;
+    if !has_size {
+        tx.execute_batch("ALTER TABLE pack_files ADD COLUMN size INTEGER;")?;
+    }
+    Ok(())
+}
+
+fn migrate_read_model_indexes(db: &mut Connection) -> Result<()> {
+    let tx = db.transaction()?;
+    read_model_schema(&tx)?;
+    // pack_files gained `size`: the pack projection rebuilds itself from OpenAEVC once.
+    tx.execute_batch(
+        "DELETE FROM projection_checkpoints WHERE name='packs';
+         DELETE FROM pack_summaries; DELETE FROM pack_files;
+         INSERT INTO schema_migrations VALUES (16);
+         PRAGMA user_version=16;",
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 fn migrate_store_binding(db: &mut Connection) -> Result<()> {
     let tx = db.transaction()?;
     tx.execute_batch(STORE_BINDING_SCHEMA)?;
@@ -2558,14 +2613,16 @@ impl Project {
                 .enumerate()
             {
                 tx.execute(
-                    "INSERT INTO pack_files VALUES (?1,?2,?3,?4,?5,?6)",
+                    "INSERT INTO pack_files(pack,position,path,change,digest,from_path,size)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7)",
                     params![
                         id,
                         position as i64,
                         effect.target.locator,
                         change,
                         effect.payload["digest"].as_str(),
-                        effect.payload["from"].as_str()
+                        effect.payload["from"].as_str(),
+                        effect.payload["size"].as_i64()
                     ],
                 )?;
             }
@@ -2581,8 +2638,97 @@ impl Project {
     /// Clears derived projections so the next read rebuilds them from OpenAEVC.
     pub(crate) fn reset_pack_index(&self) -> Result<()> {
         self.db.execute_batch(
-            "DELETE FROM pack_summaries; DELETE FROM pack_files; DELETE FROM projection_checkpoints WHERE name='packs';",
+            "DELETE FROM pack_summaries; DELETE FROM pack_files; DELETE FROM pack_results;
+             DELETE FROM event_index; DELETE FROM event_refs;
+             DELETE FROM projection_checkpoints WHERE name IN ('packs','results','events');",
         )?;
+        Ok(())
+    }
+
+    /// Projects the latest verification, evaluation and qualification result per pack
+    /// generation and check (`pack_results`) from the protocol journal since its checkpoint. A
+    /// later result for the same key replaces an earlier one, so a passing re-run resolves a
+    /// failure, exactly as a full journal scan would decide it.
+    pub(crate) async fn refresh_pack_results(&self) -> Result<()> {
+        let checkpoint: u64 = self
+            .db
+            .query_row(
+                "SELECT sequence FROM projection_checkpoints WHERE name='results'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        let mut rows: Vec<(
+            String,
+            String,
+            u64,
+            bool,
+            &'static str,
+            String,
+            &'static str,
+        )> = Vec::new();
+        let mut head = checkpoint;
+        self.scan_protocol_events(checkpoint, |e| {
+            head = e.sequence;
+            let pack = e.body["pack"].as_str().unwrap_or_default().to_owned();
+            let Some(g) = e.body["generation"].as_u64() else {
+                return Ok(());
+            };
+            let row = match e.kind.as_str() {
+                "verification.completed" => {
+                    let (v, st) = (
+                        e.body["verifier"].as_str().unwrap_or("?"),
+                        e.body["status"].as_str().unwrap_or("?"),
+                    );
+                    (
+                        format!("verification:{pack}:{g}:{v}"),
+                        matches!(st, "FAIL" | "ERROR"),
+                        "verification_failed",
+                        format!("Verification {v}: {st}"),
+                        "danger",
+                    )
+                }
+                "evaluation.completed" => {
+                    let (v, st) = (
+                        e.body["evaluator"].as_str().unwrap_or("?"),
+                        e.body["verdict"].as_str().unwrap_or("?"),
+                    );
+                    (
+                        format!("evaluation:{pack}:{g}:{v}"),
+                        matches!(st, "WARN" | "DENY"),
+                        "evaluation_warning",
+                        format!("Evaluation {v}: {st}"),
+                        if st == "DENY" { "danger" } else { "warning" },
+                    )
+                }
+                "qualification.evaluated" => (
+                    format!("qualification:{pack}:{g}"),
+                    e.body["outcome"] == "DENY",
+                    "promotion_blocked",
+                    "Qualification denied; the pack cannot be promoted".to_owned(),
+                    "danger",
+                ),
+                _ => return Ok(()),
+            };
+            rows.push((row.0, pack, g, row.1, row.2, row.3, row.4));
+            Ok(())
+        })
+        .await?;
+        let tx = self.db.unchecked_transaction()?;
+        for (key, pack, g, bad, kind, summary, severity) in rows {
+            tx.execute(
+                "INSERT INTO pack_results VALUES (?1,?2,?3,?4,?5,?6,?7)
+                 ON CONFLICT(key) DO UPDATE SET bad=excluded.bad, kind=excluded.kind,
+                 summary=excluded.summary, severity=excluded.severity",
+                params![key, pack, g, bad, kind, summary, severity],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO projection_checkpoints VALUES ('results',?1) ON CONFLICT(name) DO UPDATE SET sequence=excluded.sequence",
+            [head],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -4021,7 +4167,7 @@ impl Project {
                 Ok(())
             })?;
         }
-        let mut visit_protocol = |event: Event| {
+        let protocol_row = |event: Event| -> ActivityRow {
             let nanos = event.timestamp.unix_nanos();
             let subject = event.subjects.first().cloned();
             let sequence = event.sequence;
@@ -4034,21 +4180,56 @@ impl Project {
                 "summary":format!("{} {}",event.kind,subject.as_deref().unwrap_or("")),
                 "detail":null,"body":event.body
             });
-            push_activity_row(
-                &mut rows,
-                (nanos, "openaevc", sequence, row),
-                limit,
-                filter,
-                bounds,
-            );
-            Ok(())
+            (nanos, "openaevc", sequence, row)
         };
         if filter.source.as_deref() != Some("calve") {
-            if full_scan {
-                self.scan_protocol_events(0, &mut visit_protocol).await?;
+            let refs: Vec<&str> = [&filter.pack, &filter.task, &filter.execution]
+                .into_iter()
+                .flatten()
+                .map(String::as_str)
+                .collect();
+            if full_scan && refs.iter().all(|r| event_index::id_shaped(r)) {
+                // Indexed candidates in ranking order; every one still passes `matches`. Stop
+                // once `limit` rows are held and the next candidate is older than all of them.
+                let c = event_index::Candidates {
+                    kind: filter.event_type.as_deref(),
+                    kind_prefix: filter.object_kind.as_deref(),
+                    actor: filter.actor.as_deref(),
+                    severity: filter.severity.as_deref(),
+                    since_ns: bounds.0,
+                    until_ns: bounds.1,
+                    refs,
+                };
+                self.refresh_event_index().await?;
+                let mut before = None;
+                'pages: loop {
+                    let page = self.candidate_events(&c, before, 200).await?;
+                    let Some(last) = page.last() else { break };
+                    before = Some((
+                        i64::try_from(last.timestamp.unix_nanos()).unwrap_or(i64::MIN),
+                        last.sequence,
+                    ));
+                    for event in page {
+                        let nanos = event.timestamp.unix_nanos();
+                        push_activity_row(&mut rows, protocol_row(event), limit, filter, bounds);
+                        sort_activity_rows(&mut rows);
+                        rows.truncate(usize::from(limit));
+                        if rows.len() == usize::from(limit)
+                            && rows.last().is_some_and(|kth| nanos < kth.0)
+                        {
+                            break 'pages;
+                        }
+                    }
+                }
+            } else if full_scan {
+                self.scan_protocol_events(0, |event| {
+                    push_activity_row(&mut rows, protocol_row(event), limit, filter, bounds);
+                    Ok(())
+                })
+                .await?;
             } else {
                 for event in self.protocol_activity_events(limit).await? {
-                    visit_protocol(event)?;
+                    push_activity_row(&mut rows, protocol_row(event), limit, filter, bounds);
                 }
             }
         }
@@ -4068,15 +4249,10 @@ impl Project {
             let id: PrincipalId = serde_json::from_value(root.clone())?;
             ids.insert(id);
         }
-        self.scan_protocol_events(0, |event| {
-            if event.kind == "principal.registered" {
-                let id: PrincipalId =
-                    serde_json::from_value(event.body["principal"]["id"].clone())?;
-                ids.insert(id);
-            }
-            Ok(())
-        })
-        .await?;
+        for event in self.events_of_kind("principal.registered").await? {
+            let id: PrincipalId = serde_json::from_value(event.body["principal"]["id"].clone())?;
+            ids.insert(id);
+        }
         let mut principals = Vec::new();
         for principal in ids {
             principals.push(self.client.query(Query::GetPrincipal { principal }).await?);
@@ -4086,14 +4262,10 @@ impl Project {
 
     pub async fn authority_grants(&self) -> Result<Vec<Value>> {
         let mut ids = BTreeSet::<GrantId>::new();
-        self.scan_protocol_events(0, |event| {
-            if event.kind == "grant.issued" {
-                let id: GrantId = serde_json::from_value(event.body["grant"].clone())?;
-                ids.insert(id);
-            }
-            Ok(())
-        })
-        .await?;
+        for event in self.events_of_kind("grant.issued").await? {
+            let id: GrantId = serde_json::from_value(event.body["grant"].clone())?;
+            ids.insert(id);
+        }
         let mut grants = Vec::new();
         for grant in ids {
             grants.push(self.client.query(Query::GetGrant { grant }).await?);
@@ -4293,58 +4465,73 @@ impl Project {
 
     async fn refresh_inbox(&self) -> Result<()> {
         let mut sources: Vec<(String, String, String, String, String)> = Vec::new();
-        let executions = self.list_executions(None, None).await?;
-        for execution in executions
-            .as_array()
-            .ok_or_else(|| invalid("OpenAEVC execution list was not an array"))?
-        {
-            let state = execution["state"].as_str().unwrap_or("");
-            if matches!(state, "FAILED" | "LOST") {
-                let id = execution["id"]
-                    .as_str()
-                    .ok_or_else(|| invalid("execution has no ID"))?;
-                sources.push((
-                    format!("execution:{id}:{state}"),
-                    "execution".into(),
-                    id.into(),
-                    format!("Execution {state}"),
-                    "danger".into(),
-                ));
+        // Failed and lost executions only (state-filtered queries, never the whole list).
+        for state in [ExecutionState::Failed, ExecutionState::Lost] {
+            let executions = self.list_executions(None, Some(state)).await?;
+            for execution in executions
+                .as_array()
+                .ok_or_else(|| invalid("OpenAEVC execution list was not an array"))?
+            {
+                let state = execution["state"].as_str().unwrap_or("");
+                if matches!(state, "FAILED" | "LOST") {
+                    let id = execution["id"]
+                        .as_str()
+                        .ok_or_else(|| invalid("execution has no ID"))?;
+                    sources.push((
+                        format!("execution:{id}:{state}"),
+                        "execution".into(),
+                        id.into(),
+                        format!("Execution {state}"),
+                        "danger".into(),
+                    ));
+                }
             }
         }
-        let packs = self.list_packs().await?;
-        // Live packs at their current generation, for verification/evaluation/qualification.
-        let live: BTreeMap<String, u64> = packs
-            .iter()
-            .filter(|p| !matches!(p["state"].as_str(), Some("PROMOTED" | "ABANDONED")))
-            .filter_map(|p| Some((p["id"].as_str()?.to_owned(), p["generation"].as_u64()?)))
-            .collect();
-        for pack in &packs {
-            let id = pack["id"]
-                .as_str()
-                .ok_or_else(|| invalid("pack has no ID"))?;
-            if pack["state"] == "QUARANTINED" {
+        self.refresh_pack_index().await?;
+        self.refresh_pack_results().await?;
+        // Visible packs, as `pack list` shows them (a pending replacement is not one).
+        const VISIBLE: &str = "NOT EXISTS (SELECT 1 FROM pack_commitments c
+             WHERE c.pack_id=s.id AND c.state='replacement_pending')";
+        {
+            let mut q = self.db.prepare(&format!(
+                "SELECT s.id FROM pack_summaries s WHERE s.state='QUARANTINED' AND {VISIBLE}"
+            ))?;
+            for id in q.query_map([], |r| r.get::<_, String>(0))? {
+                let id = id?;
                 sources.push((
                     format!("pack:{id}:quarantined"),
                     "quarantined_pack".into(),
-                    id.into(),
+                    id,
                     "Pack is quarantined".into(),
                     "warning".into(),
                 ));
             }
-            for review in self.reviews(id).await? {
-                if review["stale"] == true {
-                    let review_id = review["id"]
-                        .as_str()
-                        .ok_or_else(|| invalid("review has no ID"))?;
-                    sources.push((
-                        format!("review:{review_id}:stale"),
-                        "stale_review".into(),
-                        id.into(),
-                        "Review is stale after candidate change".into(),
-                        "warning".into(),
-                    ));
-                }
+            // A review is stale when its pack moved to another generation or candidate.
+            let mut q = self.db.prepare(&format!(
+                "SELECT r.id, r.pack_id FROM reviews r JOIN pack_summaries s ON s.id=r.pack_id
+                 WHERE (r.generation != s.generation OR s.candidate_digest IS NULL
+                        OR s.candidate_digest != r.candidate_digest) AND {VISIBLE}"
+            ))?;
+            for row in q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+                let (review_id, pack) = row?;
+                sources.push((
+                    format!("review:{review_id}:stale"),
+                    "stale_review".into(),
+                    pack,
+                    "Review is stale after candidate change".into(),
+                    "warning".into(),
+                ));
+            }
+            // Failing results of each live pack's current generation (projected).
+            let mut q = self.db.prepare(&format!(
+                "SELECT x.key, x.kind, x.pack, x.summary, x.severity FROM pack_results x
+                 JOIN pack_summaries s ON s.id=x.pack AND s.generation=x.generation
+                 WHERE x.bad=1 AND s.state NOT IN ('PROMOTED','ABANDONED') AND {VISIBLE}"
+            ))?;
+            for row in q.query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })? {
+                sources.push(row?);
             }
         }
         for task in self.tasks_with_protocol().await? {
@@ -4363,66 +4550,6 @@ impl Project {
                     "warning".into(),
                 ));
             }
-        }
-        // The latest verification, evaluation and qualification result of each live pack's
-        // current generation; a later passing result resolves the item.
-        // ponytail: rescans the protocol journal on each refresh; a checkpointed projection when
-        // journals grow large.
-        let mut results: BTreeMap<String, (String, String, String, String)> = BTreeMap::new();
-        self.scan_protocol_events(0, |e| {
-            let pack = e.body["pack"].as_str().unwrap_or_default().to_owned();
-            let Some(g) = e.body["generation"].as_u64() else {
-                return Ok(());
-            };
-            if live.get(&pack) != Some(&g) {
-                return Ok(());
-            }
-            let (key, bad, kind, summary, severity) = match e.kind.as_str() {
-                "verification.completed" => {
-                    let (v, st) = (
-                        e.body["verifier"].as_str().unwrap_or("?"),
-                        e.body["status"].as_str().unwrap_or("?"),
-                    );
-                    (
-                        format!("verification:{pack}:{g}:{v}"),
-                        matches!(st, "FAIL" | "ERROR"),
-                        "verification_failed",
-                        format!("Verification {v}: {st}"),
-                        "danger",
-                    )
-                }
-                "evaluation.completed" => {
-                    let (v, st) = (
-                        e.body["evaluator"].as_str().unwrap_or("?"),
-                        e.body["verdict"].as_str().unwrap_or("?"),
-                    );
-                    (
-                        format!("evaluation:{pack}:{g}:{v}"),
-                        matches!(st, "WARN" | "DENY"),
-                        "evaluation_warning",
-                        format!("Evaluation {v}: {st}"),
-                        if st == "DENY" { "danger" } else { "warning" },
-                    )
-                }
-                "qualification.evaluated" => (
-                    format!("qualification:{pack}:{g}"),
-                    e.body["outcome"] == "DENY",
-                    "promotion_blocked",
-                    "Qualification denied; the pack cannot be promoted".to_owned(),
-                    "danger",
-                ),
-                _ => return Ok(()),
-            };
-            if bad {
-                results.insert(key, (kind.into(), pack, summary, severity.into()));
-            } else {
-                results.remove(&key);
-            }
-            Ok(())
-        })
-        .await?;
-        for (key, (kind, pack, summary, severity)) in results {
-            sources.push((key, kind, pack, summary, severity));
         }
         // Extension and provider failures.
         for x in self
@@ -4605,25 +4732,63 @@ impl Project {
         event(&self.db, "inbox.item.updated", key, action)
     }
 
+    /// Exact counts of open, sealed and qualified packs and, per state, the `limit` most recently
+    /// updated ones (pending supersessions shown on the pack they replace).
+    fn live_pack_summary(&self, limit: u64) -> Result<LiveSummary> {
+        const VISIBLE: &str = "NOT EXISTS (SELECT 1 FROM pack_commitments c
+             WHERE c.pack_id=s.id AND c.state='replacement_pending')";
+        let mut counts = BTreeMap::new();
+        let mut items: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        let superseding = crate::supersede::pending(&self.root)?;
+        for state in ["OPEN", "SEALED", "QUALIFIED"] {
+            let n: u64 = self.db.query_row(
+                &format!("SELECT COUNT(*) FROM pack_summaries s WHERE s.state=?1 AND {VISIBLE}"),
+                [state],
+                |r| r.get(0),
+            )?;
+            counts.insert(state.to_lowercase(), n);
+            let mut q = self.db.prepare(&format!(
+                "SELECT s.id, m.title, s.generation FROM pack_summaries s
+                 JOIN pack_metadata m ON m.id=s.id
+                 WHERE s.state=?1 AND {VISIBLE} ORDER BY s.updated_at DESC, s.id DESC LIMIT ?2"
+            ))?;
+            let rows = q.query_map(params![state, limit], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, u64>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (id, title, generation) = row?;
+                let mut item = json!({"id": id, "title": title, "generation": generation});
+                if let Some((saga, step)) = superseding.get(&id) {
+                    item["superseding"] = json!({"saga": saga, "pending_step": step,
+                        "display": format!("superseding (pending: {step})")});
+                }
+                items.entry(state.to_lowercase()).or_default().push(item);
+            }
+        }
+        Ok((counts, items))
+    }
+
     /// Derived summary (PLAN §17.5); every field comes from OpenAEVC queries or Calve metadata,
     /// never a second authority. `config` supplies the provider profiles to health-check.
     pub async fn status(&self, config: Option<&crate::config::EffectiveConfig>) -> Result<Value> {
-        let packs = self.list_packs().await?;
         let tasks = self.tasks_with_protocol().await?;
         let mut project = serde_json::to_value(&self.identity)?;
         project["name"] = json!(self.display_name);
-        let executions = self.list_executions(None, None).await?;
-        let active: Vec<&Value> = executions
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|e| {
-                matches!(
-                    e["state"].as_str(),
-                    Some("PENDING" | "ADMITTED" | "STARTING" | "RUNNING")
-                )
-            })
-            .collect();
+        // Active executions only: one state-filtered query per active state.
+        let mut active: Vec<Value> = Vec::new();
+        for state in [
+            ExecutionState::Pending,
+            ExecutionState::Admitted,
+            ExecutionState::Starting,
+            ExecutionState::Running,
+        ] {
+            let found = self.list_executions(None, Some(state)).await?;
+            active.extend(found.as_array().into_iter().flatten().cloned());
+        }
         let uncaptured = match self.scan_resources().await {
             Ok(scan) => json!(scan["uncaptured"].as_array().map_or(0, Vec::len)),
             Err(error) => json!({"error":error.to_string()}),
@@ -4659,16 +4824,10 @@ impl Project {
                     .collect()
             })
             .unwrap_or_default();
-        let mut by_state: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-        for p in packs
-            .iter()
-            .filter(|p| matches!(p["state"].as_str(), Some("OPEN" | "SEALED" | "QUALIFIED")))
-        {
-            by_state.entry(p["state"].as_str().unwrap_or_default().to_lowercase()).or_default().push(
-                json!({"id": p["id"], "title": p["title"], "generation": p["generation"], "superseding": p.get("superseding")}),
-            );
-        }
-        let count = |k: &str| by_state.get(k).map_or(0, Vec::len);
+        // Exact counts and the most recent items per live state, by indexed queries (the inbox
+        // refresh above brought the pack index up to date).
+        let (counts, by_state) = self.live_pack_summary(STATUS_ITEMS)?;
+        let count = |k: &str| counts.get(k).copied().unwrap_or(0);
         let attention_tasks: Vec<&Value> = tasks
             .iter()
             .filter(|t| {
@@ -4696,7 +4855,7 @@ impl Project {
             "identity_conflict",
         ]);
         let status = json!({"project": project, "active_baseline": active_baseline,
-            "packs": {"open": count("open"), "sealed": count("sealed"), "qualified": count("qualified"), "items": by_state},
+            "packs": {"open": count("open"), "sealed": count("sealed"), "qualified": count("qualified"), "items": by_state, "items_limit": STATUS_ITEMS},
             "tasks": {"total": tasks.len(), "blocked": tasks.iter().filter(|t| t["state"] == "BLOCKED").count(), "attention": attention_tasks},
             "active_executions": active, "uncaptured_changes": uncaptured,
             "blockers": {"verification": pick(&["verification_failed", "evaluation_warning", "promotion_blocked"]),

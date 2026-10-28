@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use openaevc::protocol::{Digest, Event, Query, b64};
+use openaevc::protocol::{Digest, Event, ExecutionState, Query, b64};
 use openaevc_sdk::OpenAevcClient;
 use serde_json::{Value, json};
 
@@ -154,7 +154,13 @@ impl Project {
             .rev()
             .find(|e| d.is_file_effect(e) && e.target.locator == path)
             .ok_or_else(|| invalid(format!("{path} is not part of this pack")))?;
-        let before = self.accepted_state(Some(&pack.id.to_string())).await?;
+        let paths: BTreeSet<String> = [effect.target.locator.clone()]
+            .into_iter()
+            .chain(effect.payload["from"].as_str().map(str::to_owned))
+            .collect();
+        let before = self
+            .accepted_state_for(&paths, Some(&pack.id.to_string()))
+            .await?;
         Ok(Self::file_diff(&d, &before, effect))
     }
 
@@ -173,7 +179,16 @@ impl Project {
         for effect in &pack.candidate_effects {
             latest.insert(effect.target.locator.clone(), effect);
         }
-        let before = self.accepted_state(Some(&id)).await?;
+        // Before-state of just the paths this pack touches (and moves from).
+        let paths: BTreeSet<String> = latest
+            .values()
+            .flat_map(|e| {
+                [e.target.locator.clone()]
+                    .into_iter()
+                    .chain(e.payload["from"].as_str().map(str::to_owned))
+            })
+            .collect();
+        let before = self.accepted_state_for(&paths, Some(&id)).await?;
         let domain = self.file_domain().await.ok();
         let mut files = Vec::new();
         let (mut added, mut removed) = (0u64, 0u64);
@@ -194,12 +209,14 @@ impl Project {
             files.push(row);
         }
         // Authoritative results recorded by OpenAEVC for this pack.
-        let events: Vec<Event> = self
-            .all_events()
-            .await?
-            .into_iter()
-            .filter(|event| event.subjects.contains(&id))
-            .collect();
+        // Events naming this pack (event index; same predicate as a journal scan).
+        let events: Vec<Event> = match self.events_referencing(&id).await? {
+            Some(candidates) => candidates,
+            None => self.all_events().await?,
+        }
+        .into_iter()
+        .filter(|event| event.subjects.contains(&id))
+        .collect();
         let mut verifications = Vec::new();
         let mut evaluations = Vec::new();
         let mut latest_decision: Option<(u64, Digest, String)> = None;
@@ -409,8 +426,11 @@ impl Project {
     }
 
     /// Needs-attention, active work and recent activity for the landing screen.
+    /// The Overview (console §25): needs attention, active work and recent activity, from
+    /// bounded, indexed queries (never every pack, task, Intent or execution). Each list holds
+    /// at most `OVERVIEW_ITEMS` rows per source; `*_total` fields give the exact counts.
     pub async fn view_overview(&self) -> Result<Value> {
-        let mut attention = Vec::new();
+        const OVERVIEW_ITEMS: i64 = 50;
         let rank = |kind: &str| match kind {
             "failure" => 0,
             "blocked" => 1,
@@ -419,6 +439,7 @@ impl Project {
             "running" => 4,
             _ => 5,
         };
+        let mut attention = Vec::new();
         for item in self.inbox(false).await? {
             if item["needs_attention"] != true {
                 continue;
@@ -433,65 +454,125 @@ impl Project {
                 "message":item["summary"],"at":item["last_seen"],"source_key":item["source_key"]}),
             );
         }
-        let tasks = self.tasks_with_protocol().await?;
-        for task in tasks.iter().filter(|t| t["state"] == "BLOCKED") {
-            attention.push(
-                json!({"kind":"blocked","subject":task["id"],"subject_kind":"task",
-                "message":format!("{} is blocked", task["title"].as_str().unwrap_or("task")),
-                "at":task["updated_at"]}),
-            );
-        }
-        let packs = self.view_packs().await?;
-        for pack in packs.as_array().into_iter().flatten() {
-            if pack["state"] == "SEALED" {
-                attention.push(json!({"kind":"review","subject":pack["id"],"subject_kind":"pack",
-                    "message":format!("{} awaits verification and review", pack["title"].as_str().unwrap_or("pack")),
-                    "at":pack["updated_at"]}));
+        let count = |sql: &str| -> Result<i64> { Ok(self.db.query_row(sql, [], |r| r.get(0))?) };
+        // Blocked tasks, most recently updated first.
+        let blocked_total = count("SELECT COUNT(*) FROM tasks WHERE state='BLOCKED'")?;
+        {
+            let mut q = self.db.prepare(
+                "SELECT id, title, updated_at FROM tasks WHERE state='BLOCKED'
+                 ORDER BY updated_at DESC, id DESC LIMIT ?1",
+            )?;
+            for row in q.query_map([OVERVIEW_ITEMS], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })? {
+                let (id, title, updated) = row?;
+                attention.push(json!({"kind":"blocked","subject":id,"subject_kind":"task",
+                    "message":format!("{title} is blocked"),"at":updated}));
             }
         }
-        let executions = self.list_executions(None, None).await?;
-        for execution in executions.as_array().into_iter().flatten() {
-            if matches!(
-                execution["state"].as_str(),
-                Some("RUNNING" | "STARTING" | "ADMITTED")
-            ) {
+        // Sealed packs await verification and review (pack index; pending replacements hidden).
+        const VISIBLE: &str = "NOT EXISTS (SELECT 1 FROM pack_commitments c
+             WHERE c.pack_id=s.id AND c.state='replacement_pending')";
+        let review_total: i64 = self.db.query_row(
+            &format!("SELECT COUNT(*) FROM pack_summaries s WHERE s.state='SEALED' AND {VISIBLE}"),
+            [],
+            |r| r.get(0),
+        )?;
+        {
+            let mut q = self.db.prepare(&format!(
+                "SELECT s.id, m.title, s.updated_at FROM pack_summaries s
+                 JOIN pack_metadata m ON m.id=s.id WHERE s.state='SEALED' AND {VISIBLE}
+                 ORDER BY s.updated_at DESC, s.id DESC LIMIT ?1"
+            ))?;
+            for row in q.query_map([OVERVIEW_ITEMS], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })? {
+                let (id, title, updated) = row?;
+                attention.push(json!({"kind":"review","subject":id,"subject_kind":"pack",
+                    "message":format!("{title} awaits verification and review"),"at":updated}));
+            }
+        }
+        // Running executions: state-filtered queries only.
+        for state in [
+            ExecutionState::Running,
+            ExecutionState::Starting,
+            ExecutionState::Admitted,
+        ] {
+            let found = self.list_executions(None, Some(state)).await?;
+            for execution in found.as_array().into_iter().flatten() {
                 attention.push(json!({"kind":"running","subject":execution["id"],"subject_kind":"execution",
                     "message":format!("{} running", execution["harness"].as_str().unwrap_or("execution")),
                     "at":execution["started_at"]}));
             }
         }
-        attention.sort_by_key(|item| rank(item["kind"].as_str().unwrap_or("")));
-        let intents = self.list_intents()?;
+        // §25.1: priority, then most recent first within a priority (C44).
+        let at_key = |item: &Value| -> String {
+            match &item["at"] {
+                Value::String(s) => s.clone(),
+                Value::Number(n) => format!("{:020}", n.as_i64().unwrap_or(0)),
+                _ => String::new(),
+            }
+        };
+        attention.sort_by(|a, b| {
+            rank(a["kind"].as_str().unwrap_or(""))
+                .cmp(&rank(b["kind"].as_str().unwrap_or("")))
+                .then_with(|| at_key(b).cmp(&at_key(a)))
+        });
+        // Active work: open Intents, most recently updated first, with task and pack rollups.
+        let intents_total = count("SELECT COUNT(*) FROM intents WHERE state='OPEN'")?;
         let mut work = Vec::new();
-        for intent in intents.iter().filter(|i| i["state"] == "OPEN") {
-            let own: Vec<&Value> = tasks
-                .iter()
-                .filter(|t| t["intent_id"] == intent["id"])
-                .collect();
-            let done = own.iter().filter(|t| t["state"] == "COMPLETE").count();
-            let own_packs: Vec<&Value> = packs
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|p| p["intent"] == intent["id"])
-                .collect();
-            // Display-only rollup of authoritative child states.
-            let state = if own.iter().any(|t| t["state"] == "BLOCKED") {
-                "BLOCKED"
-            } else if own.iter().any(|t| t["state"] == "IN_PROGRESS") {
-                "RUNNING"
-            } else if own_packs
-                .iter()
-                .any(|p| matches!(p["state"].as_str(), Some("SEALED" | "QUALIFIED")))
-            {
-                "REVIEW"
-            } else if !own.is_empty() && done == own.len() {
-                "COMPLETE"
-            } else {
-                "OPEN"
-            };
-            work.push(json!({"id":intent["id"],"title":intent["title"],"tasks_done":done,
-                "tasks_total":own.len(),"packs":own_packs.len(),"state":state,"updated_at":intent["updated_at"]}));
+        {
+            let mut q = self.db.prepare(
+                "SELECT i.id, i.title, i.updated_at,
+                   (SELECT COUNT(*) FROM tasks t WHERE t.intent_id=i.id),
+                   (SELECT COUNT(*) FROM tasks t WHERE t.intent_id=i.id AND t.state='COMPLETE'),
+                   (SELECT COUNT(*) FROM tasks t WHERE t.intent_id=i.id AND t.state='BLOCKED'),
+                   (SELECT COUNT(*) FROM tasks t WHERE t.intent_id=i.id AND t.state='IN_PROGRESS'),
+                   (SELECT COUNT(*) FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id
+                      WHERE m.intent_id=i.id AND NOT EXISTS (SELECT 1 FROM pack_commitments c
+                        WHERE c.pack_id=s.id AND c.state='replacement_pending')),
+                   (SELECT COUNT(*) FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id
+                      WHERE m.intent_id=i.id AND s.state IN ('SEALED','QUALIFIED'))
+                 FROM intents i WHERE i.state='OPEN'
+                 ORDER BY i.updated_at DESC, i.id DESC LIMIT ?1",
+            )?;
+            for row in q.query_map([OVERVIEW_ITEMS], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, u64>(2)?,
+                    r.get::<_, i64>(3)?,
+                    r.get::<_, i64>(4)?,
+                    r.get::<_, i64>(5)?,
+                    r.get::<_, i64>(6)?,
+                    r.get::<_, i64>(7)?,
+                    r.get::<_, i64>(8)?,
+                ))
+            })? {
+                let (id, title, updated, total, done, blocked, running, packs, in_review) = row?;
+                // Display-only rollup of authoritative child states.
+                let state = if blocked > 0 {
+                    "BLOCKED"
+                } else if running > 0 {
+                    "RUNNING"
+                } else if in_review > 0 {
+                    "REVIEW"
+                } else if total > 0 && done == total {
+                    "COMPLETE"
+                } else {
+                    "OPEN"
+                };
+                work.push(json!({"id":id,"title":title,"tasks_done":done,
+                    "tasks_total":total,"packs":packs,"state":state,"updated_at":updated}));
+            }
         }
         // Liveness chatter is not "activity" a person needs on the landing screen.
         let activity: Vec<Value> = self
@@ -514,10 +595,18 @@ impl Project {
             })
             .take(12)
             .collect();
+        let packs_total: i64 = self.db.query_row(
+            &format!("SELECT COUNT(*) FROM pack_summaries s WHERE {VISIBLE}"),
+            [],
+            |r| r.get(0),
+        )?;
         Ok(
             json!({"project":{"id":self.identity.project_id,"name":self.display_name},
             "needs_attention":attention,"active_work":work,"recent_activity":activity,
-            "counts":{"packs":packs.as_array().map_or(0, Vec::len),"intents":work.len(),
+            "totals":{"blocked_tasks":blocked_total,"awaiting_review":review_total,
+                "open_intents":intents_total},
+            "items_limit":OVERVIEW_ITEMS,
+            "counts":{"packs":packs_total,"intents":intents_total,
                 "baselines":self.list_baselines().await?.len()}}),
         )
     }
