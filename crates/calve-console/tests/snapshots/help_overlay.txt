@@ -1,6 +1,6 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fb73fzondjarz75ayzoee   ● healthy
-┌ Navigation ────────┐┌ ┌ ChangePack cpk_agqo6fb73fzondjarz75ayzoee shortcuts ─────────────────┐ector ─────────────────┐
-│ PROJECT            ││ │NAVIGATION                                                            │73fzondjarz75ayzoee    │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4ntr7snpiayi56xooe5y   ● healthy
+┌ Navigation ────────┐┌ ┌ ChangePack cpk_agqyis4ntr7snpiayi56xooe5y shortcuts ─────────────────┐ector ─────────────────┐
+│ PROJECT            ││ │NAVIGATION                                                            │ntr7snpiayi56xooe5y    │
 │  Overview        5 ││ │  j / ↓       next                                                    │tor verification rules │
 │  Work              ││c│  k / ↑       previous                                                │                       │
 │  Change Graph      ││ │  h l         outward / inward                                        │       ○ OPEN          │
@@ -26,10 +26,10 @@
 │                    ││ │  r           refresh                                                 │                       │
 │                    ││ │  y           copy ID                                                 │                       │
 │                    ││ │  ctrl+l      activity      ┌────────────────────────────────────────────────────────────────┐│
-│                    ││ │  q           quit          │ ● :pack abandon cpk_agqo6fb73fzondjarz75ayzoee --generation 2… ││
+│                    ││ │  q           quit          │ ● :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2… ││
 │                    ││ │  ?           this help     └────────────────────────────────────────────────────────────────┘│
 │                    ││ │                             ┌───────────────────────────────────────────────────────────────┐│
-│                    ││ │esc close                    │ ✓ :pack abandon cpk_agqo6fb73fzondjarz75ayzoee --generation 2 ││
+│                    ││ │esc close                    │ ✓ :pack abandon cpk_agqyis4ntr7snpiayi56xooe5y --generation 2 ││
 │                    ││ └─────────────────────────────└───────────────────────────────────────────────────────────────┘│
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

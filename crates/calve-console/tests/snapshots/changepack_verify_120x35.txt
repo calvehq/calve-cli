@@ -1,27 +1,19 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa ───────────────────────┐┌ Inspector ─────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…fbv2tzhmigx2ltg27pa    │
-│  Overview        5 ││                                                                  ││Add remote conformance      │
-│  Work              ││Check                      Status           Output         When   ││runner                      │
-│  Change Graph      ││Verify                     ✓ PASS           no findings    1m     ││                            │
-│› ChangePacks       ││                                                                  ││State       ◆ SEALED        │
-│  Baselines         ││                                                                  ││Generation  2               │
-│  Evidence          ││                                                                  ││Created     1m ago          │
-│  Events            ││                                                                  ││Changed     2 files  +7 -2  │
-│                    ││                                                                  ││Checks      1/1             │
-│ SYSTEM             ││                                                                  ││Evidence    0               │
-│  Projects          ││                                                                  ││Review      ◆ WAITING       │
-│  Inbox           2 ││                                                                  ││                            │
-│  Doctor            ││                                                                  ││Intent                      │
-│  Extensions        ││                                                                  ││HTTP conformance            │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││! Promote: missing: approved│
-│                    ││                                                                  ││review                      │
-│                    ││                                                                  ││x explain                   │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││Actions                     │
-│                    ││                                                                  ││  Run snapshot verification │
-│                    ││                                                                  ││  Run language checks       │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││Verification summary        │
+│  Overview        5 ││                                                                  ││                            │
+│  Work              ││Check                   Status           Output         Duration  ││✓ All checks passed         │
+│  Change Graph      ││Verify                  ✓ PASS           no findings    —         ││1 / 1 checks                │
+│› ChangePacks       ││                                                                  ││Last run    1m ago ·        │
+│  Baselines         ││                                                                  ││2026-10-28 20:55:05 UTC     │
+│  Evidence          ││                                                                  ││                            │
+│  Events            ││                                                                  ││Verify                      │
+│                    ││                                                                  ││Status      ✓ PASS          │
+│ SYSTEM             ││                                                                  ││enter details               │
+│  Projects          ││                                                                  ││                            │
+│  Inbox           2 ││                                                                  ││Actions                     │
+│  Doctor            ││                                                                  ││  Run snapshot verification │
+│  Extensions        ││                                                                  ││  Run language checks       │
 │                    ││                                                                  ││  Evaluate change size      │
 │                    ││                                                                  ││  Approve                   │
 │                    ││                                                                  ││  Reject                    │
@@ -31,5 +23,13 @@
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
- tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help
+ ↑↓ select  enter details  r rerun  e evidence  ^P commands  : command  ? help

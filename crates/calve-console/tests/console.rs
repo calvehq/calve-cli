@@ -120,7 +120,7 @@ impl Harness {
     }
 
     fn pack_id(&self, title: &str) -> String {
-        self.data["packs"]
+        self.data["packs"]["items"]
             .as_array()
             .unwrap()
             .iter()
@@ -522,7 +522,8 @@ fn copy_uses_object_references() {
     h.app.navigate(Route::Events);
     h.pump();
     h.key(KeyCode::Char('y'));
-    assert_eq!(h.app.clipboard.take().as_deref(), Some("calve:37"));
+    let newest = h.data["events"][0]["id"].as_str().map(str::to_owned);
+    assert_eq!(h.app.clipboard.take(), newest);
 }
 
 /// §25.2: Enter on an attention item opens its native tab.
@@ -590,7 +591,7 @@ fn marks_drawer_and_paste() {
 fn hostile_text_is_sanitized() {
     let mut h = Harness::new(120, 35);
     let mut packs = h.data["packs"].clone();
-    packs[0]["title"] = json!("evil\u{1b}]52;c;cm0gLXJmIH4=\u{7}\u{1b}[2Jtitle");
+    packs["items"][0]["title"] = json!("evil\u{1b}]52;c;cm0gLXJmIH4=\u{7}\u{1b}[2Jtitle");
     h.data.insert("packs".into(), packs);
     h.app.navigate(Route::ChangePacks);
     h.pump();
@@ -626,7 +627,7 @@ fn every_screen_renders() {
         (Route::Projects, "openaevc"),
         (Route::Inbox, "Execution FAILED"),
         (Route::Doctor, "Product database"),
-        (Route::Extensions, "org.examples.files"),
+        (Route::Extensions, "org.calve.software"),
     ];
     for (route, needle) in expectations {
         h.app.navigate(route.clone());
@@ -767,4 +768,140 @@ fn sorting_history_search_and_keymap() {
     ));
     h.key(KeyCode::Esc).key(KeyCode::Char('?'));
     assert!(h.render().contains("CUSTOM KEYS"));
+}
+
+/// Scenario D (§34, §34.2, §94.4): running checks show elapsed time, rows keep their order as
+/// checks finish, Enter opens the check detail, r reruns and e shows the evidence.
+#[test]
+fn verification_runs_update_in_place_and_open_details() {
+    let mut h = Harness::new(160, 45);
+    let id = h.pack_id("Add remote conformance runner");
+    let key = format!("pack:{id}");
+    let mut pack = h.data[&key].clone();
+    let started = h.app.now - 12;
+    pack["running"] = json!([{"id":"exe_aaaaaaaaaaaaaaaaaaaaaaaaaa","harness":"org.calve.harness.lint",
+        "state":"RUNNING","started_at":started,"provider":"org.calve.provider.shell"}]);
+    h.data.insert(key.clone(), pack.clone());
+    h.app.navigate(Route::ChangePack(id.clone()));
+    h.pump();
+    h.keys("3");
+    let screen = h.render();
+    assert!(
+        screen.contains("RUNNING") && screen.contains("12.0s"),
+        "{screen}"
+    );
+    assert!(screen.contains("1 running"), "{screen}");
+    // Row lines, by name: Lint sorts before Verify whatever finishes first.
+    let order = |screen: &str| {
+        let row = |name: &str| {
+            screen
+                .lines()
+                .position(|l| l.contains(&format!("││{name}      ")))
+                .unwrap_or(usize::MAX)
+        };
+        row("Lint") < row("Verify")
+    };
+    assert!(order(&screen));
+    // The run finishes: the row stays where it was, now with its result.
+    pack["running"] = json!([]);
+    let mut finished = pack["verifications"][0].clone();
+    finished["verifier"] = json!("org.calve.harness.lint");
+    finished["digest"] = json!(format!("sha256:{}", "c".repeat(64)));
+    pack["verifications"].as_array_mut().unwrap().push(finished);
+    h.data.insert(key.clone(), pack);
+    h.key(KeyCode::Char('r'));
+    let screen = h.render();
+    assert!(!screen.contains("RUNNING") && order(&screen), "{screen}");
+    // Enter on a completed check opens its detail.
+    h.key(KeyCode::Enter);
+    match h.app.overlays.last() {
+        Some(Overlay::Explain { lines, .. }) => {
+            let text: Vec<&str> = lines.iter().map(|(_, l)| l.as_str()).collect();
+            assert!(text.iter().any(|l| l.starts_with("Status")), "{text:?}");
+            assert!(text.iter().any(|l| l.contains("not recorded")), "{text:?}");
+        }
+        other => panic!("check detail expected, got {other:?}"),
+    }
+    h.key(KeyCode::Esc);
+    let before = h.commands.len();
+    h.key(KeyCode::Char('r'));
+    assert!(
+        h.commands.len() > before || !h.app.overlays.is_empty(),
+        "r reruns verification (or asks first)"
+    );
+    h.app.overlays.clear();
+    h.key(KeyCode::Char('e'));
+    assert_eq!(h.app.tab_name(), Some("Evidence"));
+}
+
+/// §36, §38: evidence is grouped with the requirement tally and selecting a row inspects it;
+/// receipts open their detail.
+#[test]
+fn evidence_tab_and_receipts() {
+    let mut h = Harness::new(160, 45);
+    let id = h.pack_id("Fix daemon race condition");
+    h.app.navigate(Route::ChangePack(id));
+    h.pump();
+    h.keys("5");
+    let screen = h.render();
+    assert!(
+        screen.contains("Required") && screen.contains("Review"),
+        "{screen}"
+    );
+    assert!(
+        screen.contains("Evidence evd_"),
+        "inspector follows the row:\n{screen}"
+    );
+    h.keys("7");
+    h.key(KeyCode::Enter);
+    assert!(
+        matches!(h.app.overlays.last(), Some(Overlay::Explain { title, .. }) if title.starts_with("Receipt")),
+        "{:?}",
+        h.app.overlays.last()
+    );
+}
+
+/// §41, M6 R5: the Evidence catalog is paged; scrolling loads the next page, a filter loads
+/// every page, and "Used by" lists the digest's reverse references.
+#[test]
+fn evidence_catalog_pages_and_reverse_references() {
+    let mut h = Harness::new(160, 45);
+    let first = h.data["evidence"]["items"][0].clone();
+    let mut second = first.clone();
+    second["digest"] = json!(format!("sha256:{}", "d".repeat(64)));
+    second["evidence"]["id"] = json!("evd_zzzzzzzzzzzzzzzzzzzzzzzzzz");
+    second["evidence"]["kind"] = json!("org.calve.check.report/v1");
+    h.data.insert(
+        "evidence".into(),
+        json!({"items":[first.clone()],"next":"100:1"}),
+    );
+    h.data.insert(
+        "evidence@100:1".into(),
+        json!({"items":[second],"next":null}),
+    );
+    let digest = first["digest"].as_str().unwrap().to_owned();
+    h.data.insert(
+        format!("evidence-refs:{digest}"),
+        json!([{"kind":"review.recorded","subject":"cpk_review"},{"kind":"evidence.registered","subject":"cpk_x"}]),
+    );
+    h.data.insert(
+        format!("evidence-refs:sha256:{}", "d".repeat(64)),
+        json!([]),
+    );
+    h.app.navigate(Route::Evidence);
+    h.pump();
+    let screen = h.render();
+    assert!(
+        screen.contains("evd_…zzzzzzzzz"),
+        "next page loaded ahead:\n{screen}"
+    );
+    assert!(
+        screen.contains("Used by") && screen.contains("review.recorded"),
+        "{screen}"
+    );
+    assert!(!screen.contains("evidence.registered cpk_x"));
+    h.app.collection("evidence").filter = "type:report".into();
+    calve_console::input::sync(&mut h.app);
+    h.pump();
+    assert!(h.render().contains("Report/v1"));
 }

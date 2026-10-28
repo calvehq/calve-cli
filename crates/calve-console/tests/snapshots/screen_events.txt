@@ -1,45 +1,45 @@
  Calve  project: openaevc  workspace: main  Events   ● healthy                                                                      v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Events ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Time      Actor          Event                                            Object           ││execution.finished                         │
-│  Overview        5 ││21:31:21Z calve          execution.finished                               exe_…kmvsvhf3a   ││calve:37                                   │
-│  Work              ││21:31:21Z pri_…dboetqnv4 execution.failed                                 exe_…kmvsvhf3a   ││                                           │
-│  Change Graph      ││21:31:21Z pri_…dboetqnv4 observation.appended                             exe_…kmvsvhf3a   ││Time        1m ago · 2026-09-29 21:31:21   │
-│  ChangePacks       ││21:31:21Z pri_…dboetqnv4 execution.heartbeat                              exe_…kmvsvhf3a   ││UTC                                        │
-│  Baselines         ││21:31:20Z pri_…dboetqnv4 execution.heartbeat                              exe_…kmvsvhf3a   ││Actor       —                              │
-│  Evidence          ││21:31:20Z pri_…dboetqnv4 execution.running                                exe_…kmvsvhf3a   ││Source      calve                          │
-│› Events            ││21:31:20Z pri_…dboetqnv4 execution.starting                               exe_…kmvsvhf3a   ││                                           │
-│                    ││21:31:20Z pri_…dboetqnv4 execution.admitted                               exe_…kmvsvhf3a   ││Objects                                    │
-│ SYSTEM             ││21:31:20Z pri_…dboetqnv4 workunit.added                                   cpk_…byu3s65zi   ││  → exe_agqo6fcpwj26lfwyckmvsvhf3a         │
-│  Projects          ││21:31:20Z pri_…dboetqnv4 provider.registered                              org.cal….shell   ││Detail      FAILED                         │
-│  Inbox           2 ││21:31:20Z calve          pack.created                                     cpk_…byu3s65zi   ││                                           │
-│  Doctor            ││21:31:20Z pri_…dboetqnv4 changepack.created                               cpk_…byu3s65zi   ││Raw                                        │
-│  Extensions        ││21:31:19Z pri_…dboetqnv4 changepack.quarantined                           cpk_…7sqtlkoba   ││{                                          │
-│                    ││21:31:19Z calve          pack.created                                     cpk_…7sqtlkoba   ││  "actor": null,                           │
-│                    ││21:31:18Z pri_…dboetqnv4 changepack.created                               cpk_…7sqtlkoba   ││  "body": null,                            │
-│                    ││21:31:18Z calve          file.captured                                    rules.txt        ││  "detail": "FAILED",                      │
-│                    ││21:31:18Z pri_…dboetqnv4 execution.succeeded                              exe_…z2zkohuja   ││  "id": "calve:37",                        │
-│                    ││21:31:18Z pri_…dboetqnv4 execution.heartbeat                              exe_…z2zkohuja   ││  "kind": "execution.finished",            │
-│                    ││21:31:18Z pri_…dboetqnv4 observation.appended                             exe_…z2zkohuja   ││  "namespace_id":                          │
-│                    ││21:31:18Z pri_…dboetqnv4 execution.heartbeat                              exe_…z2zkohuja   ││"ns_agqo6e7aiv5rpgmw24byhy3lji",           │
-│                    ││21:31:17Z pri_…dboetqnv4 effect.applied                                   exe_…z2zkohuja   ││  "project_id":                            │
-│                    ││21:31:17Z pri_…dboetqnv4 execution.heartbeat                              exe_…z2zkohuja   ││"prj_01a0ef13-e366-71a6-816c-8197620898db",│
-│                    ││21:31:17Z pri_…dboetqnv4 execution.running                                exe_…z2zkohuja   ││  "source": "calve",                       │
-│                    ││21:31:17Z pri_…dboetqnv4 execution.starting                               exe_…z2zkohuja   ││  "source_event_id": "37",                 │
-│                    ││21:31:17Z pri_…dboetqnv4 execution.admitted                               exe_…z2zkohuja   ││  "source_sequence": 37,                   │
-│                    ││21:31:17Z pri_…dboetqnv4 workunit.added                                   cpk_…z75ayzoee   ││  "subject":                               │
-│                    ││21:31:17Z pri_…dboetqnv4 provider.registered                              org.exa….local   ││"exe_agqo6fcpwj26lfwyckmvsvhf3a",          │
-│                    ││21:31:17Z calve          pack.created                                     cpk_…z75ayzoee   ││  "subjects": [                            │
-│                    ││21:31:16Z pri_…dboetqnv4 changepack.created                               cpk_…z75ayzoee   ││    "exe_agqo6fcpwj26lfwyckmvsvhf3a"       │
-│                    ││21:31:16Z calve          task.pack.linked                                 tsk_…c72093222   ││  ],                                       │
-│                    ││21:31:16Z calve          review.recorded                                  cpk_…ljusoarca   ││  "summary": "execution.finished           │
-│                    ││21:31:16Z pri_…dboetqnv4 evidence.registered                              cpk_…ljusoarca   ││exe_agqo6fcpwj26lfwyckmvsvhf3a",           │
-│                    ││21:31:15Z pri_…dboetqnv4 changepack.sealed                                cpk_…ljusoarca   ││  "timestamp":                             │
-│                    ││21:31:15Z calve          file.captured                                    crates/…mon.rs   ││"2026-09-29T21:31:21.350695650Z"           │
-│                    ││21:31:15Z pri_…dboetqnv4 execution.succeeded                              exe_…6kedzsxt4   ││}                                          │
-│                    ││21:31:15Z pri_…dboetqnv4 execution.heartbeat                              exe_…6kedzsxt4   ││                                           │
-│                    ││21:31:15Z pri_…dboetqnv4 observation.appended                             exe_…6kedzsxt4   ││Actions                                    │
-│                    ││21:31:15Z pri_…dboetqnv4 execution.heartbeat                              exe_…6kedzsxt4   ││  Open object                              │
-│                    ││21:31:14Z pri_…dboetqnv4 effect.applied                                   exe_…6kedzsxt4   ││  a all actions                            │
-│                    ││21:31:14Z pri_…dboetqnv4 execution.heartbeat                              exe_…6kedzsx1/100││                                           │
+│  Overview        5 ││20:55:13Z pri_…ps7jbym7u execution.finished                               exe_…2wi6nclki   ││calve:38                                   │
+│  Work              ││20:55:13Z pri_…ps7jbym7u execution.failed                                 exe_…2wi6nclki   ││                                           │
+│  Change Graph      ││20:55:13Z pri_…ps7jbym7u observation.appended                             exe_…2wi6nclki   ││Time        1m ago · 2026-10-28 20:55:13   │
+│  ChangePacks       ││20:55:13Z pri_…ps7jbym7u execution.heartbeat                              exe_…2wi6nclki   ││UTC                                        │
+│  Baselines         ││20:55:07Z pri_…ps7jbym7u execution.heartbeat                              exe_…2wi6nclki   ││Actor       pri_agqyis3t7r2jrbvjvps7jbym7u │
+│  Evidence          ││20:55:07Z pri_…ps7jbym7u execution.running                                exe_…2wi6nclki   ││Source      calve                          │
+│› Events            ││20:55:07Z pri_…ps7jbym7u execution.starting                               exe_…2wi6nclki   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.admitted                               exe_…2wi6nclki   ││Objects                                    │
+│ SYSTEM             ││20:55:07Z pri_…ps7jbym7u object.imported                                  sha256:…693a1b   ││  → exe_agqyis4sgf62rnduh2wi6nclki         │
+│  Projects          ││20:55:07Z pri_…ps7jbym7u workunit.added                                   cpk_…ktjashkqa   ││Detail      FAILED                         │
+│  Inbox           2 ││20:55:07Z pri_…ps7jbym7u provider.registered                              org.cal….shell   ││                                           │
+│  Doctor            ││20:55:07Z pri_…ps7jbym7u pack.created                                     cpk_…ktjashkqa   ││Raw                                        │
+│  Extensions        ││20:55:07Z pri_…ps7jbym7u changepack.created                               cpk_…ktjashkqa   ││{                                          │
+│                    ││20:55:07Z pri_…ps7jbym7u changepack.quarantined                           cpk_…6ociavur4   ││  "actor":                                 │
+│                    ││20:55:07Z pri_…ps7jbym7u pack.created                                     cpk_…6ociavur4   ││"pri_agqyis3t7r2jrbvjvps7jbym7u",          │
+│                    ││20:55:07Z pri_…ps7jbym7u changepack.created                               cpk_…6ociavur4   ││  "body": null,                            │
+│                    ││20:55:07Z pri_…ps7jbym7u file.captured                                    rules.txt        ││  "detail": "FAILED",                      │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.succeeded                              exe_…c6chadsw4   ││  "id": "calve:38",                        │
+│                    ││20:55:07Z pri_…ps7jbym7u observation.appended                             exe_…c6chadsw4   ││  "kind": "execution.finished",            │
+│                    ││20:55:07Z pri_…ps7jbym7u observation.appended                             exe_…c6chadsw4   ││  "namespace_id":                          │
+│                    ││20:55:07Z pri_…ps7jbym7u effect.applied                                   exe_…c6chadsw4   ││"ns_agqyis3t7r5apiijzkq7p3cxbu",           │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.heartbeat                              exe_…c6chadsw4   ││  "project_id":                            │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.running                                exe_…c6chadsw4   ││"prj_01a1844b-73fe-743f-a1c8-6ecf760e529e",│
+│                    ││20:55:07Z pri_…ps7jbym7u execution.starting                               exe_…c6chadsw4   ││  "source": "calve",                       │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.admitted                               exe_…c6chadsw4   ││  "source_event_id": "38",                 │
+│                    ││20:55:07Z pri_…ps7jbym7u workunit.added                                   cpk_…i56xooe5y   ││  "source_sequence": 38,                   │
+│                    ││20:55:07Z pri_…ps7jbym7u provider.registered                              org.cal….local   ││  "subject":                               │
+│                    ││20:55:06Z pri_…ps7jbym7u pack.created                                     cpk_…i56xooe5y   ││"exe_agqyis4sgf62rnduh2wi6nclki",          │
+│                    ││20:55:06Z pri_…ps7jbym7u changepack.created                               cpk_…i56xooe5y   ││  "subjects": [                            │
+│                    ││20:55:06Z pri_…ps7jbym7u task.pack.linked                                 tsk_…3dcf1367f   ││    "exe_agqyis4sgf62rnduh2wi6nclki"       │
+│                    ││20:55:06Z pri_…ps7jbym7u review.recorded                                  cpk_…4sw3z77ba   ││  ],                                       │
+│                    ││20:55:06Z pri_…ps7jbym7u evidence.registered                              cpk_…4sw3z77ba   ││  "summary": "execution.finished           │
+│                    ││20:55:06Z pri_…ps7jbym7u changepack.sealed                                cpk_…4sw3z77ba   ││exe_agqyis4sgf62rnduh2wi6nclki",           │
+│                    ││20:55:06Z pri_…ps7jbym7u file.captured                                    crates/…mon.rs   ││  "timestamp":                             │
+│                    ││20:55:06Z pri_…ps7jbym7u execution.succeeded                              exe_…o654ie5ve   ││"2026-10-28T20:55:13.818668996Z"           │
+│                    ││20:55:06Z pri_…ps7jbym7u observation.appended                             exe_…o654ie5ve   ││}                                          │
+│                    ││20:55:06Z pri_…ps7jbym7u observation.appended                             exe_…o654ie5ve   ││                                           │
+│                    ││20:55:06Z pri_…ps7jbym7u effect.applied                                   exe_…o654ie5ve   ││Actions                                    │
+│                    ││20:55:06Z pri_…ps7jbym7u execution.heartbeat                              exe_…o654ie5ve   ││  Open object                              │
+│                    ││20:55:06Z pri_…ps7jbym7u execution.running                                exe_…o654ie51/100││  a all actions                            │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
  paused · f follow  ↑↓ navigate  / filter actor: type: object: after:  f live  ^P commands  : command  ? help

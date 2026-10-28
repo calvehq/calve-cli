@@ -1,7 +1,7 @@
  Calve  project: openaevc  workspace: main  Baselines   ● healthy                           v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Baselines ───────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ID               Label                 Packs  State               ││Baseline                    │
-│  Overview        5 ││bsl_…vzah4boca   staging               1      ✓ VALID     active  ││bsl_…shn4crvzah4boca        │
+│  Overview        5 ││bsl_…fth57jjam   staging               1      ✓ VALID     active  ││bsl_…3lnykofth57jjam        │
 │  Work              ││                                                                  ││staging                     │
 │  Change Graph      ││                                                                  ││                            │
 │  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │

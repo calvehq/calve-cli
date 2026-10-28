@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 # Builds a realistic demo Project through the public CLI and records every read model the
-# console requests into console.json. Re-run after read-model changes:
-#   cargo build --workspace && crates/calve-console/tests/fixtures/generate.sh
+# console requests into console.json. Extensions come from the first-party signed catalog:
+# set CALVE_CATALOG_ADD as for examples/lib.sh (e.g. via ~/calve-scripts/xrepo.sh). Re-run
+# after read-model changes:
+#   cargo build -p calve && CALVE_CATALOG_ADD=... crates/calve-console/tests/fixtures/generate.sh
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../../.." && pwd)"
 bin="$root/target/debug"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+trap 'chmod -R u+w "$work"; rm -rf "$work"' EXIT
 export XDG_DATA_HOME="$work/d" XDG_CONFIG_HOME="$work/c"
 p="$work/openaevc"
 calve() { "$bin/calve" --no-daemon-start --json --project "$p" "$@"; }
 field() { python3 -c "import json,sys; print(json.load(sys.stdin)['data']$1)"; }
 gen() { calve pack show "$1" | field '["generation"]'; }
 
+: "${CALVE_CATALOG_ADD:?set CALVE_CATALOG_ADD to the catalog add arguments, one per line}"
+mapfile -t catalog_args <<<"$CALVE_CATALOG_ADD"
+"$bin/calve" --no-daemon-start --json "${catalog_args[@]}" >/dev/null
 "$bin/calve" --no-daemon-start --json init "$p" --name openaevc >/dev/null
-calve extension enable >/dev/null
-calve extension enable org.langs.rust >/dev/null
+calve extension enable org.calve.software --acknowledge-native >/dev/null
+calve extension enable org.calve.rust --acknowledge-native >/dev/null
 
 http=$(calve intent create "HTTP conformance" --description "Validate OpenAEVC conformance over a remote HTTP transport." | field '["id"]')
 sdk=$(calve intent create "SDK compatibility" | field '["id"]')
@@ -92,7 +97,7 @@ def calve(*args):
     r = subprocess.run([bin_, "--no-daemon-start", "--json", "--project", proj, *args], capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit(f"{args}: {r.stderr}")
-    return json.loads(r.stdout)
+    return json.loads(r.stdout)["data"]
 data = {}
 def put(key, *args):
     data[key] = calve(*args)
@@ -112,7 +117,7 @@ put("doctor", "doctor")
 put("extensions", "extension", "list")
 put("extension-health", "extension", "health")
 put("extension-catalog", "extension", "search")
-for pack in data["packs"]:
+for pack in data["packs"]["items"]:
     pid = pack["id"]
     put(f"pack:{pid}", "view", "pack", pid)
     for f in data[f"pack:{pid}"]["files"]:

@@ -1,32 +1,32 @@
  Calve  project: openaevc  workspace: main  Overview   ● healthy                                                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Overview ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Needs attention ───────────────────────────────────────────────────────────────────────────││openaevc                                   │
-│› Overview        5 ││    Subject                                                                                ││prj_01a0ef13-e366-71a6-816c-8197620898db   │
-│  Work              ││×   exe_…kmvsvhf3a   Execution FAILED                                               1m     ││                                           │
-│  Change Graph      ││!   tsk_…c72093222   Daemon hardening is blocked                                    1m     ││ChangePacks 6                              │
-│  ChangePacks       ││◆   cpk_…x2ltg27pa   Add remote conformance runner awaits verification and review   1m     ││Intents     2                              │
-│  Baselines         ││◆   cpk_…ljusoarca   Fix daemon race condition awaits verification and review       1m     ││Baselines   1                              │
-│  Evidence          ││!   cpk_…7sqtlkoba   Pack is quarantined                                            1m     ││Attention   5                              │
+│› Overview        5 ││    Subject                                                                                ││prj_01a1844b-73fe-743f-a1c8-6ecf760e529e   │
+│  Work              ││×   exe_…2wi6nclki   Execution FAILED                                               1m     ││                                           │
+│  Change Graph      ││!   tsk_…3dcf1367f   Daemon hardening is blocked                                    1m     ││ChangePacks 6                              │
+│  ChangePacks       ││◆   cpk_…4sw3z77ba   Fix daemon race condition awaits verification and review       1m     ││Intents     2                              │
+│  Baselines         ││◆   cpk_…7ztd5yoxq   Add remote conformance runner awaits verification and review   1m     ││Baselines   1                              │
+│  Evidence          ││!   cpk_…6ociavur4   Pack is quarantined                                            1m     ││Attention   5                              │
 │  Events            ││                                                                                           ││                                           │
 │                    ││Active work ───────────────────────────────────────────────────────────────────────────────││                                           │
 │ SYSTEM             ││Intent                                                        Tasks   Packs  State         ││                                           │
-│  Projects          ││HTTP conformance                                              1/4     2      ! BLOCKED     ││                                           │
-│  Inbox           2 ││SDK compatibility                                             0/1     1      ● RUNNING     ││                                           │
+│  Projects          ││SDK compatibility                                             0/1     1      ● RUNNING     ││                                           │
+│  Inbox           2 ││HTTP conformance                                              1/4     2      ! BLOCKED     ││                                           │
 │  Doctor            ││                                                                                           ││                                           │
 │  Extensions        ││Recent activity ───────────────────────────────────────────────────────────────────────────││                                           │
 │                    ││Time      Actor          Event                                            Object           ││                                           │
-│                    ││21:31:21Z calve          execution.finished                               exe_…kmvsvhf3a   ││                                           │
-│                    ││21:31:21Z pri_…dboetqnv4 execution.failed                                 exe_…kmvsvhf3a   ││                                           │
-│                    ││21:31:20Z calve          pack.created                                     cpk_…byu3s65zi   ││                                           │
-│                    ││21:31:20Z pri_…dboetqnv4 changepack.created                               cpk_…byu3s65zi   ││                                           │
-│                    ││21:31:19Z pri_…dboetqnv4 changepack.quarantined                           cpk_…7sqtlkoba   ││                                           │
-│                    ││21:31:19Z calve          pack.created                                     cpk_…7sqtlkoba   ││                                           │
-│                    ││21:31:18Z pri_…dboetqnv4 changepack.created                               cpk_…7sqtlkoba   ││                                           │
-│                    ││21:31:18Z calve          file.captured                                    rules.txt        ││                                           │
-│                    ││21:31:18Z pri_…dboetqnv4 execution.succeeded                              exe_…z2zkohuja   ││                                           │
-│                    ││21:31:17Z pri_…dboetqnv4 effect.applied                                   exe_…z2zkohuja   ││                                           │
-│                    ││21:31:17Z calve          pack.created                                     cpk_…z75ayzoee   ││                                           │
-│                    ││21:31:16Z pri_…dboetqnv4 changepack.created                               cpk_…z75ayzoee   ││                                           │
+│                    ││20:55:13Z pri_…ps7jbym7u execution.finished                               exe_…2wi6nclki   ││                                           │
+│                    ││20:55:13Z pri_…ps7jbym7u execution.failed                                 exe_…2wi6nclki   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u object.imported                                  sha256:…693a1b   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u pack.created                                     cpk_…ktjashkqa   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u changepack.created                               cpk_…ktjashkqa   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u changepack.quarantined                           cpk_…6ociavur4   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u pack.created                                     cpk_…6ociavur4   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u changepack.created                               cpk_…6ociavur4   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u file.captured                                    rules.txt        ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u execution.succeeded                              exe_…c6chadsw4   ││                                           │
+│                    ││20:55:07Z pri_…ps7jbym7u effect.applied                                   exe_…c6chadsw4   ││                                           │
+│                    ││20:55:06Z pri_…ps7jbym7u pack.created                                     cpk_…i56xooe5y   ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

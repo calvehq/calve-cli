@@ -1,30 +1,30 @@
  Calve  project: openaevc  workspace: main  Overview   ● healthy        v0.1.0  ^P Commands  ? Help
 ┌ Overview ──────────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
 │Needs attention ────────────────────────────────────────────││openaevc                            │
-│    Subject                                                 ││prj_01a0ef13-e366-71a6-816c-81976208│
-│×   exe_…kmvsvhf3a   Execution FAILED                1m     ││98db                                │
-│!   tsk_…c72093222   Daemon hardening is blocked     1m     ││                                    │
-│◆   cpk_…x2ltg27pa   Add remote conformance runner … 1m     ││ChangePacks 6                       │
-│◆   cpk_…ljusoarca   Fix daemon race condition awai… 1m     ││Intents     2                       │
-│!   cpk_…7sqtlkoba   Pack is quarantined             1m     ││Baselines   1                       │
+│    Subject                                                 ││prj_01a1844b-73fe-743f-a1c8-6ecf760e│
+│×   exe_…2wi6nclki   Execution FAILED                1m     ││529e                                │
+│!   tsk_…3dcf1367f   Daemon hardening is blocked     1m     ││                                    │
+│◆   cpk_…4sw3z77ba   Fix daemon race condition awai… 1m     ││ChangePacks 6                       │
+│◆   cpk_…7ztd5yoxq   Add remote conformance runner … 1m     ││Intents     2                       │
+│!   cpk_…6ociavur4   Pack is quarantined             1m     ││Baselines   1                       │
 │                                                            ││Attention   5                       │
 │Active work ────────────────────────────────────────────────││                                    │
 │Intent                         Tasks   Packs  State         ││                                    │
-│HTTP conformance               1/4     2      ! BLOCKED     ││                                    │
 │SDK compatibility              0/1     1      ● RUNNING     ││                                    │
+│HTTP conformance               1/4     2      ! BLOCKED     ││                                    │
 │                                                            ││                                    │
 │Recent activity ────────────────────────────────────────────││                                    │
 │Time      Actor          Event                              ││                                    │
-│21:31:21Z calve          execution.finished                 ││                                    │
-│21:31:21Z pri_…dboetqnv4 execution.failed                   ││                                    │
-│21:31:20Z calve          pack.created                       ││                                    │
-│21:31:20Z pri_…dboetqnv4 changepack.created                 ││                                    │
-│21:31:19Z pri_…dboetqnv4 changepack.quarantined             ││                                    │
-│21:31:19Z calve          pack.created                       ││                                    │
-│21:31:18Z pri_…dboetqnv4 changepack.created                 ││                                    │
-│21:31:18Z calve          file.captured                      ││                                    │
-│21:31:18Z pri_…dboetqnv4 execution.succeeded                ││                                    │
-│21:31:17Z pri_…dboetqnv4 effect.applied                     ││                                    │
-│21:31:17Z calve          pack.created                   1/19││                                    │
+│20:55:13Z pri_…ps7jbym7u execution.finished                 ││                                    │
+│20:55:13Z pri_…ps7jbym7u execution.failed                   ││                                    │
+│20:55:07Z pri_…ps7jbym7u object.imported                    ││                                    │
+│20:55:07Z pri_…ps7jbym7u pack.created                       ││                                    │
+│20:55:07Z pri_…ps7jbym7u changepack.created                 ││                                    │
+│20:55:07Z pri_…ps7jbym7u changepack.quarantined             ││                                    │
+│20:55:07Z pri_…ps7jbym7u pack.created                       ││                                    │
+│20:55:07Z pri_…ps7jbym7u changepack.created                 ││                                    │
+│20:55:07Z pri_…ps7jbym7u file.captured                      ││                                    │
+│20:55:07Z pri_…ps7jbym7u execution.succeeded                ││                                    │
+│20:55:07Z pri_…ps7jbym7u effect.applied                 1/19││                                    │
 └────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

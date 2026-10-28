@@ -1,6 +1,6 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqo6fbfbv2tzhmigx2ltg27pa ───────────────────────┐┌ Inspector ─────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…fbv2tzhmigx2ltg27pa    │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqyis4a7b5ylj3hs7ztd5yoxq ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  ││cpk_…a7b5ylj3hs7ztd5yoxq    │
 │  Overview        5 ││                                                                  ││Add remote conformance      │
 │  Work              ││Review      ◆ WAITING                                             ││runner                      │
 │  Change Graph      ││Required    yes, by pack policy                                   ││                            │
@@ -14,7 +14,7 @@
 │  Inbox           2 ││×│Comment                                                               │                       │
 │  Doctor            ││ │>                                                                     │t                      │
 │  Extensions        ││r│                                                                      │conformance            │
-│                    ││ │Binds to generation 2 of cpk_…tzhmigx2ltg27pa                         │                       │
+│                    ││ │Binds to generation 2 of cpk_…ylj3hs7ztd5yoxq                         │                       │
 │                    ││ │tab field  ↑↓/space choose  ctrl+s or enter (on comment) submit  esc  │mote: missing: approved│
 │                    ││ └──────────────────────────────────────────────────────────────────────┘w                      │
 │                    ││                                                                  ││x explain                   │

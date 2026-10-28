@@ -69,6 +69,8 @@ pub struct Table {
     pub empty: (String, String),
     /// Quick state chips shown above the table (ChangePacks).
     pub chips: Vec<(String, usize)>,
+    /// Rows in the whole collection when only some pages are loaded.
+    pub total: Option<usize>,
 }
 
 pub struct GraphNode {
@@ -103,7 +105,13 @@ pub struct Screen {
     pub hints: Vec<(&'static str, &'static str)>,
     pub actions: Vec<PaletteItem>,
     pub explain: Option<(String, Vec<(Tone, String)>)>,
+    /// What Enter opens for a selected row that has no screen of its own (check, receipt,
+    /// event detail).
+    pub detail: Option<Detail>,
 }
+
+/// A titled explanation or detail overlay's content.
+pub type Detail = (String, Vec<(Tone, String)>);
 
 impl Screen {
     fn new(body: Body) -> Self {
@@ -113,6 +121,7 @@ impl Screen {
             hints: Vec::new(),
             actions: Vec::new(),
             explain: None,
+            detail: None,
         }
     }
 }
@@ -558,6 +567,7 @@ fn overview(app: &App) -> Screen {
             "Create an intent and a ChangePack to begin.".into(),
         ),
         chips: vec![],
+        total: None,
     }));
     screen.inspector = vec![
         heading(app, str_of(&value["project"], "name")),
@@ -737,6 +747,7 @@ fn work(app: &App) -> Screen {
             "Create one with :intent create \"goal\".".into(),
         ),
         chips: vec![],
+        total: None,
     }));
     let selected = selected_row_id(app, "work");
     if let Some(task) =
@@ -896,6 +907,7 @@ fn task(app: &App, id: &str) -> Screen {
                     "Link one with :task link-execution.".into(),
                 ),
                 chips: vec![],
+                total: None,
             })
         }
         Some("Raw") => Body::Text(raw_lines(app, value)),
@@ -1039,6 +1051,16 @@ fn execution(app: &App, id: &str) -> Screen {
     screen
 }
 
+/// A record's stable row id: its digest, id or sequence; the position only as a last resort.
+fn row_key(entry: &Value, index: usize) -> String {
+    entry["digest"]
+        .as_str()
+        .or(entry["id"].as_str())
+        .map(str::to_owned)
+        .or_else(|| entry["sequence"].as_u64().map(|n| n.to_string()))
+        .unwrap_or_else(|| index.to_string())
+}
+
 /// Generic table for low-frequency objects (§81–82).
 fn table_body(
     app: &App,
@@ -1064,11 +1086,7 @@ fn table_body(
         .flatten()
         .enumerate()
         .map(|(index, entry)| Row {
-            id: entry["digest"]
-                .as_str()
-                .or(entry["id"].as_str())
-                .map(str::to_owned)
-                .unwrap_or_else(|| index.to_string()),
+            id: row_key(entry, index),
             cells: fields
                 .iter()
                 .map(|(key, _)| {
@@ -1105,6 +1123,7 @@ fn table_body(
         }],
         empty: (empty.to_owned(), String::new()),
         chips: vec![],
+        total: None,
     })
 }
 
@@ -1249,23 +1268,28 @@ fn change_graph(app: &App) -> Screen {
 }
 
 fn packs(app: &App) -> Screen {
-    let value = match status_or(app, "packs", "ChangePacks") {
+    let first = match status_or(app, "packs", "ChangePacks") {
         Ok(value) => value,
         Err(screen) => return *screen,
     };
-    let all = value.as_array().cloned().unwrap_or_default();
-    let count = |state: &str| all.iter().filter(|p| p["state"] == state).count();
+    // Keyset pages, newest first; counts come from the pack index, not the loaded rows.
+    let pages = app.pages("packs");
+    let counts = &first["counts"];
+    let count = |state: &str| counts[state].as_u64().unwrap_or(0) as usize;
+    let total: usize = counts.as_object().map_or(0, |c| {
+        c.values().filter_map(Value::as_u64).sum::<u64>() as usize
+    });
     let chips = vec![
-        ("All".into(), all.len()),
+        ("All".into(), total),
         ("Open".into(), count("OPEN")),
         ("Sealed".into(), count("SEALED")),
         ("Qualified".into(), count("QUALIFIED")),
         ("Promoted".into(), count("PROMOTED")),
         ("Quarantined".into(), count("QUARANTINED")),
     ];
-    let rows: Vec<Row> = all
+    let rows: Vec<Row> = pages
+        .items
         .iter()
-        .rev()
         .map(|pack| {
             let id = str_of(pack, "id");
             Row {
@@ -1308,6 +1332,7 @@ fn packs(app: &App) -> Screen {
                 .into(),
         ),
         chips,
+        total: pages.next.is_some().then_some(total),
     }));
     if let Some(id) = selected_row_id(app, "packs") {
         match app.value(&format!("pack:{id}")) {
@@ -1446,66 +1471,7 @@ fn pack(app: &App, id: &str) -> Screen {
     let tab = app.tab_name().unwrap_or("Summary");
     let body = match tab {
         "Diff" => Body::Diff,
-        "Verify" => {
-            let rows: Vec<Row> = value["verifications"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(|v| {
-                    let findings = v["findings"].as_array().map_or(0, Vec::len);
-                    Row {
-                        id: str_of(v, "digest").to_owned(),
-                        cells: vec![
-                            plain(app, label(str_of(v, "verifier"))),
-                            state_cell(app, str_of(v, "status")),
-                            muted(
-                                app,
-                                if findings == 0 {
-                                    "no findings".to_owned()
-                                } else {
-                                    format!("{findings} findings")
-                                },
-                            ),
-                            muted(
-                                app,
-                                if v["current"] == true {
-                                    "current".to_owned()
-                                } else {
-                                    format!("gen {}", v["generation"])
-                                },
-                            ),
-                            age_cell(app, &v["at"]),
-                        ],
-                        copy: None,
-                        tab: None,
-                        open: None,
-                        search: search(&[
-                            ("text", str_of(v, "verifier")),
-                            ("status", str_of(v, "status")),
-                        ]),
-                    }
-                })
-                .collect();
-            Body::Table(Table {
-                key: format!("verify:{id}"),
-                sections: vec![Section {
-                    title: None,
-                    columns: vec![
-                        fill("Check", 18, 1),
-                        col("Status", 16, 1),
-                        col("Output", 14, 2),
-                        col("Generation", 11, 3),
-                        col("When", 6, 2),
-                    ],
-                    rows,
-                }],
-                empty: (
-                    "No verification has run for this pack.".into(),
-                    "Seal the pack, then run verification or language checks from Actions.".into(),
-                ),
-                chips: vec![],
-            })
-        }
+        "Verify" => verify_body(app, id, value),
         "Risk" => {
             let rows = value["evaluations"].clone();
             table_body(
@@ -1521,18 +1487,7 @@ fn pack(app: &App, id: &str) -> Screen {
                 "No evaluations recorded. Risk is shown only when an evaluator reports it.",
             )
         }
-        "Evidence" => table_body(
-            app,
-            format!("evidence:{id}"),
-            &value["evidence"]["items"],
-            &[
-                ("kind", "Type"),
-                ("media_type", "Media"),
-                ("digest", "Digest"),
-                ("stale", "Stale"),
-            ],
-            "No evidence is attached to this ChangePack.",
-        ),
+        "Evidence" => evidence_tab(app, id, value),
         "Review" => {
             let mut lines = Vec::new();
             let reviews = value["reviews"].as_array().cloned().unwrap_or_default();
@@ -1641,8 +1596,40 @@ fn pack(app: &App, id: &str) -> Screen {
     };
     let mut screen = Screen::new(body);
     screen.inspector = pack_inspector(app, value);
-    if tab == "Diff" {
-        screen.inspector = diff_inspector(app, id, value);
+    match tab {
+        "Diff" => screen.inspector = diff_inspector(app, id, value),
+        "Verify" => {
+            let (inspector, detail) = verify_inspector(app, id, value);
+            screen.inspector = inspector;
+            screen.detail = detail;
+        }
+        "Evidence" => {
+            if let Some(selected) = selected_row_id(app, &format!("evidence:{id}"))
+                && let Some(e) = value["evidence"]["items"]
+                    .as_array()
+                    .and_then(|v| v.iter().find(|e| e["digest"] == selected.as_str()))
+            {
+                let status = if e["stale"] == true { "STALE" } else { "VALID" };
+                screen.inspector = evidence_inspector(app, e, &e["evidence"], status);
+            }
+        }
+        "Receipts" | "Events" => {
+            let (key, list) = if tab == "Receipts" {
+                (format!("receipts:{id}"), &value["receipts"])
+            } else {
+                (format!("pack-events:{id}"), &value["events"])
+            };
+            if let Some(selected) = selected_row_id(app, &key)
+                && let Some((_, entry)) = list.as_array().and_then(|v| {
+                    v.iter()
+                        .enumerate()
+                        .find(|(i, e)| row_key(e, *i) == selected)
+                })
+            {
+                screen.detail = Some(record_detail(app, tab, entry));
+            }
+        }
+        _ => {}
     }
     screen.actions = backend_actions(value);
     screen.explain = Some(pack_explain(app, value));
@@ -1659,6 +1646,12 @@ fn pack(app: &App, id: &str) -> Screen {
             ("x", "explain"),
             ("a", "actions"),
             ("tab", "tabs"),
+        ],
+        "Verify" => vec![
+            ("↑↓", "select"),
+            ("enter", "details"),
+            ("r", "rerun"),
+            ("e", "evidence"),
         ],
         _ => vec![
             ("tab", "tabs"),
@@ -1779,6 +1772,358 @@ fn pack_summary(app: &App, pack: &Value) -> Vec<Line<'static>> {
         ));
     }
     lines
+}
+
+/// Seconds as `12.4s`, `3m 33s`, `1h 02m`.
+pub fn duration(seconds: f64) -> String {
+    let whole = seconds as u64;
+    match whole {
+        0..=59 => format!("{seconds:.1}s"),
+        60..=3599 => format!("{}m {:02}s", whole / 60, whole % 60),
+        _ => format!("{}h {:02}m", whole / 3600, whole % 3600 / 60),
+    }
+}
+
+/// Completed checks plus the ones still running, in a fixed name order so rows never jump
+/// as checks finish (§34, §34.2).
+fn verify_body(app: &App, id: &str, value: &Value) -> Body {
+    let mut rows: Vec<(String, Row)> = Vec::new();
+    for v in value["verifications"].as_array().into_iter().flatten() {
+        let findings = v["findings"].as_array().map_or(0, Vec::len);
+        let name = label(str_of(v, "verifier"));
+        rows.push((
+            name.clone(),
+            Row {
+                id: str_of(v, "digest").to_owned(),
+                cells: vec![
+                    plain(app, &name),
+                    state_cell(app, str_of(v, "status")),
+                    muted(
+                        app,
+                        if findings == 0 {
+                            "no findings".to_owned()
+                        } else {
+                            format!("{findings} findings")
+                        },
+                    ),
+                    // The verifier records no start or end, so no duration is invented.
+                    muted(app, "—"),
+                    muted(
+                        app,
+                        if v["current"] == true {
+                            "current".to_owned()
+                        } else {
+                            format!("gen {}", v["generation"])
+                        },
+                    ),
+                    age_cell(app, &v["at"]),
+                ],
+                copy: Some(str_of(v, "digest").to_owned()),
+                tab: None,
+                open: None,
+                search: search(&[
+                    ("text", str_of(v, "verifier")),
+                    ("status", str_of(v, "status")),
+                ]),
+            },
+        ));
+    }
+    for e in value["running"].as_array().into_iter().flatten() {
+        let name = label(str_of(e, "harness"));
+        let elapsed = unix_seconds(&e["started_at"])
+            .map(|t| duration((app.now - t).max(0) as f64))
+            .unwrap_or_else(|| "—".into());
+        rows.push((
+            name.clone(),
+            Row {
+                id: str_of(e, "id").to_owned(),
+                cells: vec![
+                    plain(app, &name),
+                    state_cell(app, str_of(e, "state")),
+                    muted(app, str_of(e, "provider")),
+                    muted(app, elapsed),
+                    muted(app, "current"),
+                    age_cell(app, &e["started_at"]),
+                ],
+                copy: None,
+                tab: None,
+                open: Some(Route::Execution(str_of(e, "id").to_owned())),
+                search: search(&[
+                    ("text", str_of(e, "harness")),
+                    ("status", str_of(e, "state")),
+                ]),
+            },
+        ));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    Body::Table(Table {
+        key: format!("verify:{id}"),
+        sections: vec![Section {
+            title: None,
+            columns: vec![
+                fill("Check", 18, 1),
+                col("Status", 16, 1),
+                col("Output", 14, 2),
+                col("Duration", 9, 2),
+                col("Generation", 11, 3),
+                col("When", 6, 4),
+            ],
+            rows: rows.into_iter().map(|(_, r)| r).collect(),
+        }],
+        empty: (
+            "No verification has run for this pack.".into(),
+            "Seal the pack, then run verification or language checks from Actions.".into(),
+        ),
+        chips: vec![],
+        total: None,
+    })
+}
+
+/// Verification summary (§34) and the selected check's detail (§34.1).
+fn verify_inspector(app: &App, id: &str, pack: &Value) -> (Vec<Line<'static>>, Option<Detail>) {
+    let current: Vec<&Value> = pack["verifications"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|v| v["current"] == true)
+        .collect();
+    let passed = current.iter().filter(|v| v["status"] == "PASS").count();
+    let running = pack["running"].as_array().map_or(0, Vec::len);
+    let mut lines = vec![heading(app, "Verification summary"), blank()];
+    lines.push(if current.is_empty() {
+        muted_line(app, "No current checks")
+    } else if passed == current.len() {
+        toned(app, Tone::Success, "All checks passed")
+    } else {
+        toned(
+            app,
+            Tone::Danger,
+            format!("{} checks failing", current.len() - passed),
+        )
+    });
+    lines.push(text_line(
+        app,
+        format!("{passed} / {} checks", current.len()),
+    ));
+    if running > 0 {
+        lines.push(toned(app, Tone::Running, format!("{running} running")));
+    }
+    if let Some(last) = current.iter().filter_map(|v| v["at"].as_str()).max() {
+        lines.push(field(app, "Last run", exact(app, &Value::from(last))));
+    }
+    let selected = selected_row_id(app, &format!("verify:{id}"));
+    let check = selected.as_deref().and_then(|d| {
+        pack["verifications"]
+            .as_array()?
+            .iter()
+            .find(|v| v["digest"] == d)
+    });
+    let Some(v) = check else {
+        return (lines, None);
+    };
+    let mut detail = vec![
+        (
+            Tone::Neutral,
+            format!("Check       {}", str_of(v, "verifier")),
+        ),
+        (
+            state_tone(str_of(v, "status")),
+            format!("Status      {}", str_of(v, "status")),
+        ),
+        (
+            Tone::Neutral,
+            format!(
+                "Generation  {}{}",
+                v["generation"],
+                if v["current"] == true {
+                    " (current)"
+                } else {
+                    " (earlier candidate)"
+                }
+            ),
+        ),
+        (
+            Tone::Neutral,
+            format!("Completed   {}", exact(app, &v["at"])),
+        ),
+        (
+            Tone::Neutral,
+            "Duration    not recorded by the verifier".into(),
+        ),
+        (
+            Tone::Neutral,
+            format!("Record      {}", str_of(v, "digest")),
+        ),
+        (Tone::Neutral, String::new()),
+        (Tone::Neutral, "Findings".into()),
+    ];
+    let findings = v["findings"].as_array().cloned().unwrap_or_default();
+    if findings.is_empty() {
+        detail.push((Tone::Success, "none".into()));
+    }
+    for finding in findings {
+        detail.push((Tone::Warning, scalar(&finding)));
+    }
+    detail.push((Tone::Neutral, String::new()));
+    detail.push((Tone::Neutral, "Evidence produced".into()));
+    match v["evidence"].as_array().filter(|e| !e.is_empty()) {
+        Some(evidence) => detail.extend(evidence.iter().map(|e| (Tone::Neutral, scalar(e)))),
+        None => detail.push((Tone::Neutral, "none recorded".into())),
+    }
+    detail.push((Tone::Neutral, String::new()));
+    detail.push((
+        Tone::Neutral,
+        if pack["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|a| a["id"] == "verify")
+        {
+            "r rerun verification".into()
+        } else {
+            "Rerun is not available in this state.".into()
+        },
+    ));
+    lines.push(blank());
+    lines.push(heading(app, label(str_of(v, "verifier"))));
+    lines.push(field_state(app, "Status", str_of(v, "status")));
+    lines.push(muted_line(app, "enter details"));
+    (lines, Some((label(str_of(v, "verifier")), detail)))
+}
+
+/// Evidence grouped by purpose with the requirement tally (§36).
+fn evidence_tab(app: &App, id: &str, pack: &Value) -> Body {
+    let group = |kind: &str| {
+        let kind = kind.to_lowercase();
+        if kind.contains("review") || kind.contains("approval") || kind.contains("rejection") {
+            "Review"
+        } else if kind.contains("verif") || kind.contains("check") || kind.contains("test") {
+            "Verification"
+        } else {
+            "Artifacts"
+        }
+    };
+    let items = pack["evidence"]["items"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let satisfied = pack["explain"]["satisfied"].as_array().map_or(0, Vec::len);
+    let missing = pack["explain"]["missing"].as_array().map_or(0, Vec::len);
+    let mut sections = Vec::new();
+    for name in ["Verification", "Artifacts", "Review"] {
+        let rows: Vec<Row> = items
+            .iter()
+            .filter(|e| group(str_of(&e["evidence"], "kind")) == name)
+            .map(|e| {
+                let body = &e["evidence"];
+                let stale = e["stale"] == true;
+                Row {
+                    id: str_of(e, "digest").to_owned(),
+                    cells: vec![
+                        id_cell(app, str_of(body, "id")),
+                        plain(app, label(str_of(body, "kind"))),
+                        state_cell(app, if stale { "STALE" } else { "VALID" }),
+                        age_cell(app, &body["created_at"]),
+                    ],
+                    copy: Some(str_of(e, "digest").to_owned()),
+                    tab: None,
+                    open: None,
+                    search: search(&[
+                        ("type", str_of(body, "kind")),
+                        ("status", if stale { "stale" } else { "valid" }),
+                        ("digest", str_of(e, "digest")),
+                    ]),
+                }
+            })
+            .collect();
+        if !rows.is_empty() {
+            sections.push(Section {
+                title: Some(name.into()),
+                columns: vec![
+                    col("ID", 16, 1),
+                    fill("Type", 18, 1),
+                    col("Status", 11, 1),
+                    col("Created", 8, 2),
+                ],
+                rows,
+            });
+        }
+    }
+    if !sections.is_empty() {
+        sections[0].title = Some(format!(
+            "Required {satisfied} / {} satisfied · {}",
+            satisfied + missing,
+            sections[0].title.clone().unwrap_or_default()
+        ));
+    }
+    Body::Table(Table {
+        key: format!("evidence:{id}"),
+        sections,
+        empty: (
+            "No evidence is attached to this ChangePack.".into(),
+            format!("Required {satisfied} / {} satisfied.", satisfied + missing),
+        ),
+        chips: vec![],
+        total: None,
+    })
+}
+
+/// Receipt (§38) or event detail behind Enter.
+fn record_detail(app: &App, tab: &str, entry: &Value) -> (String, Vec<(Tone, String)>) {
+    let mut lines = Vec::new();
+    if tab == "Receipts" {
+        lines.push((
+            Tone::Neutral,
+            format!("Command   {}", str_of(entry, "command")),
+        ));
+        lines.push((
+            Tone::Neutral,
+            format!("Actor     {}", str_of(entry, "caller")),
+        ));
+        lines.push((
+            Tone::Neutral,
+            format!("Time      {}", exact(app, &entry["at"])),
+        ));
+        lines.push((
+            Tone::Neutral,
+            format!("Receipt   {}", str_of(entry, "digest")),
+        ));
+        lines.push((Tone::Neutral, String::new()));
+        lines.push((Tone::Neutral, "Result".into()));
+    } else {
+        lines.push((
+            Tone::Neutral,
+            format!("Event     {}", str_of(entry, "kind")),
+        ));
+        lines.push((
+            Tone::Neutral,
+            format!("Actor     {}", entry["actor"].as_str().unwrap_or("—")),
+        ));
+        lines.push((
+            Tone::Neutral,
+            format!("Time      {}", exact(app, &entry["at"])),
+        ));
+        lines.push((Tone::Neutral, format!("Sequence  {}", entry["sequence"])));
+        lines.push((Tone::Neutral, String::new()));
+        lines.push((Tone::Neutral, "Body".into()));
+    }
+    let raw = if tab == "Receipts" {
+        &entry["result"]
+    } else {
+        &entry["body"]
+    };
+    for line in serde_json::to_string_pretty(raw)
+        .unwrap_or_default()
+        .lines()
+    {
+        lines.push((Tone::Neutral, format!("  {}", text::line(line))));
+    }
+    let title = if tab == "Receipts" {
+        format!("Receipt · {}", str_of(entry, "command"))
+    } else {
+        format!("Event · {}", str_of(entry, "kind"))
+    };
+    (title, lines)
 }
 
 fn diff_inspector(app: &App, id: &str, pack: &Value) -> Vec<Line<'static>> {
@@ -1904,6 +2249,7 @@ fn baselines(app: &App) -> Screen {
         }],
         empty: ("No Baselines yet.".into(), "A Baseline is an independent composition of promoted ChangePacks. Create one with :baseline create <label> <promoted digest…>.".into()),
         chips: vec![],
+        total: None,
     }));
     if let Some(id) = selected_row_id(app, "baselines") {
         match app.value(&format!("baseline:{id}")) {
@@ -2054,6 +2400,7 @@ fn baseline(app: &App, id: &str) -> Screen {
                 }],
                 empty: ("This Baseline has no members.".into(), String::new()),
                 chips: vec![],
+                total: None,
             })
         }
         "Relations" => table_body(
@@ -2083,6 +2430,7 @@ fn baseline(app: &App, id: &str) -> Screen {
                         String::new(),
                     ),
                     chips: vec![],
+                    total: None,
                 })
             }
             None => Body::Status {
@@ -2226,62 +2574,58 @@ fn baseline_explain(app: &App, value: &Value) -> (String, Vec<(Tone, String)>) {
 }
 
 fn evidence(app: &App) -> Screen {
-    let value = match status_or(app, "evidence", "evidence") {
-        Ok(value) => value,
-        Err(screen) => return *screen,
-    };
-    let rows: Vec<Row> = value
-        .as_array()
-        .into_iter()
-        .flatten()
+    if let Err(screen) = status_or(app, "evidence", "evidence") {
+        return *screen;
+    }
+    let pages = app.pages("evidence");
+    let status = |e: &Value| if e["stale"] == true { "STALE" } else { "VALID" };
+    let rows: Vec<Row> = pages
+        .items
+        .iter()
         .map(|e| {
             let digest = str_of(e, "digest");
+            let body = &e["evidence"];
+            let attached = e["pack_title"].as_str().unwrap_or(str_of(e, "pack"));
             Row {
                 id: digest.to_owned(),
                 cells: vec![
-                    muted(app, text::middle(digest, 20, app.symbols.ellipsis())),
-                    plain(app, label(str_of(e, "kind"))),
-                    plain(app, e["pack_title"].as_str().unwrap_or("")),
-                    state_cell(
+                    id_cell(app, str_of(body, "id")),
+                    plain(app, label(str_of(body, "kind"))),
+                    muted(
                         app,
-                        if e["stale"] == true {
-                            "STALE"
-                        } else {
-                            "CURRENT"
-                        },
+                        text::short_id(str_of(body, "producer"), 14, app.symbols.ellipsis()),
                     ),
-                    muted(app, str_of(e, "media_type")),
+                    plain(app, attached),
+                    state_cell(app, status(e)),
+                    age_cell(app, &body["created_at"]),
                 ],
                 copy: None,
                 tab: None,
                 open: e["pack"].as_str().map(|p| Route::ChangePack(p.to_owned())),
                 search: search(&[
                     ("digest", digest),
-                    ("type", str_of(e, "kind")),
-                    ("attached", str_of(e, "pack")),
-                    (
-                        "status",
-                        if e["stale"] == true {
-                            "stale"
-                        } else {
-                            "current"
-                        },
-                    ),
-                    ("text", e["pack_title"].as_str().unwrap_or("")),
+                    ("id", str_of(body, "id")),
+                    ("type", str_of(body, "kind")),
+                    ("producer", str_of(body, "producer")),
+                    ("attached", &format!("{} {attached}", str_of(e, "pack"))),
+                    ("status", status(e)),
+                    ("created", str_of(body, "created_at")),
+                    ("text", attached),
                 ]),
             }
         })
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
-        key: "evidence-all".into(),
+        key: "evidence".into(),
         sections: vec![Section {
             title: None,
             columns: vec![
-                col("Digest", 20, 1),
+                col("ID", 16, 1),
                 fill("Type", 16, 1),
+                col("Producer", 14, 3),
                 col("Attached to", 20, 2),
                 col("Status", 11, 1),
-                col("Media", 18, 4),
+                col("Created", 8, 2),
             ],
             rows,
         }],
@@ -2290,39 +2634,73 @@ fn evidence(app: &App) -> Screen {
             "Evidence is registered against sealed candidates by checks, reviews and tools.".into(),
         ),
         chips: vec![],
+        total: None,
     }));
-    if let Some(id) = selected_row_id(app, "evidence-all")
-        && let Some(e) = value
-            .as_array()
-            .and_then(|v| v.iter().find(|e| e["digest"] == id.as_str()))
+    if let Some(id) = selected_row_id(app, "evidence")
+        && let Some(e) = pages.items.iter().find(|e| e["digest"] == id.as_str())
     {
-        screen.inspector = vec![
-            heading(app, "Evidence"),
-            muted_line(app, text::middle(&id, 40, app.symbols.ellipsis())),
-            blank(),
-            field(app, "Type", label(str_of(e, "kind"))),
-            field(app, "Media", str_of(e, "media_type")),
-            field(app, "Generation", e["generation"].to_string()),
-            field_state(
+        screen.inspector = evidence_inspector(app, e, &e["evidence"], status(e));
+        // Reverse references (§41): every event naming this digest, from the event index.
+        screen.inspector.push(blank());
+        screen.inspector.push(heading(app, "Used by"));
+        match app
+            .value(&format!("evidence-refs:{id}"))
+            .and_then(Value::as_array)
+        {
+            Some(refs) => {
+                for r in refs.iter().filter(|r| r["kind"] != "evidence.registered") {
+                    screen.inspector.push(muted_line(
+                        app,
+                        format!("  {} {}", str_of(r, "kind"), str_of(r, "subject")),
+                    ));
+                }
+                if refs.iter().all(|r| r["kind"] == "evidence.registered") {
+                    screen
+                        .inspector
+                        .push(muted_line(app, "  no other references"));
+                }
+            }
+            None => screen.inspector.push(muted_line(
                 app,
-                "Status",
-                if e["stale"] == true {
-                    "STALE"
-                } else {
-                    "CURRENT"
-                },
-            ),
-            blank(),
-            heading(app, "Used by"),
-            muted_line(app, format!("  {}", e["pack_title"].as_str().unwrap_or(""))),
-        ];
+                format!("  Loading{}", app.symbols.ellipsis()),
+            )),
+        }
         screen.actions.push(item(
             "Show evidence",
             "evidence show",
             run("Evidence", &["evidence", "show", &id], false),
         ));
     }
+    screen.hints = vec![
+        ("↑↓", "navigate"),
+        ("enter", "open pack"),
+        ("/", "filter type: producer: attached: status: created:"),
+    ];
     screen
+}
+
+/// Evidence detail shared by the Evidence screen and the ChangePack Evidence tab (§36).
+fn evidence_inspector(app: &App, row: &Value, body: &Value, status: &str) -> Vec<Line<'static>> {
+    vec![
+        heading(app, format!("Evidence {}", str_of(body, "id"))),
+        blank(),
+        field(app, "Type", label(str_of(body, "kind"))),
+        field(
+            app,
+            "Digest",
+            text::middle(str_of(row, "digest"), 30, app.symbols.ellipsis()),
+        ),
+        field(app, "Created", exact(app, &body["created_at"])),
+        field(app, "Producer", str_of(body, "producer")),
+        field(app, "Media", str_of(body, "media_type")),
+        field(
+            app,
+            "Attached to",
+            row["pack_title"].as_str().unwrap_or(str_of(body, "pack")),
+        ),
+        field(app, "Generation", body["generation"].to_string()),
+        field_state(app, "Status", status),
+    ]
 }
 
 fn events(app: &App) -> Screen {
@@ -2345,6 +2723,7 @@ fn events(app: &App) -> Screen {
         }],
         empty: ("No events yet.".into(), String::new()),
         chips: vec![],
+        total: None,
     }));
     if let Some(id) = selected_row_id(app, "events")
         && let Some(e) = value
@@ -2492,6 +2871,7 @@ fn projects(app: &App) -> Screen {
         }],
         empty,
         chips: vec![],
+        total: None,
     }));
     let register = item(
         "Register",
@@ -2633,6 +3013,7 @@ fn inbox(app: &App) -> Screen {
         sections: vec![Section { title: None, columns: vec![col("Severity", 11, 1), col("Type", 18, 2), fill("Message", 20, 1), col("", 4, 3), col("Age", 6, 2)], rows }],
         empty: ("Inbox is clear.".into(), "Attention items appear when executions fail, packs are quarantined or reviews go stale.".into()),
         chips: vec![],
+        total: None,
     }));
     let marked: Vec<String> = app
         .collections
@@ -2765,6 +3146,7 @@ fn doctor(app: &App) -> Screen {
         }],
         empty: ("No diagnostics.".into(), String::new()),
         chips: vec![],
+        total: None,
     }));
     let index = app
         .collections
@@ -2914,6 +3296,7 @@ fn extensions(app: &App) -> Screen {
             "Enable the software extension with :extension enable.".into(),
         ),
         chips: vec![],
+        total: None,
     }));
     if let Some(id) = selected_row_id(app, "extensions") {
         if let Some(name) = id.strip_prefix("available:") {

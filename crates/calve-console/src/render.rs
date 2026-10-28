@@ -296,7 +296,10 @@ fn navigation(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_widget(block, area);
     let badge = |route: &Route| -> Option<usize> {
         match route {
-            Route::ChangePacks => app.value("packs").and_then(Value::as_array).map(Vec::len),
+            Route::ChangePacks => app
+                .value("packs")
+                .and_then(|p| p["counts"].as_object())
+                .map(|c| c.values().filter_map(Value::as_u64).sum::<u64>() as usize),
             Route::Baselines => app
                 .value("baselines")
                 .and_then(Value::as_array)
@@ -640,12 +643,20 @@ fn draw_table(frame: &mut Frame<'_>, app: &App, table: &Table, area: Rect, focus
             .map(|(_, line)| line),
     );
     frame.render_widget(Paragraph::new(lines), area);
-    if total > height && area.height > 0 {
-        let position = format!(
-            "{}/{}",
-            selection(app, table).map_or(0, |i| i + 1),
-            visible.len()
-        );
+    if (total > height || table.total.is_some()) && area.height > 0 {
+        // Paged collections say how much is loaded of how much exists.
+        let position = match table.total {
+            Some(all) => format!(
+                "{}/{} of {all}",
+                selection(app, table).map_or(0, |i| i + 1),
+                visible.len()
+            ),
+            None => format!(
+                "{}/{}",
+                selection(app, table).map_or(0, |i| i + 1),
+                visible.len()
+            ),
+        };
         let rect = Rect {
             x: area.x + area.width.saturating_sub(position.len() as u16),
             y: area.y + area.height - 1,

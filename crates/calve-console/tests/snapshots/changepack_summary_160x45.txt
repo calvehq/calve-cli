@@ -1,23 +1,23 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqo6fch6v6mnbhlp7sqtlkoba   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqo6fch6v6mnbhlp7sqtlkoba ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││cpk_…h6v6mnbhlp7sqtlkoba                   │
-│  Overview        5 ││                                                                                           ││Experimental transport                     │
-│  Work              ││cpk_…v6mnbhlp7sqtlkoba · Experimental transport   ! QUARANTINED                            ││                                           │
-│  Change Graph      ││                                                                                           ││State       ! QUARANTINED                  │
-│› ChangePacks     6 ││Changes                                                                                    ││Generation  1                              │
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqyis4r654gziqv4ktjashkqa   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqyis4r654gziqv4ktjashkqa ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││cpk_…r654gziqv4ktjashkqa                   │
+│  Overview        5 ││                                                                                           ││Lint sweep                                 │
+│  Work              ││cpk_…54gziqv4ktjashkqa · Lint sweep   ○ OPEN                                               ││                                           │
+│  Change Graph      ││                                                                                           ││State       ○ OPEN                         │
+│› ChangePacks     6 ││Changes                                                                                    ││Generation  2                              │
 │  Baselines         ││  0 files   +0 -0                                                                          ││Created     1m ago                         │
 │  Evidence          ││                                                                                           ││Changed     0 files  +0 -0                 │
-│  Events            ││! Quarantined: security review pending                                                     ││Evidence    0                              │
+│  Events            ││                                                                                           ││Evidence    0                              │
 │                    ││                                                                                           ││                                           │
-│ SYSTEM             ││                                                                                           ││! Promote: pack is quarantined             │
-│  Projects          ││                                                                                           ││x explain                                  │
-│  Inbox           2 ││                                                                                           ││                                           │
-│  Doctor            ││                                                                                           ││Actions                                    │
-│  Extensions        ││                                                                                           ││  Release quarantine                       │
+│ SYSTEM             ││                                                                                           ││! Promote: pack is OPEN; seal and qualify  │
+│  Projects          ││                                                                                           ││it first                                   │
+│  Inbox           2 ││                                                                                           ││x explain                                  │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Seal candidate                           │
+│                    ││                                                                                           ││  Abandon                                  │
+│                    ││                                                                                           ││  Quarantine                               │
 │                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

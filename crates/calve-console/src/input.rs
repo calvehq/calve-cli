@@ -39,6 +39,18 @@ pub fn sync(app: &mut App) {
                 state.selected_id = Some(id);
                 state.selected_index = 0;
             }
+            // Paged collections load ahead of the selection, and completely while a filter
+            // runs, so a filter is never answered from a partial list.
+            if crate::model::PAGED.iter().any(|(k, _, _)| *k == table.key) {
+                let filtering = app
+                    .collections
+                    .get(&table.key)
+                    .is_some_and(|c| !c.filter.is_empty());
+                let rows = visible_rows(app, table).len();
+                if filtering || selection(app, table).unwrap_or(0) + 50 >= rows {
+                    app.more(&table.key);
+                }
+            }
             if let Some(index) = selection(app, table) {
                 let id = visible_rows(app, table)[index].id.clone();
                 let state = app.collection(&table.key);
@@ -327,12 +339,7 @@ pub fn palette_items(app: &App, screen: &Screen, query: &str) -> Vec<PaletteItem
         }
     };
     let str_of = |v: &Value, k: &str| v[k].as_str().unwrap_or("").to_owned();
-    for pack in app
-        .value("packs")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-    {
+    for pack in app.pages("packs").items {
         let id = str_of(&pack, "id");
         push(
             &[&id, &str_of(&pack, "title")],
@@ -994,6 +1001,8 @@ fn open_selected(app: &mut App) {
             if route == Route::Events {
                 app.collection("events").selected_id = Some(row.id.clone());
             }
+        } else if let Some((title, lines)) = screen.detail.clone() {
+            app.overlays.push(Overlay::Explain { title, lines });
         } else if app.width() != Width::Wide && app.focus == Focus::Workspace {
             app.focus = Focus::Inspector;
         }
@@ -1250,6 +1259,21 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             ),
             None => app.notify(Tone::Warning, "Nothing selected to copy"),
         },
+        // Verify tab (§94.4): r reruns verification, e shows the evidence it produced.
+        KeyCode::Char('r') if app.tab_name() == Some("Verify") => {
+            match screen.actions.iter().find(|a| {
+                matches!(&a.target, Target::Run { args, .. } if args.get(1).map(String::as_str) == Some("verify"))
+            }) {
+                Some(item) => run_target(app, item.target.clone()),
+                None => app.notify(Tone::Warning, "Rerun is not available in this state"),
+            }
+        }
+        KeyCode::Char('e') if app.tab_name() == Some("Verify") => {
+            if let Some(index) = app.route.tabs().iter().position(|t| *t == "Evidence") {
+                app.set_tab(index);
+                sync(app);
+            }
+        }
         KeyCode::Char('r') if app.tab_name() == Some("Review") => {
             if let Some(item) = screen
                 .actions

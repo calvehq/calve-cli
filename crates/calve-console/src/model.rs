@@ -104,6 +104,23 @@ impl Route {
     }
 }
 
+/// Keyset-paged read models: data key, request, cursor flag. Page n+1 is cached under
+/// `key@<page n's next>`, always following each page's *current* `next`, so inserts never
+/// open a gap between pages (M6 R5/R8).
+pub const PAGED: &[(&str, &[&str], &str)] = &[
+    ("packs", &["view", "packs"], "--after"),
+    ("evidence", &["view", "evidence"], "--before"),
+];
+
+/// The loaded rows of a paged read model.
+#[derive(Debug, Default)]
+pub struct Pages {
+    pub items: Vec<Value>,
+    /// Cursor of the first page not loaded yet; `None` once the end is loaded.
+    pub next: Option<String>,
+    pub loading: bool,
+}
+
 /// A read-model request; the key identifies the cached result.
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -526,6 +543,61 @@ impl App {
         self.data.get(key)
     }
 
+    /// Every loaded page of `key` in order, with the cursor of the next page to load.
+    pub fn pages(&self, key: &str) -> Pages {
+        let mut pages = Pages::default();
+        for (page_key, _) in self.page_chain(key) {
+            match self.data.get(&page_key) {
+                Some(Loaded {
+                    value: Some(value),
+                    loading,
+                    ..
+                }) => {
+                    pages.loading |= *loading;
+                    pages
+                        .items
+                        .extend(value["items"].as_array().into_iter().flatten().cloned());
+                }
+                Some(Loaded { loading: true, .. }) => pages.loading = true,
+                _ => {}
+            }
+        }
+        if let Some((page_key, cursor)) = self.page_chain(key).last()
+            && cursor.is_some()
+            && self.value(page_key).is_none()
+        {
+            pages.next = cursor.clone();
+        }
+        pages
+    }
+
+    /// The page keys of `key` reachable from its first page, with each page's cursor; the last
+    /// one may not be loaded yet.
+    fn page_chain(&self, key: &str) -> Vec<(String, Option<String>)> {
+        let mut chain = vec![(key.to_owned(), None)];
+        let mut seen = BTreeSet::new();
+        while let Some(next) = self
+            .value(&chain.last().expect("non-empty").0)
+            .and_then(|v| v["next"].as_str())
+            .filter(|n| seen.insert((*n).to_owned()))
+        {
+            chain.push((format!("{key}@{next}"), Some(next.to_owned())));
+        }
+        chain
+    }
+
+    /// Requests the next page of a paged read model, if there is one to load.
+    pub fn more(&mut self, key: &str) {
+        let Some((_, args, flag)) = PAGED.iter().find(|(k, _, _)| *k == key) else {
+            return;
+        };
+        if let Some(cursor) = self.pages(key).next {
+            let mut words: Vec<&str> = args.to_vec();
+            words.extend([*flag, cursor.as_str()]);
+            self.request(&format!("{key}@{cursor}"), action(&words));
+        }
+    }
+
     /// Queues everything the current route renders.
     pub fn load_route(&mut self) {
         for (key, action) in route_requests(&self.route) {
@@ -538,6 +610,18 @@ impl App {
         let mut keys = route_requests(&self.route);
         if self.drawer {
             keys.push(("events".into(), action(&["activity"])));
+        }
+        // Loaded later pages refresh too, so no page shows older state than the first.
+        for (key, args, flag) in PAGED {
+            if keys.iter().any(|(k, _)| k == key) {
+                for (page_key, cursor) in self.page_chain(key).into_iter().skip(1) {
+                    if self.data.contains_key(&page_key) {
+                        let mut words: Vec<&str> = args.to_vec();
+                        words.extend([*flag, cursor.as_deref().unwrap_or_default()]);
+                        keys.push((page_key, action(&words)));
+                    }
+                }
+            }
         }
         for (key, action) in keys {
             if let Some(entry) = self.data.get_mut(&key) {
@@ -751,6 +835,10 @@ pub fn detail_request(route: &Route, id: &str) -> Option<(String, Action)> {
         Route::Projects => Some((
             format!("project-health:{id}"),
             action(&["project", "health", id]),
+        )),
+        Route::Evidence => Some((
+            format!("evidence-refs:{id}"),
+            action(&["activity", "--pack", id]),
         )),
         _ => None,
     }

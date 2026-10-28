@@ -1,24 +1,24 @@
  Calve  project: openaevc  workspace: main  Evidence   ● healthy                                                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Evidence ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││Digest               Type              Attached to          Status      Media              ││Evidence                                   │
-│  Overview        5 ││sha256:c9d…220d80563                   Fix daemon race con… ○ CURRENT                      ││sha256:c9d1a7c48b3ba…5142224d3b220d80563   │
-│  Work              ││                                                                                           ││                                           │
-│  Change Graph      ││                                                                                           ││Type                                       │
-│  ChangePacks       ││                                                                                           ││Media                                      │
-│  Baselines         ││                                                                                           ││Generation  null                           │
-│› Evidence          ││                                                                                           ││Status      ○ CURRENT                      │
-│  Events            ││                                                                                           ││                                           │
-│                    ││                                                                                           ││Used by                                    │
-│ SYSTEM             ││                                                                                           ││  Fix daemon race condition                │
-│  Projects          ││                                                                                           ││                                           │
-│  Inbox           2 ││                                                                                           ││Actions                                    │
-│  Doctor            ││                                                                                           ││  Show evidence                            │
-│  Extensions        ││                                                                                           ││  a all actions                            │
+│ PROJECT            ││ID               Type             Producer       Attached to          Status      Created  ││Evidence evd_agqyis4nk55qxdju2onzeln3se    │
+│  Overview        5 ││evd_…onzeln3se   Rejection/v1     pri_…ps7jbym7u Fix daemon race con… ✓ VALID     1m       ││                                           │
+│  Work              ││                                                                                           ││Type        Rejection/v1                   │
+│  Change Graph      ││                                                                                           ││Digest      sha256:4d891e0d…7908259a82f60e │
+│  ChangePacks       ││                                                                                           ││Created     1m ago · 2026-10-28 20:55:06   │
+│  Baselines         ││                                                                                           ││UTC                                        │
+│› Evidence          ││                                                                                           ││Producer    pri_agqyis3t7r2jrbvjvps7jbym7u │
+│  Events            ││                                                                                           ││Media                                      │
+│                    ││                                                                                           ││application/vnd.calve.review+json          │
+│ SYSTEM             ││                                                                                           ││Attached to Fix daemon race condition      │
+│  Projects          ││                                                                                           ││Generation  2                              │
+│  Inbox           2 ││                                                                                           ││Status      ✓ VALID                        │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││Used by                                    │
+│                    ││                                                                                           ││  Loading…                                 │
 │                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Show evidence                            │
+│                    ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
@@ -42,4 +42,4 @@
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
- ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help
+ ↑↓ navigate  enter open pack  / filter type: producer: attached: status: created:  ^P commands  : command  ? help
