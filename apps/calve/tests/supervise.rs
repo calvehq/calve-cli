@@ -421,3 +421,50 @@ impl GroupCompat for Command {
         self.process_group(0)
     }
 }
+
+/// The worker's own program may live outside every read-write root (a provider installed in
+/// /srv, a volume, a temp dir): it is readable and executable, nothing more.
+#[test]
+fn a_program_outside_every_root_runs_but_cannot_write_beside_itself() {
+    if inside() {
+        let w = work();
+        let bin = PathBuf::from("/dev/shm").join(format!(
+            "cp-{}",
+            &uuid::Uuid::now_v7().simple().to_string()[24..]
+        ));
+        fs::create_dir(&bin).unwrap();
+        let prog = bin.join("prog.sh");
+        fs::write(
+            &prog,
+            format!(
+                "#!/bin/sh\necho ran > {w}/ran\necho x 2>/dev/null > {b}/x\nexit 0\n",
+                w = w.display(),
+                b = bin.display()
+            ),
+        )
+        .unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&prog, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let mut s = Supervised::spawn(&[prog.display().to_string()], &env(), &w).unwrap();
+        let end = s.wait().unwrap();
+        let wrote_beside = bin.join("x").exists();
+        fs::remove_dir_all(&bin).unwrap();
+        assert_eq!(
+            end,
+            Termination::Finished {
+                exit_code: Some(0),
+                signal: None
+            }
+        );
+        assert!(w.join("ran").exists(), "the program did not run");
+        assert!(!wrote_beside, "the program wrote beside itself");
+        return;
+    }
+    let (ok, _, _t) = isolated(
+        "a_program_outside_every_root_runs_but_cannot_write_beside_itself",
+        &[],
+    );
+    assert!(ok);
+}

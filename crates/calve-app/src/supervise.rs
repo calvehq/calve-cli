@@ -498,7 +498,7 @@ mod unix {
         // 4. Landlock: the worker can read system paths and work in its directory, temp and
         // home; the spawn directory (runtime dir) is outside every rule.
         #[cfg(target_os = "linux")]
-        let landlock = restrict_worker(&dir);
+        let landlock = restrict_worker(&dir, Path::new(&argv[0]));
         #[cfg(not(target_os = "linux"))]
         let landlock = "unsupported";
         // 5. The worker inherits the helper's group, stdio, environment and directory.
@@ -534,7 +534,7 @@ mod unix {
 
     /// Applies the worker ruleset; returns how far the kernel enforced it.
     #[cfg(target_os = "linux")]
-    fn restrict_worker(spawn_dir: &Path) -> &'static str {
+    fn restrict_worker(spawn_dir: &Path, program: &Path) -> &'static str {
         use landlock::{
             ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
         };
@@ -601,6 +601,14 @@ mod unix {
                     Err(_) => return "none",
                 };
             }
+        }
+        // The worker's own program, wherever it is installed (outside every root above, a
+        // configured provider could not even start).
+        if let Ok(fd) = PathFd::new(program) {
+            r = match r.add_rule(PathBeneath::new(fd, AccessFs::Execute | AccessFs::ReadFile)) {
+                Ok(r) => r,
+                Err(_) => return "none",
+            };
         }
         match r.restrict_self().map(|st| st.ruleset) {
             Ok(landlock::RulesetStatus::FullyEnforced) => "full",
