@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view baseline --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "active": {
+        "type": "boolean"
+      },
+      "aliases": {
+        "type": "array",
+        "items": {}
+      },
+      "edges": {
+        "type": "array",
+        "items": {}
+      },
+      "heads": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "id": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "members": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "head": {
+              "type": "boolean"
+            },
+            "pack": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "digest",
+            "head",
+            "pack",
+            "state",
+            "title"
+          ]
+        }
+      },
+      "raw": {
+        "type": "object",
+        "properties": {
+          "facts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "graph_digest": {
+            "type": "string"
+          },
+          "heads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "facts",
+          "graph_digest",
+          "heads",
+          "id",
+          "members",
+          "metadata"
+        ]
+      },
+      "validation": {
+        "type": "object",
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "graph_digest": {
+            "type": "string"
+          },
+          "problems": {
+            "type": "array",
+            "items": {}
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "validators": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "digest",
+          "graph_digest",
+          "problems",
+          "valid",
+          "validators"
+        ]
+      }
+    },
+    "required": [
+      "active",
+      "aliases",
+      "edges",
+      "heads",
+      "id",
+      "label",
+      "members",
+      "raw",
+      "validation"
+    ]
+  }
+}

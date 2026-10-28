@@ -1756,7 +1756,15 @@ async fn dispatch(request: Request) -> Result<Value> {
         Action::Recover { .. } => unreachable!("recover runs before the Project is opened"),
         Action::View { view } => match view {
             ViewQuery::Overview => project.view_overview().await,
-            ViewQuery::Packs => project.view_packs().await,
+            ViewQuery::Packs {
+                after,
+                limit,
+                state,
+            } => {
+                project
+                    .view_packs(after.as_deref(), limit, state.as_deref())
+                    .await
+            }
             ViewQuery::Pack { id } => project.view_pack(&id).await,
             ViewQuery::PackDiff { id, path, context } => {
                 project.view_pack_diff(&id, &path, context).await
@@ -1764,7 +1772,9 @@ async fn dispatch(request: Request) -> Result<Value> {
             ViewQuery::ChangeGraph { intent } => project.view_change_graph(intent.as_deref()).await,
             ViewQuery::Baseline { id } => project.view_baseline(&id).await,
             ViewQuery::Execution { id } => project.view_execution(&id).await,
-            ViewQuery::Evidence => project.view_evidence().await,
+            ViewQuery::Evidence { before, limit } => {
+                project.view_evidence(before.as_deref(), limit).await
+            }
             ViewQuery::Changes {
                 protocol,
                 product,

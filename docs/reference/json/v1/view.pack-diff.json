@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view pack-diff --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "added": {
+        "type": "integer"
+      },
+      "binary": {
+        "type": "boolean"
+      },
+      "digest": {
+        "type": "string"
+      },
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "new": {
+              "type": "integer"
+            },
+            "old": {
+              "type": "null"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ]
+        }
+      },
+      "path": {
+        "type": "string"
+      },
+      "removed": {
+        "type": "integer"
+      },
+      "size": {
+        "type": "integer"
+      },
+      "status": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "added",
+      "binary",
+      "digest",
+      "lines",
+      "path",
+      "removed",
+      "size",
+      "status",
+      "truncated"
+    ]
+  }
+}

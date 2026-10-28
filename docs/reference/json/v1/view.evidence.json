@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view evidence --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "object",
+              "properties": {
+                "candidate": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "media_type": {
+                  "type": "string"
+                },
+                "pack": {
+                  "type": "string"
+                },
+                "payload": {
+                  "type": "string"
+                },
+                "producer": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "candidate",
+                "created_at",
+                "generation",
+                "id",
+                "kind",
+                "media_type",
+                "pack",
+                "payload",
+                "producer"
+              ]
+            },
+            "pack": {
+              "type": "string"
+            },
+            "pack_title": {
+              "type": "string"
+            },
+            "registered_at": {
+              "type": "string"
+            },
+            "stale": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "digest",
+            "evidence",
+            "pack",
+            "pack_title",
+            "registered_at",
+            "stale"
+          ]
+        }
+      },
+      "next": {
+        "type": [
+          "null",
+          "string"
+        ]
+      }
+    },
+    "required": [
+      "items",
+      "next"
+    ]
+  }
+}

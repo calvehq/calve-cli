@@ -964,12 +964,22 @@ const READ_MODEL_INDEXES: &str = "
     CREATE INDEX IF NOT EXISTS pack_summaries_state ON pack_summaries(state);
     CREATE INDEX IF NOT EXISTS pack_summaries_promoted ON pack_summaries(promoted_digest);
     CREATE INDEX IF NOT EXISTS pack_files_from ON pack_files(from_path);
-    CREATE INDEX IF NOT EXISTS intents_order ON intents(created_at, id);";
+    CREATE INDEX IF NOT EXISTS intents_order ON intents(created_at, id);
+";
+
+/// Request id → receipt (OpenAEVC stores receipts under their request id but cannot look
+/// one up by it); immutable rows, filled by `refresh_receipt_index`.
+pub(crate) const RECEIPT_SCHEMA: &str = "
+    CREATE TABLE IF NOT EXISTS receipt_index (
+      request_id TEXT PRIMARY KEY, digest TEXT NOT NULL UNIQUE, command TEXT NOT NULL,
+      caller TEXT NOT NULL, completed_at TEXT NOT NULL, result TEXT NOT NULL
+    );";
 
 /// The read-model schema; idempotent, so a database whose version was lowered (tests, a
 /// partial run) migrates again cleanly.
 fn read_model_schema(tx: &rusqlite::Transaction) -> Result<()> {
     tx.execute_batch(READ_MODEL_INDEXES)?;
+    tx.execute_batch(RECEIPT_SCHEMA)?;
     tx.execute_batch(event_index::SCHEMA)?;
     let has_size: bool = tx.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('pack_files') WHERE name='size'",
@@ -2637,10 +2647,14 @@ impl Project {
 
     /// Clears derived projections so the next read rebuilds them from OpenAEVC.
     pub(crate) fn reset_pack_index(&self) -> Result<()> {
+        // A restored store may lack receipts the index named; it is rebuilt with the rest.
+        self.db.execute_batch(RECEIPT_SCHEMA)?;
         self.db.execute_batch(
             "DELETE FROM pack_summaries; DELETE FROM pack_files; DELETE FROM pack_results;
+             DELETE FROM receipt_index;
              DELETE FROM event_index; DELETE FROM event_refs;
-             DELETE FROM projection_checkpoints WHERE name IN ('packs','results','events');",
+             DELETE FROM projection_checkpoints
+               WHERE name IN ('packs','results','events','events.v2','receipts');",
         )?;
         Ok(())
     }
@@ -2911,35 +2925,45 @@ impl Project {
             ));
         }
         let pack = self.pack(id).await?;
-        let page = self
-            .client
-            .query(Query::ListObjectDigests {
-                kind: Some(ObjectKind::Evidence),
-                after,
-                limit: Some(limit),
-            })
-            .await?;
-        let entries = page["objects"]
-            .as_array()
-            .ok_or_else(|| invalid("invalid evidence index response"))?;
-        let mut items = Vec::new();
-        for entry in entries {
-            let digest: Digest = serde_json::from_value(entry["digest"].clone())?;
-            let object = self.evidence(digest).await?;
-            let body = &object["envelope"]["body"];
-            if body["pack"] != json!(pack.id) {
+        // The pack's registrations come from the event index (bounded by this pack's evidence,
+        // not the store); pages keep OpenAEVC's digest order so `--after` means what it did.
+        let mut registered: Vec<(Digest, Value)> = Vec::new();
+        for event in self
+            .events_of_kind_referencing("evidence.registered", &pack.id.to_string())
+            .await?
+        {
+            if event.body["pack"] != json!(pack.id) {
                 continue;
             }
-            let stale = body["generation"] != json!(pack.generation)
+            let digest: Digest = serde_json::from_value(event.body["evidence"].clone())?;
+            registered.push((digest, event.body));
+        }
+        registered.sort_by_key(|a| a.0.to_string());
+        registered.dedup_by(|a, b| a.0 == b.0);
+        let stale = |body: &Value| {
+            body["generation"] != json!(pack.generation)
                 || pack
                     .sealed
                     .as_ref()
-                    .is_none_or(|seal| body["candidate"] != json!(seal.candidate));
-            if !current_only || !stale {
-                items.push(json!({"digest":digest,"evidence":body,"stale":stale}));
-            }
+                    .is_none_or(|seal| body["candidate"] != json!(seal.candidate))
+        };
+        let mut rest = registered
+            .into_iter()
+            .filter(|(d, _)| after.as_ref().is_none_or(|a| d.to_string() > a.to_string()))
+            .filter(|(_, body)| !current_only || !stale(body))
+            .peekable();
+        let mut items = Vec::new();
+        let mut last = None;
+        while items.len() < limit as usize
+            && let Some((digest, registration)) = rest.next()
+        {
+            let object = self.evidence(digest).await?;
+            let body = &object["envelope"]["body"];
+            items.push(json!({"digest":digest,"evidence":body,"stale":stale(&registration)}));
+            last = Some(digest);
         }
-        Ok(json!({"items":items,"next":page["next"]}))
+        let next = if rest.peek().is_some() { last } else { None };
+        Ok(json!({"items":items,"next":next}))
     }
 
     /// Changes the intent reference through OpenAEVC's generation-checked structural update.
@@ -3031,6 +3055,19 @@ impl Project {
         after: Option<&str>,
         limit: Option<u32>,
     ) -> Result<Vec<Value>> {
+        self.packs_page(after, limit, false, &PackFilter::default())
+            .await
+    }
+
+    /// `newest_first`: `(created_at, id)` descending, `after` continuing downwards; `filter`
+    /// narrows by state, ids or promoted digests through the pack index.
+    pub(crate) async fn packs_page(
+        &self,
+        after: Option<&str>,
+        limit: Option<u32>,
+        newest_first: bool,
+        filter: &PackFilter<'_>,
+    ) -> Result<Vec<Value>> {
         self.refresh_pack_index().await?;
         if let Some(after) = after {
             let known: bool = self.db.query_row(
@@ -3042,19 +3079,35 @@ impl Project {
                 return Err(crate::coded("NOT_FOUND", format!("unknown pack {after}")));
             }
         }
-        let mut stmt = self.db.prepare(
+        let (cmp, order) = if newest_first {
+            ("<", "DESC")
+        } else {
+            (">", "ASC")
+        };
+        let mut stmt = self.db.prepare(&format!(
             "SELECT m.id,m.title,m.intent_id,s.state,s.generation,s.candidate_digest,s.promoted_digest,
                     s.created_at,s.updated_at,s.changed,s.revision,c.state
              FROM pack_metadata m JOIN pack_summaries s ON s.id=m.id
              LEFT JOIN pack_commitments c ON c.pack_id=m.id
              WHERE (c.state IS NULL OR c.state != 'replacement_pending')
                AND (?1 IS NULL
-                    OR (m.created_at,m.id) > (SELECT created_at,id FROM pack_metadata WHERE id=?1))
-             ORDER BY m.created_at,m.id LIMIT ?2",
-        )?;
+                    OR (m.created_at,m.id) {cmp} (SELECT created_at,id FROM pack_metadata WHERE id=?1))
+               AND (?3 IS NULL OR s.state=?3)
+               AND (?4 IS NULL OR m.id IN (SELECT value FROM json_each(?4)))
+               AND (?5 IS NULL OR s.promoted_digest IN (SELECT value FROM json_each(?5)))
+             ORDER BY m.created_at {order},m.id {order} LIMIT ?2",
+        ))?;
         // A pending supersession is shown on the pack it replaces, never as success (§12).
         let superseding = crate::supersede::pending(&self.root)?;
-        let rows = stmt.query_map(rusqlite::params![after, limit.map_or(-1, i64::from)], |r| {
+        let list = |v: Option<&[String]>| v.map(|v| json!(v).to_string());
+        let params = rusqlite::params![
+            after,
+            limit.map_or(-1, i64::from),
+            filter.state,
+            list(filter.ids),
+            list(filter.promoted)
+        ];
+        let rows = stmt.query_map(params, |r| {
             Ok(
                 json!({"id":r.get::<_,String>(0)?,"title":r.get::<_,String>(1)?,
                 "intent":r.get::<_,Option<String>>(2)?,"state":r.get::<_,String>(3)?,
@@ -4866,4 +4919,12 @@ impl Project {
         let typed: calve_api::responses::Status = serde_json::from_value(status)?;
         Ok(serde_json::to_value(typed)?)
     }
+}
+
+/// Narrows [`Project::packs_page`]; every field is optional and they combine.
+#[derive(Default)]
+pub(crate) struct PackFilter<'a> {
+    pub state: Option<&'a str>,
+    pub ids: Option<&'a [String]>,
+    pub promoted: Option<&'a [String]>,
 }

@@ -5,8 +5,8 @@
 //! them, so results are exactly what a full scan returns (the journal stays the authority).
 //!
 //! `event_refs` holds each event's subjects and every ID-shaped string value in its body
-//! (`exe_…`, `cpk_…`, `ns_…`): a lookup by an ID-shaped reference therefore finds every event
-//! whose subjects or body contain it. A reference that is not ID-shaped is never looked up here;
+//! (`exe_…`, `cpk_…`, `ns_…`, `sha256:…` digests): a lookup by an ID-shaped reference
+//! therefore finds every event whose subjects or body contain it. A reference that is not ID-shaped is never looked up here;
 //! its callers fall back to the full scan.
 use std::collections::BTreeSet;
 
@@ -29,8 +29,15 @@ pub(crate) const SCHEMA: &str = "
       ref TEXT NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(ref, seq)
     ) WITHOUT ROWID;";
 
-/// An OpenAEVC-style ID: a 2–4 letter lowercase prefix, `_`, then 20–40 `[a-z0-9]`.
+/// The index's checkpoint; a new name rebuilds the index when what it records changes.
+pub(crate) const CHECKPOINT: &str = "events.v2";
+
+/// An OpenAEVC-style ID (a 2–4 letter lowercase prefix, `_`, then 20–40 `[a-z0-9]`) or a
+/// `sha256:` content digest.
 pub(crate) fn id_shaped(s: &str) -> bool {
+    if let Some(hex) = s.strip_prefix("sha256:") {
+        return hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    }
     let Some((prefix, rest)) = s.split_once('_') else {
         return false;
     };
@@ -69,15 +76,22 @@ pub(crate) struct Candidates<'a> {
 impl Project {
     /// Brings the index up to date with the journal (only events after its checkpoint).
     pub(crate) async fn refresh_event_index(&self) -> Result<()> {
-        let checkpoint: u64 = self
+        let checkpoint: Option<u64> = self
             .db
             .query_row(
-                "SELECT sequence FROM projection_checkpoints WHERE name='events'",
-                [],
+                "SELECT sequence FROM projection_checkpoints WHERE name=?1",
+                [CHECKPOINT],
                 |r| r.get(0),
             )
-            .optional()?
-            .unwrap_or(0);
+            .optional()?;
+        if checkpoint.is_none() {
+            // First build under this checkpoint: rows of an older index version are dropped.
+            self.db.execute_batch(
+                "DELETE FROM event_index; DELETE FROM event_refs;
+                 DELETE FROM projection_checkpoints WHERE name='events';",
+            )?;
+        }
+        let checkpoint = checkpoint.unwrap_or(0);
         // Collected first and written after the scan: no transaction stays open across an await
         // (the daemon's requests share this connection on one thread).
         struct Row {
@@ -120,9 +134,9 @@ impl Project {
             }
         }
         tx.execute(
-            "INSERT INTO projection_checkpoints VALUES ('events',?1)
+            "INSERT INTO projection_checkpoints VALUES (?1,?2)
              ON CONFLICT(name) DO UPDATE SET sequence=excluded.sequence",
-            [head],
+            params![CHECKPOINT, head],
         )?;
         tx.commit()?;
         Ok(())
@@ -176,6 +190,24 @@ impl Project {
                 .collect::<std::result::Result<_, _>>()?
         };
         Ok(Some(self.events_by_seq(seqs).await?))
+    }
+
+    /// Events of this kind that reference `id`, in sequence order (an indexed lookup).
+    pub(crate) async fn events_of_kind_referencing(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<Vec<Event>> {
+        self.refresh_event_index().await?;
+        let seqs: Vec<u64> = {
+            let mut q = self.db.prepare(
+                "SELECT e.seq FROM event_refs r JOIN event_index e ON e.seq=r.seq
+                 WHERE r.ref=?1 AND e.kind=?2 ORDER BY e.seq",
+            )?;
+            q.query_map([id, kind], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        self.events_by_seq(seqs).await
     }
 
     /// Every event of exactly this kind, in sequence order.
@@ -281,11 +313,13 @@ mod tests {
     fn id_shape() {
         assert!(id_shaped("exe_agqxvuw4mb3cxmvpsfwtsgoqbe"));
         assert!(id_shaped("ns_agqxvuwlrzz4xmf3nn4szev7am"));
-        assert!(!id_shaped("sha256:abc"));
         assert!(!id_shaped("EXE_agqxvuw4mb3cxmvpsfwtsgoqbe"));
         assert!(!id_shaped("exe_short"));
         assert!(!id_shaped("a_agqxvuw4mb3cxmvpsfwtsgoqbe"));
         assert!(!id_shaped("exe_agqx-uw4mb3cxmvpsfwtsgoqbe"));
+        assert!(id_shaped(&format!("sha256:{}", "ab".repeat(32))));
+        assert!(!id_shaped(&format!("sha256:{}", "AB".repeat(32))));
+        assert!(!id_shaped("sha256:abc"));
     }
 
     #[test]

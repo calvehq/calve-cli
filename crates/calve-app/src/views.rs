@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use openaevc::protocol::{Digest, Event, ExecutionState, Query, b64};
 use openaevc_sdk::OpenAevcClient;
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
 use crate::{Error, Project, Result};
@@ -104,10 +105,41 @@ impl Project {
         Ok(rows)
     }
 
-    /// ChangePack rows with the columns the list screen shows.
-    pub async fn view_packs(&self) -> Result<Value> {
-        // The pack index already carries every column the list shows.
-        Ok(json!(self.list_packs().await?))
+    /// One keyset page of ChangePack rows, newest first, with per-state totals from the pack
+    /// index; `after` is the previous page's `next` (M6 R5: no whole-store list).
+    pub async fn view_packs(
+        &self,
+        after: Option<&str>,
+        limit: Option<u32>,
+        state: Option<&str>,
+    ) -> Result<Value> {
+        let limit = limit.unwrap_or(200).clamp(1, 1000);
+        let state = state.map(str::to_uppercase);
+        let filter = crate::PackFilter {
+            state: state.as_deref(),
+            ..Default::default()
+        };
+        let mut items = self
+            .packs_page(after, Some(limit + 1), true, &filter)
+            .await?;
+        let more = items.len() > limit as usize;
+        items.truncate(limit as usize);
+        let mut counts = serde_json::Map::new();
+        let mut stmt = self.db.prepare(
+            "SELECT s.state, COUNT(*) FROM pack_summaries s
+             LEFT JOIN pack_commitments c ON c.pack_id=s.id
+             WHERE c.state IS NULL OR c.state != 'replacement_pending' GROUP BY s.state",
+        )?;
+        for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?)))? {
+            let (state, count) = row?;
+            counts.insert(state, json!(count));
+        }
+        let next = if more {
+            items.last().map(|p| p["id"].clone())
+        } else {
+            None
+        };
+        Ok(json!({"items":items,"next":next,"counts":counts}))
     }
 
     /// One file's change against accepted state before this pack: the old side is the
@@ -170,6 +202,100 @@ impl Project {
             .accepted_state_for(&paths, Some(&pack.id.to_string()))
             .await?;
         Ok(Self::file_diff(&d, &before, effect, context))
+    }
+
+    /// Records receipts OpenAEVC committed since the last top-up (`receipt_index`).
+    ///
+    /// shortcut: OpenAEVC v0.1.0 has no request-id → receipt query, so a top-up lists the
+    /// receipt digest index (O(receipts) digests, objects fetched only when unseen); it runs only
+    /// after the journal advanced. Upgrade when the protocol can resolve receipts by request.
+    async fn refresh_receipt_index(&self) -> Result<()> {
+        self.db.execute_batch(crate::RECEIPT_SCHEMA)?;
+        self.refresh_event_index().await?;
+        let checkpoint = |name: &str| -> Result<Option<u64>> {
+            Ok(self
+                .db
+                .query_row(
+                    "SELECT sequence FROM projection_checkpoints WHERE name=?1",
+                    [name],
+                    |r| r.get(0),
+                )
+                .optional()?)
+        };
+        let head = checkpoint(crate::event_index::CHECKPOINT)?.unwrap_or(0);
+        if checkpoint("receipts")? == Some(head) {
+            return Ok(());
+        }
+        let mut rows = Vec::new();
+        let mut after = None;
+        loop {
+            let page = self
+                .client
+                .query(Query::ListObjectDigests {
+                    kind: Some(openaevc::protocol::ObjectKind::Receipt),
+                    after,
+                    limit: Some(100),
+                })
+                .await?;
+            for entry in page["objects"].as_array().into_iter().flatten() {
+                let digest: Digest = serde_json::from_value(entry["digest"].clone())?;
+                let known: bool = self.db.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM receipt_index WHERE digest=?1)",
+                    [digest.to_string()],
+                    |r| r.get(0),
+                )?;
+                if !known {
+                    let object = self.receipt(digest).await?;
+                    let r = &object["envelope"]["body"];
+                    rows.push((
+                        r["request_id"].as_str().unwrap_or_default().to_owned(),
+                        digest.to_string(),
+                        r["command"].as_str().unwrap_or_default().to_owned(),
+                        r["caller"].as_str().unwrap_or_default().to_owned(),
+                        r["completed_at"].as_str().unwrap_or_default().to_owned(),
+                        r["result"].to_string(),
+                    ));
+                }
+            }
+            match page["next"].as_str() {
+                Some(next) => {
+                    after = Some(next.parse().map_err(|_| invalid("bad receipt cursor"))?)
+                }
+                None => break,
+            }
+        }
+        let tx = self.db.unchecked_transaction()?;
+        for row in rows {
+            tx.execute(
+                "INSERT OR IGNORE INTO receipt_index VALUES (?1,?2,?3,?4,?5,?6)",
+                rusqlite::params![row.0, row.1, row.2, row.3, row.4, row.5],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO projection_checkpoints VALUES ('receipts',?1)
+             ON CONFLICT(name) DO UPDATE SET sequence=excluded.sequence",
+            [head],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Receipts of these requests, oldest first.
+    async fn receipts_for(&self, requests: &[String]) -> Result<Vec<Value>> {
+        self.refresh_receipt_index().await?;
+        let mut q = self.db.prepare(
+            "SELECT digest, command, caller, completed_at, result FROM receipt_index
+             WHERE request_id IN (SELECT value FROM json_each(?1)) ORDER BY completed_at, digest",
+        )?;
+        let rows = q.query_map([json!(requests).to_string()], |r| {
+            let result: String = r.get(4)?;
+            Ok(
+                json!({"digest":r.get::<_,String>(0)?,"command":r.get::<_,String>(1)?,
+                "caller":r.get::<_,String>(2)?,"at":r.get::<_,String>(3)?,
+                "result":serde_json::from_str::<Value>(&result).unwrap_or(Value::Null)}),
+            )
+        })?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
 
     /// Everything the ChangePack workstation needs in one read.
@@ -267,32 +393,26 @@ impl Project {
         self.refresh_pack_index().await?;
         let reviews = self.reviews(&id).await?;
         // Receipts are joined through the requests that produced this pack's events.
-        let requests: BTreeSet<String> = events
+        let requests: Vec<String> = events
             .iter()
             .filter_map(|event| event.request_id.map(|r| r.to_string()))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
             .collect();
-        let mut receipts = Vec::new();
-        let mut after = None;
-        loop {
-            let page = self.list_receipts(after, 100).await?;
-            for item in page["items"].as_array().into_iter().flatten() {
-                if item["receipt"]["request_id"]
-                    .as_str()
-                    .is_some_and(|r| requests.contains(r))
-                {
-                    receipts.push(
-                        json!({"digest":item["digest"],"command":item["receipt"]["command"],
-                        "caller":item["receipt"]["caller"],"at":item["receipt"]["completed_at"],
-                        "result":item["receipt"]["result"]}),
-                    );
-                }
-            }
-            match page["next"].as_str() {
-                Some(next) => {
-                    after = Some(next.parse().map_err(|_| invalid("bad receipt cursor"))?)
-                }
-                None => break,
-            }
+        let receipts = self.receipts_for(&requests).await?;
+        // Checks still running for this pack (§34.2): one state-filtered query per state.
+        let mut running = Vec::new();
+        for state in [
+            ExecutionState::Pending,
+            ExecutionState::Admitted,
+            ExecutionState::Starting,
+            ExecutionState::Running,
+        ] {
+            let found = self.list_executions(Some(&id), Some(state)).await?;
+            running.extend(found.as_array().into_iter().flatten().map(|e| {
+                json!({"id":e["id"],"harness":e["harness"],"state":e["state"],
+                    "started_at":e["created_at"],"provider":e["provider"]})
+            }));
         }
         let history: Vec<Value> = events
             .iter()
@@ -329,6 +449,7 @@ impl Project {
             "summary":{"files":files.len(),"added":added,"removed":removed},
             "files":files,"verifications":verifications,"evaluations":evaluations,
             "evidence":evidence,"reviews":reviews,"receipts":receipts,"events":history,
+            "running":running,
             "dependencies":dependencies,"explain":explain,
             "actions":available,"unavailable_actions":blocked,
             "raw":serde_json::to_value(&pack)?,
@@ -622,7 +743,6 @@ impl Project {
     /// Tasks, their dependencies and produced packs as one graph.
     pub async fn view_change_graph(&self, intent: Option<&str>) -> Result<Value> {
         let tasks = self.tasks_with_protocol().await?;
-        let packs = self.view_packs().await?;
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
         let mut pack_ids = BTreeSet::new();
@@ -642,13 +762,24 @@ impl Project {
                 pack_ids.insert(pack.as_str().unwrap_or_default().to_owned());
             }
         }
-        for pack in packs.as_array().into_iter().flatten() {
-            let id = pack["id"].as_str().unwrap_or_default();
-            if pack_ids.contains(id) || intent.is_some_and(|i| pack["intent"] == i) {
-                nodes.push(
-                    json!({"id":id,"kind":"pack","label":pack["title"],"state":pack["state"]}),
-                );
+        // Only the linked packs (and the intent's own) are looked up, through the pack index.
+        if let Some(intent) = intent {
+            let mut q = self
+                .db
+                .prepare("SELECT id FROM pack_metadata WHERE intent_id=?1")?;
+            for id in q.query_map([intent], |r| r.get::<_, String>(0))? {
+                pack_ids.insert(id?);
             }
+        }
+        let ids: Vec<String> = pack_ids.into_iter().collect();
+        let filter = crate::PackFilter {
+            ids: Some(&ids),
+            ..Default::default()
+        };
+        for pack in self.packs_page(None, None, false, &filter).await? {
+            nodes.push(
+                json!({"id":pack["id"],"kind":"pack","label":pack["title"],"state":pack["state"]}),
+            );
         }
         Ok(json!({"intent":intent,"nodes":nodes,"edges":edges}))
     }
@@ -657,11 +788,14 @@ impl Project {
     pub async fn view_baseline(&self, id_or_alias: &str) -> Result<Value> {
         let baseline = self.baseline_typed(id_or_alias).await?;
         let validation = self.validate_baseline(id_or_alias).await?;
-        let packs = self.view_packs().await?;
+        let members: Vec<String> = baseline.members.iter().map(ToString::to_string).collect();
+        let filter = crate::PackFilter {
+            promoted: Some(&members),
+            ..Default::default()
+        };
+        let packs = self.packs_page(None, None, false, &filter).await?;
         let by_digest: BTreeMap<String, &Value> = packs
-            .as_array()
-            .into_iter()
-            .flatten()
+            .iter()
             .filter_map(|p| p["promoted_digest"].as_str().map(|d| (d.to_owned(), p)))
             .collect();
         let heads: BTreeSet<String> = baseline.heads.iter().map(ToString::to_string).collect();
@@ -782,19 +916,60 @@ impl Project {
     }
 
     /// Evidence across every pack, with the pack each item is attached to.
-    pub async fn view_evidence(&self) -> Result<Value> {
-        let mut rows = Vec::new();
-        for pack in self.list_packs().await? {
-            let id = pack["id"].as_str().unwrap_or_default();
-            let page = self.list_evidence(id, None, 100, false).await?;
-            for item in page["items"].as_array().into_iter().flatten() {
-                let mut row = item.clone();
-                row["pack"] = json!(id);
-                row["pack_title"] = pack["title"].clone();
-                rows.push(row);
+    /// Newest evidence first, one keyset page at a time (`before` is the previous page's
+    /// `next`): registrations come from the event index and staleness from the pack
+    /// summaries, so a page costs its own rows, never the store (§41, M6 R5).
+    pub async fn view_evidence(&self, before: Option<&str>, limit: Option<u32>) -> Result<Value> {
+        let limit = limit.unwrap_or(100).clamp(1, 500);
+        let before = match before {
+            None => None,
+            Some(cursor) => {
+                let parsed = cursor
+                    .split_once(':')
+                    .and_then(|(t, s)| Some((t.parse::<i64>().ok()?, s.parse::<u64>().ok()?)));
+                Some(parsed.ok_or_else(|| invalid(format!("invalid evidence cursor {cursor}")))?)
             }
+        };
+        self.refresh_pack_index().await?;
+        self.refresh_event_index().await?;
+        let c = crate::event_index::Candidates {
+            kind: Some("evidence.registered"),
+            ..Default::default()
+        };
+        // One more than the page tells whether another page exists.
+        let events = self.candidate_events(&c, before, limit + 1).await?;
+        let more = events.len() > limit as usize;
+        let mut rows = Vec::new();
+        let mut next = None;
+        for event in events.into_iter().take(limit as usize) {
+            next = Some(format!(
+                "{}:{}",
+                i64::try_from(event.timestamp.unix_nanos()).unwrap_or(i64::MAX),
+                event.sequence
+            ));
+            let pack = event.body["pack"].as_str().unwrap_or_default().to_owned();
+            let digest: Digest = serde_json::from_value(event.body["evidence"].clone())?;
+            let object = self.evidence(digest).await?;
+            let summary: Option<(String, u64, Option<String>)> = self
+                .db
+                .query_row(
+                    "SELECT m.title, s.generation, s.candidate_digest FROM pack_metadata m
+                     JOIN pack_summaries s ON s.id=m.id WHERE m.id=?1",
+                    [&pack],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()?;
+            let stale = summary.as_ref().is_none_or(|(_, generation, candidate)| {
+                event.body["generation"] != json!(generation)
+                    || candidate.as_deref() != event.body["candidate"].as_str()
+            });
+            rows.push(
+                json!({"digest":digest,"evidence":object["envelope"]["body"],
+                "pack":pack,"pack_title":summary.map(|s| s.0),"stale":stale,
+                "registered_at":event.timestamp}),
+            );
         }
-        Ok(json!(rows))
+        Ok(json!({"items":rows,"next":if more { next } else { None }}))
     }
 }
 

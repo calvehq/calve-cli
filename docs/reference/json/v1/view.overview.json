@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve view overview --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "active_work": {
+        "type": "array",
+        "items": {}
+      },
+      "counts": {
+        "type": "object",
+        "properties": {
+          "baselines": {
+            "type": "integer"
+          },
+          "intents": {
+            "type": "integer"
+          },
+          "packs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "baselines",
+          "intents",
+          "packs"
+        ]
+      },
+      "items_limit": {
+        "type": "integer"
+      },
+      "needs_attention": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "subject_kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "kind",
+            "message",
+            "subject",
+            "subject_kind"
+          ]
+        }
+      },
+      "project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "recent_activity": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string"
+            },
+            "body": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "candidate": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "string"
+                },
+                "generation": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "mandatory": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pack": {
+                  "type": "string"
+                },
+                "policy": {
+                  "type": "string"
+                }
+              },
+              "required": []
+            },
+            "detail": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "namespace_id": {
+              "type": "string"
+            },
+            "project_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "source_event_id": {
+              "type": "string"
+            },
+            "source_sequence": {
+              "type": "integer"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "subjects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor",
+            "body",
+            "detail",
+            "id",
+            "kind",
+            "namespace_id",
+            "project_id",
+            "source",
+            "source_event_id",
+            "source_sequence",
+            "subject",
+            "subjects",
+            "summary",
+            "timestamp"
+          ]
+        }
+      },
+      "totals": {
+        "type": "object",
+        "properties": {
+          "awaiting_review": {
+            "type": "integer"
+          },
+          "blocked_tasks": {
+            "type": "integer"
+          },
+          "open_intents": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "awaiting_review",
+          "blocked_tasks",
+          "open_intents"
+        ]
+      }
+    },
+    "required": [
+      "active_work",
+      "counts",
+      "items_limit",
+      "needs_attention",
+      "project",
+      "recent_activity",
+      "totals"
+    ]
+  }
+}

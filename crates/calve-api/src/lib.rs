@@ -277,8 +277,17 @@ pub enum Action {
 pub enum ViewQuery {
     /// Overview read model.
     Overview,
-    /// ChangePack list read model.
-    Packs,
+    /// ChangePack list read model: newest first, keyset-paged, with per-state counts.
+    Packs {
+        /// The previous page's `next`.
+        #[arg(long)]
+        after: Option<String>,
+        /// Page size (default 200, at most 1000).
+        #[arg(long)]
+        limit: Option<u32>,
+        #[arg(long)]
+        state: Option<String>,
+    },
     /// ChangePack workstation read model.
     Pack { id: String },
     /// One file diff read model.
@@ -298,8 +307,15 @@ pub enum ViewQuery {
     Baseline { id: String },
     /// Execution detail read model.
     Execution { id: String },
-    /// Evidence catalog read model.
-    Evidence,
+    /// Evidence catalog read model: newest first, keyset-paged.
+    Evidence {
+        /// The previous page's `next`.
+        #[arg(long)]
+        before: Option<String>,
+        /// Page size (default 100, at most 500).
+        #[arg(long)]
+        limit: Option<u32>,
+    },
     /// Long-poll: returns when the Project changes past the cursor or after `wait_ms`.
     Changes {
         #[arg(long, default_value_t = 0)]
