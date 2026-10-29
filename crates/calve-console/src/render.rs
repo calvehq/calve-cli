@@ -118,6 +118,9 @@ fn asciify(frame: &mut Frame<'_>) {
                 "·" | "—" | "–" => "-",
                 "“" | "”" => "\"",
                 "…" => ".",
+                "█" => "#",
+                "▲" => "^",
+                "▼" => "v",
                 _ => "?",
             };
             cell.set_symbol(replacement);
@@ -580,9 +583,20 @@ fn draw_table(frame: &mut Frame<'_>, app: &App, table: &Table, area: Rect, focus
     let selected = selection(app, table)
         .and_then(|index| visible.get(index))
         .map(|row| row.id.clone());
-    let mut row_lines: Vec<(Option<String>, Line<'static>)> = Vec::new();
-    for section in &table.sections {
-        let rows: Vec<_> = section
+    // Entries are cheap references; only the visible window is formatted and styled (§71,
+    // §96: lists of 10,000+ rows).
+    enum Entry<'a> {
+        Blank,
+        Title(&'a str),
+        Header(usize),
+        Empty,
+        Row(&'a screens::Row, usize),
+    }
+    let mut entries: Vec<Entry<'_>> = Vec::new();
+    let mut fitted_by_section: Vec<Vec<(usize, u16)>> = Vec::new();
+    for (s_index, section) in table.sections.iter().enumerate() {
+        fitted_by_section.push(fit_columns(&section.columns, area.width));
+        let rows: Vec<&screens::Row> = section
             .rows
             .iter()
             .filter(|row| screens::matches_filter(row, &filter))
@@ -590,117 +604,133 @@ fn draw_table(frame: &mut Frame<'_>, app: &App, table: &Table, area: Rect, focus
         if rows.is_empty() && section.title.is_none() {
             continue;
         }
-        let fitted = fit_columns(&section.columns, area.width);
         if let Some(title) = &section.title {
-            if !row_lines.is_empty() {
-                row_lines.push((None, Line::from("")));
+            if !entries.is_empty() {
+                entries.push(Entry::Blank);
             }
-            let rule = "─".repeat((area.width as usize).saturating_sub(text::width(title) + 1));
-            let rule = if app.symbols.unicode {
-                rule
-            } else {
-                "-".repeat(rule.chars().count())
-            };
-            row_lines.push((
-                None,
-                Line::from(vec![
-                    span(format!("{title} "), theme.heading()),
-                    span(rule, Style::default().fg(theme.border)),
-                ]),
-            ));
+            entries.push(Entry::Title(title));
         }
         if section.columns.iter().any(|c| !c.title.is_empty()) {
-            let header: Vec<Span<'static>> = fitted
-                .iter()
-                .map(|(i, w)| {
-                    let sorted = (table.sections.len() == 1)
-                        .then(|| app.collections.get(&table.key).and_then(|c| c.sort))
-                        .flatten()
-                        .filter(|(col, _)| col == i);
-                    let title = match sorted {
-                        Some((_, true)) => format!("{} ▼", section.columns[*i].title),
-                        Some((_, false)) => format!("{} ▲", section.columns[*i].title),
-                        None => section.columns[*i].title.to_owned(),
-                    };
-                    span(
-                        format!("{} ", fit(&title, *w as usize, ellipsis)),
-                        theme.muted(),
-                    )
-                })
-                .collect();
-            row_lines.push((None, Line::from(header)));
+            entries.push(Entry::Header(s_index));
         }
         if rows.is_empty() {
-            row_lines.push((None, Line::from(span("  none", theme.muted()))));
+            entries.push(Entry::Empty);
         }
         for row in rows {
-            let is_selected = selected.as_deref() == Some(row.id.as_str());
-            let marked = app
-                .collections
-                .get(&table.key)
-                .is_some_and(|c| c.marked.contains(&row.id));
-            let spans: Vec<Span<'static>> = fitted
-                .iter()
-                .map(|(i, w)| {
-                    let cell = row
-                        .cells
-                        .get(*i)
-                        .cloned()
-                        .unwrap_or_else(|| screens::cell("", theme.text()));
-                    let style = if is_selected {
-                        theme.selected(focused)
-                    } else {
-                        cell.style
-                    };
-                    span(
-                        format!("{} ", fit(&cell.text, *w as usize, ellipsis)),
-                        style,
-                    )
-                })
-                .collect();
-            let mut spans = spans;
-            if marked {
-                spans.insert(
-                    0,
-                    span(app.symbols.tone(Tone::Success), theme.tone(Tone::Success)),
-                );
-            }
-            row_lines.push((Some(row.id.clone()), Line::from(spans)));
+            entries.push(Entry::Row(row, s_index));
         }
     }
     let height = area.height as usize - lines.len().min(area.height as usize);
-    let selected_line = row_lines
+    let selected_line = entries
         .iter()
-        .position(|(id, _)| id.is_some() && id.as_deref() == selected.as_deref())
+        .position(
+            |e| matches!(e, Entry::Row(row, _) if Some(row.id.as_str()) == selected.as_deref()),
+        )
         .unwrap_or(0);
     let scroll = selected_line.saturating_sub(height.saturating_sub(2));
-    let total = row_lines.len();
+    let total = entries.len();
     let top = area.y + lines.len() as u16;
-    for (offset, (id, _)) in row_lines.iter().skip(scroll).take(height).enumerate() {
-        if let Some(id) = id {
-            let rect = Rect {
-                x: area.x,
-                y: top + offset as u16,
-                width: area.width,
-                height: 1,
-            };
-            app.hits.borrow_mut().push((
-                rect,
-                Hit::Row {
-                    key: table.key.clone(),
-                    id: id.clone(),
-                },
-            ));
-        }
+    let marked = app.collections.get(&table.key).map(|c| &c.marked);
+    for (offset, entry) in entries.iter().skip(scroll).take(height).enumerate() {
+        let line = match entry {
+            Entry::Blank => Line::from(""),
+            Entry::Title(title) => {
+                let rule = "─".repeat((area.width as usize).saturating_sub(text::width(title) + 1));
+                let rule = if app.symbols.unicode {
+                    rule
+                } else {
+                    "-".repeat(rule.chars().count())
+                };
+                Line::from(vec![
+                    span(format!("{title} "), theme.heading()),
+                    span(rule, Style::default().fg(theme.border)),
+                ])
+            }
+            Entry::Header(s_index) => {
+                let section = &table.sections[*s_index];
+                Line::from(
+                    fitted_by_section[*s_index]
+                        .iter()
+                        .map(|(i, w)| {
+                            let sorted = (table.sections.len() == 1)
+                                .then(|| app.collections.get(&table.key).and_then(|c| c.sort))
+                                .flatten()
+                                .filter(|(col, _)| col == i);
+                            let title = match sorted {
+                                Some((_, true)) => format!("{} ▼", section.columns[*i].title),
+                                Some((_, false)) => format!("{} ▲", section.columns[*i].title),
+                                None => section.columns[*i].title.to_owned(),
+                            };
+                            span(
+                                format!("{} ", fit(&title, *w as usize, ellipsis)),
+                                theme.muted(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
+            Entry::Empty => Line::from(span("  none", theme.muted())),
+            Entry::Row(row, s_index) => {
+                app.hits.borrow_mut().push((
+                    Rect {
+                        x: area.x,
+                        y: top + offset as u16,
+                        width: area.width,
+                        height: 1,
+                    },
+                    Hit::Row {
+                        key: table.key.clone(),
+                        id: row.id.clone(),
+                    },
+                ));
+                let is_selected = selected.as_deref() == Some(row.id.as_str());
+                let mut spans: Vec<Span<'static>> = fitted_by_section[*s_index]
+                    .iter()
+                    .map(|(i, w)| {
+                        let (text, style) = row
+                            .cells
+                            .get(*i)
+                            .map_or(("", theme.text()), |c| (c.text.as_str(), c.style));
+                        span(
+                            format!("{} ", fit(text, *w as usize, ellipsis)),
+                            if is_selected {
+                                theme.selected(focused)
+                            } else {
+                                style
+                            },
+                        )
+                    })
+                    .collect();
+                if marked.is_some_and(|m| m.contains(&row.id)) {
+                    spans.insert(
+                        0,
+                        span(app.symbols.tone(Tone::Success), theme.tone(Tone::Success)),
+                    );
+                }
+                Line::from(spans)
+            }
+        };
+        lines.push(line);
     }
-    lines.extend(
-        row_lines
-            .into_iter()
-            .skip(scroll)
-            .take(height)
-            .map(|(_, line)| line),
-    );
     frame.render_widget(Paragraph::new(lines), area);
+    if total > height && area.height > 2 {
+        // A scrollbar shows where the window is in a long list (§53).
+        let mut state =
+            ratatui::widgets::ScrollbarState::new(total.saturating_sub(height)).position(scroll);
+        frame.render_stateful_widget(
+            ratatui::widgets::Scrollbar::new(ratatui::widgets::ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None)
+                .track_symbol(Some("│"))
+                .thumb_symbol("█"),
+            Rect {
+                y: top,
+                height: area.height.saturating_sub(top - area.y + 1),
+                ..area
+            },
+            &mut state,
+        );
+    }
     if (total > height || table.total.is_some()) && area.height > 0 {
         // Paged collections say how much is loaded of how much exists.
         let position = match table.total {
@@ -1112,10 +1142,24 @@ fn inspector_pane(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect)
         .iter()
         .filter(|a| a.group == "Actions")
         .collect();
+    let scroll = app.collections.get("inspector").map_or(0, |c| c.scroll) as u16;
     if !available.is_empty() && app.can_act() {
         lines.push(Line::from(""));
         lines.push(Line::from(span("Actions", app.theme.heading())));
-        for action in available.iter().take(6) {
+        for (i, action) in available.iter().take(6).enumerate() {
+            // Clickable when the line is not wrapped away (§53).
+            let row = (lines.len() as u16).checked_sub(scroll);
+            if let Some(row) = row.filter(|r| *r < inner.height) {
+                app.hits.borrow_mut().push((
+                    Rect {
+                        x: inner.x,
+                        y: inner.y + row,
+                        width: inner.width,
+                        height: 1,
+                    },
+                    Hit::Action(i),
+                ));
+            }
             lines.push(Line::from(vec![span(
                 format!("  {}", line(&action.label)),
                 app.theme.text(),
@@ -1123,7 +1167,6 @@ fn inspector_pane(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect)
         }
         lines.push(Line::from(span("  a all actions", app.theme.muted())));
     }
-    let scroll = app.collections.get("inspector").map_or(0, |c| c.scroll) as u16;
     frame.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })

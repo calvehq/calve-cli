@@ -56,10 +56,8 @@ pub fn sync(app: &mut App) {
                 let state = app.collection(&table.key);
                 state.selected_id = Some(id.clone());
                 state.selected_index = index;
-                if let Some((key, action)) = detail_request(&app.route, &id)
-                    && app.value(&key).is_none()
-                {
-                    app.request(&key, action);
+                if let Some((key, action)) = detail_request(&app.route, &id) {
+                    app.request_once(&key, action);
                 }
             }
         }
@@ -86,13 +84,12 @@ pub fn sync(app: &mut App) {
                 if let Some(file) = files.get(index.min(files.len().saturating_sub(1))) {
                     let path = file["path"].as_str().unwrap_or("").to_owned();
                     let key = format!("diff:{id}:{path}");
-                    if app.value(&key).is_none() {
-                        app.request(
-                            &key,
-                            parse_action(&strings(&["view", "pack-diff", &id, &path]))
-                                .expect("valid view"),
-                        );
+                    let mut words = vec!["view", "pack-diff", id.as_str(), path.as_str()];
+                    let context = app.diff_context.map(|n| n.to_string());
+                    if let Some(n) = &context {
+                        words.extend(["--context", n.as_str()]);
                     }
+                    app.request_once(&key, parse_action(&strings(&words)).expect("valid view"));
                 }
             }
         }
@@ -352,6 +349,7 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
                 .into_iter()
                 .map(|(k, _)| k)
                 .collect();
+            app.data_version += 1;
             app.data.retain(|k, _| {
                 keep.contains(k)
                     || !(k.starts_with("pack:")
@@ -1519,7 +1517,14 @@ fn diff_texts(app: &App) -> Vec<String> {
 
 /// Scrolls the open diff, never past its last line (§33.1).
 fn scroll_diff(app: &mut App, delta: isize) {
-    let last = diff_texts(app).len().saturating_sub(1) as isize;
+    let count = match (&app.route, diff_path(app)) {
+        (Route::ChangePack(id), Some(path)) => app
+            .value(&format!("diff:{id}:{path}"))
+            .and_then(|d| d["lines"].as_array())
+            .map_or(0, Vec::len),
+        _ => 0,
+    };
+    let last = count.saturating_sub(1) as isize;
     app.diff_scroll = (app.diff_scroll as isize + delta).clamp(0, last.max(0)) as usize;
 }
 
@@ -2174,9 +2179,40 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                         open_selected(app);
                     }
                 }
+                Some(Hit::Action(index)) => {
+                    let screen = screens::build(app);
+                    if let Some(item) = screen
+                        .actions
+                        .iter()
+                        .filter(|a| a.group == "Actions")
+                        .nth(index)
+                        && app.can_act()
+                    {
+                        run_target(app, item.target.clone());
+                    }
+                }
                 None => {}
             }
             sync(app);
+        }
+        // Right-click: select the row and open its actions (§53 context menu).
+        MouseEventKind::Down(MouseButton::Right) => {
+            let hit = app
+                .hits
+                .borrow()
+                .iter()
+                .find(|(rect, _)| {
+                    rect.x <= mouse.column
+                        && mouse.column < rect.x + rect.width
+                        && rect.y <= mouse.row
+                        && mouse.row < rect.y + rect.height
+                })
+                .map(|(_, hit)| hit.clone());
+            if let Some(Hit::Row { key, id }) = hit {
+                app.collection(&key).selected_id = Some(id);
+                sync(app);
+                handle_key(app, KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+            }
         }
         _ => {}
     }

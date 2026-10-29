@@ -848,13 +848,24 @@ impl Project {
 
     /// Execution record, its journal events, resolved observations and produced effects.
     pub async fn view_execution(&self, id: &str) -> Result<Value> {
+        // Bounded windows (§96: logs of 1M lines): the newest output lines, observations and
+        // events, with totals; `calve execution logs` returns everything.
+        const OUTPUT_TAIL: usize = 2000;
+        const RECENT: usize = 500;
         let logs = self.execution_logs(id).await?;
         let execution = self.execution(id).await?;
+        let all_events = logs["events"].as_array().cloned().unwrap_or_default();
+        let observed: Vec<&Value> = all_events
+            .iter()
+            .filter(|e| e["kind"] == "observation.appended")
+            .collect();
         let mut observations = Vec::new();
-        let mut output = Vec::new();
-        for event in logs["events"].as_array().into_iter().flatten() {
-            if event["kind"] != "observation.appended" {
-                continue;
+        let mut output: Vec<Value> = Vec::new();
+        let mut read_lines = 0usize;
+        // Newest first, fetching objects only while the windows still need them.
+        for event in observed.iter().rev() {
+            if output.len() >= OUTPUT_TAIL && observations.len() >= RECENT {
+                break;
             }
             let Ok(digest) = serde_json::from_value::<Digest>(event["body"]["digest"].clone())
             else {
@@ -863,16 +874,35 @@ impl Project {
             let object = self.client.query(Query::GetObject { digest }).await?;
             let body = object["envelope"]["body"].clone();
             // Harness logs arrive as `{"lines":[{"stream","text"}]}` batches.
-            for line in body["payload"]["lines"].as_array().into_iter().flatten() {
-                output.push(
-                    json!({"stream":line["stream"],"text":line["text"],"at":body["observed_at"]}),
+            let lines = body["payload"]["lines"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            read_lines += lines.len();
+            for line in lines.iter().rev() {
+                if output.len() < OUTPUT_TAIL {
+                    output.push(
+                        json!({"stream":line["stream"],"text":line["text"],"at":body["observed_at"]}),
+                    );
+                }
+            }
+            if observations.len() < RECENT {
+                observations.push(
+                    json!({"digest":digest,"kind":body["kind"],"at":body["observed_at"],
+                    "payload":body["payload"],"resources":body["related_resources"]}),
                 );
             }
-            observations.push(
-                json!({"digest":digest,"kind":body["kind"],"at":body["observed_at"],
-                "payload":body["payload"],"resources":body["related_resources"]}),
-            );
         }
+        output.reverse();
+        observations.reverse();
+        let output_truncated = read_lines > output.len() || observed.len() > observations.len();
+        let events_total = all_events.len();
+        let observations_total = observed.len();
+        let events: Vec<Value> = all_events
+            .iter()
+            .skip(events_total.saturating_sub(RECENT))
+            .cloned()
+            .collect();
         let effects: Vec<Value> = match execution["pack"].as_str() {
             Some(pack) => self
                 .pack(pack)
@@ -901,9 +931,11 @@ impl Project {
             )
             .optional()?;
         Ok(
-            json!({"execution":execution,"events":logs["events"],"observations":observations,
+            json!({"execution":execution,"events":events,"observations":observations,
             "output":output,"effects":effects,
-            "task":task.map(|(id, title)| json!({"id":id,"title":title}))}),
+            "task":task.map(|(id, title)| json!({"id":id,"title":title})),
+            "output_truncated":output_truncated,"events_total":events_total,
+            "observations_total":observations_total}),
         )
     }
 

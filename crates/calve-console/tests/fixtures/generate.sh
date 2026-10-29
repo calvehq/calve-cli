@@ -127,6 +127,8 @@ for b in data["baselines"]:
     put(f"baseline-history:{b['id']}", "activity", "--pack", b["id"])
 for t in data["tasks"]:
     put(f"task:{t['id']}", "task", "show", t["id"])
+for e in data["extensions"]:
+    put(f"extension-info:{e['id']}", "extension", "info", e["id"])
 for p in data["projects"]:
     put(f"project-health:{p['project_id']}", "project", "health", p["project_id"])
 put(f"execution:{os.environ['CALVE_EXECUTION']}", "view", "execution", os.environ["CALVE_EXECUTION"])

@@ -8,12 +8,37 @@ use crate::theme::{Symbols, Theme, Tone};
 
 /// (layer, row) per node. Layers follow longest dependency paths; nodes on a cycle are placed
 /// after everything acyclic and reported so the renderer can say so.
+#[derive(Clone)]
 pub struct Placement {
     pub positions: Vec<(usize, usize)>,
     pub cyclic: Vec<usize>,
 }
 
+/// Node count, edges and their layout.
+type Cached = Option<(usize, Vec<(usize, usize)>, Placement)>;
+
+thread_local! {
+    /// The last layout: recomputed only when the topology changes (§71).
+    static CACHE: std::cell::RefCell<Cached> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// [`compute`] memoized on the topology.
 pub fn layout(count: usize, edges: &[(usize, usize)]) -> Placement {
+    CACHE.with(|cache| {
+        if let Some((n, e, placement)) = cache.borrow().as_ref()
+            && *n == count
+            && e.as_slice() == edges
+        {
+            return placement.clone();
+        }
+        let placement = compute(count, edges);
+        *cache.borrow_mut() = Some((count, edges.to_vec(), placement.clone()));
+        placement
+    })
+}
+
+pub fn compute(count: usize, edges: &[(usize, usize)]) -> Placement {
     let mut indegree = vec![0usize; count];
     let mut outgoing = vec![Vec::new(); count];
     for &(from, to) in edges {
@@ -47,6 +72,12 @@ pub fn layout(count: usize, edges: &[(usize, usize)]) -> Placement {
         by_layer[layer[node]].push(node);
     }
     // One barycenter pass keeps related nodes near each other; ties keep input order.
+    let mut incoming = vec![Vec::new(); count];
+    for &(from, to) in edges {
+        if from < count && to < count {
+            incoming[to].push(from);
+        }
+    }
     let mut row = vec![0f64; count];
     for (index, &node) in by_layer.first().into_iter().flatten().enumerate() {
         row[node] = index as f64;
@@ -56,11 +87,7 @@ pub fn layout(count: usize, edges: &[(usize, usize)]) -> Placement {
             .iter()
             .enumerate()
             .map(|(order, &node)| {
-                let parents: Vec<f64> = edges
-                    .iter()
-                    .filter(|(_, to)| *to == node)
-                    .map(|(from, _)| row[*from])
-                    .collect();
+                let parents: Vec<f64> = incoming[node].iter().map(|from| row[*from]).collect();
                 let center = if parents.is_empty() {
                     order as f64
                 } else {

@@ -3,22 +3,22 @@
 │ PROJECT            ││Enabled in this Project ───────────────────────────────────────────────────────────────────││org.calve.rust                             │
 │  Overview        5 ││Extension                                        Version   Status       Granted            ││                                           │
 │  Work              ││org.calve.rust                                   0.1.0     ✓ ACTIVE                        ││Version     0.1.0                          │
-│  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Manifest    sha256:6ce666…9d2b4cad60b0     │
-│  ChangePacks       ││                                                                                           ││Granted                                    │
-│  Baselines         ││Available ─────────────────────────────────────────────────────────────────────────────────││Active      yes                            │
-│  Evidence          ││Extension                                        Version   Source       Summary            ││                                           │
-│  Events            ││  none                                                                                     ││Actions                                    │
+│  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Source      catalog calve · publisher calve│
+│  ChangePacks       ││                                                                                           ││Manifest    sha256:6b4425…78b8a1dfc6b3     │
+│  Baselines         ││Available ─────────────────────────────────────────────────────────────────────────────────││Artifact    sha256:227c37…b8064ebb7079     │
+│  Evidence          ││Extension                                        Version   Source       Publisher          ││Contract                                   │
+│  Events            ││org.calve.c-cpp                                  0.1.0     ○ calve      calve              ││Granted                                    │
+│                    ││org.calve.general                                0.1.0     ○ calve      calve              ││Active      yes                            │
+│ SYSTEM             ││org.calve.go                                     0.1.0     ○ calve      calve              ││                                           │
+│  Projects          ││org.calve.hcl                                    0.1.0     ○ calve      calve              ││Contributes                                │
+│  Inbox           2 ││org.calve.java                                   0.1.0     ○ calve      calve              ││Verifiers   org.calve.rust.checks          │
+│  Doctor            ││org.calve.javascript-typescript                  0.1.0     ○ calve      calve              ││Modes       subprocess                     │
+│› Extensions        ││org.calve.python                                 0.1.0     ○ calve      calve              ││                                           │
+│                    ││org.calve.shell                                  0.1.0     ○ calve      calve              ││Actions                                    │
 │                    ││                                                                                           ││  Permissions                              │
-│ SYSTEM             ││                                                                                           ││  Update                                   │
-│  Projects          ││                                                                                           ││  Disable                                  │
-│  Inbox           2 ││                                                                                           ││  a all actions                            │
-│  Doctor            ││                                                                                           ││                                           │
-│› Extensions        ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││  Update                                   │
+│                    ││                                                                                           ││  Disable                                  │
+│                    ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

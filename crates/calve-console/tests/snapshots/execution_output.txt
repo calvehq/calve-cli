@@ -1,18 +1,18 @@
- Calve  project: openaevc  workspace: main  Execution exe_agqyi52fyf23pfvwj7flr6veqe   ● healthy                                    v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ Execution exe_agqyi52fyf23pfvwj7flr6veqe ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqyi52fyf23pfvwj7flr6veqe   │
+ Calve  project: openaevc  workspace: main  Execution exe_agqyjaox7fya3aqvtb4civrno4   ● healthy                                    v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Execution exe_agqyjaox7fya3aqvtb4civrno4 ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqyjaox7fya3aqvtb4civrno4   │
 │  Overview        5 ││                                                                                           ││                                           │
 │› Work              ││checking                                                                                   ││State       × FAILED                       │
-│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqyi52frr3urbmlxak6mqqmkm │
+│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqyjaoxyryy5hnlnos3cz5rxi │
 │  ChangePacks       ││                                                                                           ││Harness     org.calve.harness.lint         │
 │  Baselines         ││                                                                                           ││Provider    org.calve.provider.shell       │
-│  Evidence          ││                                                                                           ││Actor       pri_agqyi5xlkb3lndtjmva33cz5tu │
+│  Evidence          ││                                                                                           ││Actor       pri_agqyjanz3f6vdfucg5zvgsh3wu │
 │  Events            ││                                                                                           ││Attempt     1 of 3                         │
 │                    ││                                                                                           ││Generation  2                              │
 │ SYSTEM             ││                                                                                           ││Task        —                              │
-│  Projects          ││                                                                                           ││Started     1m ago · 2026-10-28 21:42:51   │
+│  Projects          ││                                                                                           ││Started     1m ago · 2026-10-28 21:54:24   │
 │  Inbox           2 ││                                                                                           ││UTC                                        │
-│  Doctor            ││                                                                                           ││Finished    1m ago · 2026-10-28 21:42:57   │
+│  Doctor            ││                                                                                           ││Finished    1m ago · 2026-10-28 21:54:30   │
 │  Extensions        ││                                                                                           ││UTC                                        │
 │                    ││                                                                                           ││Duration    6.0s                           │
 │                    ││                                                                                           ││Result      worker exited with status 2    │

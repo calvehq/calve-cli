@@ -1367,3 +1367,231 @@ fn baseline_inspector_list_and_compare() {
     );
     assert!(screen.contains("Shared      0 ChangePacks"), "{screen}");
 }
+
+/// §46, §47, §53: Doctor passes only what it checked; extension updates compare semantic
+/// versions and the inspector shows source, digests and contributions; mouse clicks run
+/// inspector actions, right-click opens a row's actions, long lists get a scrollbar.
+#[test]
+fn doctor_extensions_and_mouse() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::Doctor);
+    h.pump();
+    let screen = h.render();
+    assert!(screen.contains("○ INFO     version"), "{screen}");
+    let mut doctor = h.data["doctor"].clone();
+    doctor["namespace"] = Value::Null;
+    h.data.insert("doctor".into(), doctor);
+    h.key(KeyCode::Char('r'));
+    assert!(
+        h.render().contains("× FAIL     answered"),
+        "no namespace, no PASS"
+    );
+    // A catalog offering 0.10.0 is an update for 0.9.0 (not by text order).
+    let mut extensions = h.data["extensions"].clone();
+    extensions[0]["version"] = json!("0.9.0");
+    let id = extensions[0]["id"].as_str().unwrap().to_owned();
+    h.data.insert("extensions".into(), extensions);
+    let mut catalog = h.data["extension-catalog"].clone();
+    catalog
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"catalog":"calve","id":id,"package":{"publisher":"calve","versions":[{"version":"0.10.0"}]}}));
+    h.data.insert("extension-catalog".into(), catalog);
+    h.app.navigate(Route::Extensions);
+    h.pump();
+    let screen = h.render();
+    assert!(screen.contains("UPDATE"), "{screen}");
+    assert!(
+        screen.contains("catalog calve · publisher calve") && screen.contains("Contributes"),
+        "{screen}"
+    );
+    // Right-click a row: its actions; clicking an inspector action runs it.
+    let mouse = |h: &mut Harness, button: MouseButton, column: u16, row: u16| {
+        h.app.hits.borrow_mut().clear();
+        h.render();
+        calve_console::input::handle_mouse(
+            &mut h.app,
+            MouseEvent {
+                kind: MouseEventKind::Down(button),
+                column,
+                row,
+                modifiers: KeyModifiers::NONE,
+            },
+        );
+        h.pump();
+    };
+    let screen = h.render();
+    // The row in the workspace, not the inspector heading that names it too.
+    let row = screen
+        .lines()
+        .position(|l| l.find(&id).is_some_and(|c| (20..110).contains(&c)))
+        .unwrap() as u16;
+    mouse(&mut h, MouseButton::Right, 40, row);
+    assert!(matches!(
+        h.app.overlays.last(),
+        Some(Overlay::Actions { .. })
+    ));
+    h.app.overlays.clear();
+    let screen = h.render();
+    let line = screen
+        .lines()
+        .position(|l| l.contains("  Permissions"))
+        .unwrap() as u16;
+    let column = screen
+        .lines()
+        .nth(line as usize)
+        .unwrap()
+        .find("Permissions")
+        .unwrap() as u16;
+    let before = h.commands.len();
+    mouse(&mut h, MouseButton::Left, column, line);
+    assert_eq!(h.commands.len(), before + 1, "inspector action ran");
+    // A list longer than the pane draws a scrollbar.
+    let mut events = h.data["events"].as_array().unwrap().clone();
+    let template = events[0].clone();
+    for i in 0..80 {
+        let mut e = template.clone();
+        e["id"] = json!(format!("calve:{}", 5000 + i));
+        events.push(e);
+    }
+    h.data.insert("events".into(), Value::Array(events));
+    h.app.navigate(Route::Events);
+    h.pump();
+    assert!(h.render().contains('█'), "scrollbar thumb");
+}
+
+/// §96 performance datasets, as the console receives them (keyset pages and bounded views):
+/// 10,000 ChangePacks (pages of 200), 10,000 tasks, 1,000 graph nodes, a 20,000-line diff and
+/// a bounded log tail. Navigation and rendering stay windowed; timings are printed for the
+/// M6 benchmark record and held to a generous debug-build budget.
+#[test]
+fn large_datasets_stay_windowed() {
+    use std::time::{Duration, Instant};
+    let budget = Duration::from_millis(1500);
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    let mut worst: Vec<(&str, Duration)> = Vec::new();
+    let mut timed = |name: &'static str, h: &mut Harness, f: &dyn Fn(&mut Harness)| {
+        let start = Instant::now();
+        f(h);
+        h.render();
+        let took = start.elapsed();
+        worst.push((name, took));
+        assert!(took < budget, "{name} took {took:?}");
+    };
+    // 10,000 packs: only the first page is loaded until the selection nears its end.
+    let template = h.data["packs"]["items"][0].clone();
+    let page = |from: usize| {
+        let items: Vec<Value> = (from..from + 200)
+            .map(|i| {
+                let mut p = template.clone();
+                p["id"] = json!(format!("cpk_{i:026}"));
+                p["title"] = json!(format!("Pack {i}"));
+                p
+            })
+            .collect();
+        let next = (from + 200 < 10_000).then(|| format!("cpk_{:026}", from + 199));
+        json!({"items":items,"next":next,"counts":{"OPEN":10_000}})
+    };
+    h.data.insert("packs".into(), page(0));
+    for from in (200..10_000).step_by(200) {
+        h.data
+            .insert(format!("packs@cpk_{:026}", from - 1), page(from));
+    }
+    timed("open ChangePacks", &mut h, &|h| {
+        h.app.navigate(Route::ChangePacks);
+        h.pump();
+    });
+    assert_eq!(
+        h.app.pages("packs").items.len(),
+        200,
+        "one page, not 10,000 rows"
+    );
+
+    timed("j ×20", &mut h, &|h| {
+        for _ in 0..20 {
+            h.key(KeyCode::Char('j'));
+        }
+    });
+    assert!(h.render().contains("of 10000"), "loaded of total");
+    timed("G (loads ahead)", &mut h, &|h| {
+        h.key(KeyCode::Char('G'));
+    });
+    // 10,000 tasks across 50 intents.
+    let task = h.data["tasks"][0].clone();
+    let intent = h.data["intents"][0].clone();
+    let intents: Vec<Value> = (0..50)
+        .map(|i| {
+            let mut x = intent.clone();
+            x["id"] = json!(format!("int_{i}"));
+            x["title"] = json!(format!("Intent {i}"));
+            x
+        })
+        .collect();
+    let tasks: Vec<Value> = (0..10_000)
+        .map(|i| {
+            let mut t = task.clone();
+            t["id"] = json!(format!("tsk_{i}"));
+            t["intent_id"] = json!(format!("int_{}", i % 50));
+            t["title"] = json!(format!("Task {i}"));
+            t
+        })
+        .collect();
+    h.data.insert("intents".into(), Value::Array(intents));
+    h.data.insert("tasks".into(), Value::Array(tasks));
+    timed("open Work (10k tasks)", &mut h, &|h| {
+        h.app.navigate(Route::Work);
+        h.pump();
+    });
+    timed("Work j ×10", &mut h, &|h| {
+        for _ in 0..10 {
+            h.key(KeyCode::Char('j'));
+        }
+    });
+    // 1,000-node graph.
+    let nodes: Vec<Value> = (0..1000)
+        .map(|i| json!({"id":format!("n{i}"),"label":format!("Node {i}"),"kind":"task","state":"OPEN"}))
+        .collect();
+    let edges: Vec<Value> = (1..1000)
+        .map(|i| json!({"from":format!("n{}", i / 3),"to":format!("n{i}"),"kind":"depends_on"}))
+        .collect();
+    h.data.insert(
+        "graph".into(),
+        json!({"intent":null,"nodes":nodes,"edges":edges}),
+    );
+    timed("open Change Graph (1k nodes)", &mut h, &|h| {
+        h.app.navigate(Route::ChangeGraph);
+        h.pump();
+    });
+    timed("graph l ×10", &mut h, &|h| {
+        for _ in 0..10 {
+            h.key(KeyCode::Char('l'));
+        }
+    });
+    // A 20,000-line diff (the backend's cap): only the window is styled.
+    let path = h.data[&format!("pack:{runner}")]["files"][0]["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let lines: Vec<Value> = (0..20_000)
+        .map(|i| json!({"kind":"add","new":i + 1,"text":format!("line {i}")}))
+        .collect();
+    h.data.insert(
+        format!("diff:{runner}:{path}"),
+        json!({"binary":false,"added":20_000,"removed":0,"lines":lines,"truncated":true}),
+    );
+    timed("open Diff (20k lines)", &mut h, &|h| {
+        h.app.navigate(Route::ChangePack(runner.clone()));
+        h.pump();
+        h.keys("2");
+    });
+    timed("diff J ×50", &mut h, &|h| {
+        for _ in 0..50 {
+            h.key(KeyCode::Char('J'));
+        }
+    });
+    for (name, took) in &worst {
+        println!("§96 {name}: {took:?}");
+    }
+}

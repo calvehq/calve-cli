@@ -1,12 +1,12 @@
  Calve  project: openaevc  workspace: main  Overview   ● healthy                            v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Overview ────────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││Needs attention ──────────────────────────────────────────────────││openaevc                    │
-│› Overview        5 ││    Subject                                                       ││prj_01a18476-eb57-769d-8864-│
-│  Work              ││×   exe_…7flr6veqe   Execution FAILED                      1m     ││970b09c914ad                │
-│  Change Graph      ││!   tsk_…3f92defed   Daemon hardening is blocked           1m     ││                            │
-│  ChangePacks       ││◆   cpk_…fwyx6w5aa   Fix daemon race condition awaits ver… 1m     ││ChangePacks 6               │
-│  Baselines         ││◆   cpk_…dhjmmfudm   Add remote conformance runner awaits… 1m     ││Intents     2               │
-│  Evidence          ││!   cpk_…wj4m3zu7q   Pack is quarantined                   1m     ││Baselines   1               │
+│› Overview        5 ││    Subject                                                       ││prj_01a18481-b9da-7206-a903-│
+│  Work              ││×   exe_…b4civrno4   Execution FAILED                      1m     ││ee96bb4ec558                │
+│  Change Graph      ││!   tsk_…7fb11b3df   Daemon hardening is blocked           1m     ││                            │
+│  ChangePacks       ││◆   cpk_…aipmqieqe   Fix daemon race condition awaits ver… 1m     ││ChangePacks 6               │
+│  Baselines         ││◆   cpk_…etppeyqhq   Add remote conformance runner awaits… 1m     ││Intents     2               │
+│  Evidence          ││!   cpk_…gckyz3sxq   Pack is quarantined                   1m     ││Baselines   1               │
 │  Events            ││                                                                  ││Attention   5               │
 │                    ││Active work ──────────────────────────────────────────────────────││                            │
 │ SYSTEM             ││Intent                               Tasks   Packs  State         ││                            │
@@ -15,18 +15,18 @@
 │  Doctor            ││                                                                  ││                            │
 │  Extensions        ││Recent activity ──────────────────────────────────────────────────││                            │
 │                    ││Time      Actor          Event                   Object           ││                            │
-│                    ││21:42:57Z pri_…va33cz5tu execution.finished      exe_…7flr6veqe   ││                            │
-│                    ││21:42:57Z pri_…va33cz5tu execution.failed        exe_…7flr6veqe   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu object.imported         sha256:…5cf6fb   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu pack.created            cpk_…ak6mqqmkm   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu changepack.created      cpk_…ak6mqqmkm   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu changepack.quarantined  cpk_…wj4m3zu7q   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu pack.created            cpk_…wj4m3zu7q   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu changepack.created      cpk_…wj4m3zu7q   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu file.captured           rules.txt        ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu execution.succeeded     exe_…wtosluc3e   ││                            │
-│                    ││21:42:51Z pri_…va33cz5tu effect.applied          exe_…wtosluc3e   ││                            │
-│                    ││21:42:50Z pri_…va33cz5tu pack.created            cpk_…ahnhyhuxy   ││                            │
+│                    ││21:54:30Z pri_…5zvgsh3wu execution.finished      exe_…b4civrno4   ││                            │
+│                    ││21:54:30Z pri_…5zvgsh3wu execution.failed        exe_…b4civrno4   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu object.imported         sha256:…e13974   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu pack.created            cpk_…os3cz5rxi   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu changepack.created      cpk_…os3cz5rxi   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu changepack.quarantined  cpk_…gckyz3sxq   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu pack.created            cpk_…gckyz3sxq   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu changepack.created      cpk_…gckyz3sxq   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu file.captured           rules.txt        ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.succeeded     exe_…4kv34s5hi   ││                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu effect.applied          exe_…4kv34s5hi   ││                            │
+│                    ││21:54:23Z pri_…5zvgsh3wu pack.created            cpk_…kfn65l6ke   ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

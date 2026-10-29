@@ -4,6 +4,8 @@
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use std::rc::Rc;
+
 use serde_json::{Value, json};
 
 use crate::model::{App, PaletteItem, Route, Target};
@@ -65,8 +67,9 @@ pub struct Section {
 
 pub struct Table {
     pub key: String,
-    pub sections: Vec<Section>,
     pub empty: (String, String),
+    /// Shared so a memoized table is reused, not rebuilt, by navigation keys (§71).
+    pub sections: Rc<Vec<Section>>,
     /// Quick state chips shown above the table (ChangePacks).
     pub chips: Vec<(String, usize)>,
     /// Rows in the whole collection when only some pages are loaded.
@@ -649,7 +652,7 @@ fn overview(app: &App) -> Screen {
     });
     let mut screen = Screen::new(Body::Table(Table {
         key: "overview".into(),
-        sections,
+        sections: Rc::new(sections),
         empty: (
             "Nothing needs attention.".into(),
             "Create an intent and a ChangePack to begin.".into(),
@@ -772,68 +775,73 @@ fn work(app: &App) -> Screen {
         .value("overview")
         .and_then(|v| v["active_work"].as_array().cloned())
         .unwrap_or_default();
-    let mut sections = Vec::new();
-    for intent in intents.as_array().unwrap_or(&empty) {
-        let intent_id = str_of(intent, "id");
-        let state = rollup
-            .iter()
-            .find(|w| w["id"] == intent["id"])
-            .map(|w| str_of(w, "state").to_owned())
-            .unwrap_or_else(|| str_of(intent, "state").to_owned());
-        let rows: Vec<Row> = tasks
-            .as_array()
-            .unwrap_or(&empty)
-            .iter()
-            .filter(|task| task["intent_id"] == intent["id"])
-            .map(|task| Row {
-                id: str_of(task, "id").to_owned(),
-                cells: vec![
-                    plain(app, str_of(task, "title")),
-                    muted(app, task["assignee"].as_str().unwrap_or("—")),
-                    muted(app, str_of(task, "priority")),
-                    state_cell(app, str_of(task, "state")),
-                    age_cell(app, &task["updated_at"]),
+    let sections = memo(app, "work", || {
+        let mut sections = Vec::new();
+        // Tasks grouped once, not filtered per intent (§96: 10,000 tasks).
+        let mut by_intent: std::collections::HashMap<&str, Vec<&Value>> =
+            std::collections::HashMap::new();
+        for task in tasks.as_array().unwrap_or(&empty) {
+            by_intent
+                .entry(str_of(task, "intent_id"))
+                .or_default()
+                .push(task);
+        }
+        for intent in intents.as_array().unwrap_or(&empty) {
+            let intent_id = str_of(intent, "id");
+            let own: &[&Value] = by_intent.get(intent_id).map_or(&[], Vec::as_slice);
+            let state = rollup
+                .iter()
+                .find(|w| w["id"] == intent["id"])
+                .map(|w| str_of(w, "state").to_owned())
+                .unwrap_or_else(|| str_of(intent, "state").to_owned());
+            let rows: Vec<Row> = own
+                .iter()
+                .map(|task| Row {
+                    id: str_of(task, "id").to_owned(),
+                    cells: vec![
+                        plain(app, str_of(task, "title")),
+                        muted(app, task["assignee"].as_str().unwrap_or("—")),
+                        muted(app, str_of(task, "priority")),
+                        state_cell(app, str_of(task, "state")),
+                        age_cell(app, &task["updated_at"]),
+                    ],
+                    copy: None,
+                    tab: None,
+                    open: Some(Route::Task(str_of(task, "id").to_owned())),
+                    search: search(&[
+                        ("text", str_of(task, "title")),
+                        ("state", str_of(task, "state")),
+                        ("actor", task["assignee"].as_str().unwrap_or("")),
+                        ("id", str_of(task, "id")),
+                        ("intent", intent_id),
+                    ])
+                    .into_iter()
+                    .chain(time_search(app, "updated", &task["updated_at"]))
+                    .collect(),
+                })
+                .collect();
+            let done = own.iter().filter(|t| t["state"] == "COMPLETE").count();
+            sections.push(Section {
+                title: Some(format!(
+                    "{}  {}/{} · {} {}",
+                    line(str_of(intent, "title")),
+                    done,
+                    rows.len(),
+                    app.symbols.tone(state_tone(&state)),
+                    state
+                )),
+                columns: vec![
+                    fill("Task", 20, 1),
+                    col("Actor", 12, 3),
+                    col("Priority", 9, 4),
+                    col("State", 14, 1),
+                    col("Updated", 8, 2),
                 ],
-                copy: None,
-                tab: None,
-                open: Some(Route::Task(str_of(task, "id").to_owned())),
-                search: search(&[
-                    ("text", str_of(task, "title")),
-                    ("state", str_of(task, "state")),
-                    ("actor", task["assignee"].as_str().unwrap_or("")),
-                    ("id", str_of(task, "id")),
-                    ("intent", intent_id),
-                ])
-                .into_iter()
-                .chain(time_search(app, "updated", &task["updated_at"]))
-                .collect(),
-            })
-            .collect();
-        let done = tasks
-            .as_array()
-            .unwrap_or(&empty)
-            .iter()
-            .filter(|t| t["intent_id"] == intent["id"] && t["state"] == "COMPLETE")
-            .count();
-        sections.push(Section {
-            title: Some(format!(
-                "{}  {}/{} · {} {}",
-                line(str_of(intent, "title")),
-                done,
-                rows.len(),
-                app.symbols.tone(state_tone(&state)),
-                state
-            )),
-            columns: vec![
-                fill("Task", 20, 1),
-                col("Actor", 12, 3),
-                col("Priority", 9, 4),
-                col("State", 14, 1),
-                col("Updated", 8, 2),
-            ],
-            rows,
-        });
-    }
+                rows,
+            });
+        }
+        sections
+    });
     let mut screen = Screen::new(Body::Table(Table {
         key: "work".into(),
         sections,
@@ -992,11 +1000,11 @@ fn task(app: &App, id: &str) -> Screen {
                 .collect();
             Body::Table(Table {
                 key: format!("task-executions:{id}"),
-                sections: vec![Section {
+                sections: Rc::new(vec![Section {
                     title: None,
                     columns: vec![fill("Execution", 20, 1)],
                     rows,
-                }],
+                }]),
                 empty: (
                     "No executions linked.".into(),
                     "Link one with :task link-execution.".into(),
@@ -1103,7 +1111,19 @@ fn execution(app: &App, id: &str) -> Screen {
             } else {
                 Body::Log {
                     key: format!("output:{id}"),
-                    header: vec![],
+                    // The view returns the newest lines of a long log (§96); say so.
+                    header: if value["output_truncated"] == true {
+                        vec![toned(
+                            app,
+                            Tone::Warning,
+                            format!(
+                                "Showing the last {} lines · full log: calve execution logs {id}",
+                                value["output"].as_array().map_or(0, Vec::len)
+                            ),
+                        )]
+                    } else {
+                        vec![]
+                    },
                     lines,
                     follow: matches!(
                         str_of(exec, "state"),
@@ -1262,11 +1282,11 @@ fn table_body(
         .collect();
     Body::Table(Table {
         key,
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns,
             rows,
-        }],
+        }]),
         empty: (empty.to_owned(), String::new()),
         chips: vec![],
         total: None,
@@ -1333,7 +1353,7 @@ fn change_graph(app: &App) -> Screen {
             "No tasks or packs in the change graph.",
         ));
         if let Body::Table(table) = &mut screen.body {
-            for row in &mut table.sections[0].rows {
+            for row in &mut Rc::make_mut(&mut table.sections)[0].rows {
                 row.open = all_nodes
                     .iter()
                     .find(|n| n["id"] == row.id.as_str())
@@ -1463,7 +1483,7 @@ fn packs(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "packs".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![
                 col("ID", 16, 1),
@@ -1473,7 +1493,7 @@ fn packs(app: &App) -> Screen {
                 col("Updated", 8, 2),
             ],
             rows,
-        }],
+        }]),
         empty: (
             "No ChangePacks yet.".into(),
             "Create one with :pack create \"title\", capture files, then seal it to start review."
@@ -1488,6 +1508,21 @@ fn packs(app: &App) -> Screen {
                 screen.inspector = pack_inspector(app, detail);
                 screen.actions = backend_actions(detail);
                 screen.explain = Some(pack_explain(app, detail));
+            }
+            None if app
+                .loaded(&format!("pack:{id}"))
+                .is_some_and(|l| l.error.is_some()) =>
+            {
+                screen.inspector = vec![toned(
+                    app,
+                    Tone::Danger,
+                    format!(
+                        "Could not load {id}: {} · r refresh",
+                        app.loaded(&format!("pack:{id}"))
+                            .and_then(|l| l.error.as_deref())
+                            .unwrap_or("")
+                    ),
+                )]
             }
             None => {
                 screen.inspector = vec![muted_line(
@@ -2112,7 +2147,7 @@ fn verify_body(app: &App, id: &str, value: &Value) -> Body {
     rows.sort_by(|a, b| a.0.cmp(&b.0));
     Body::Table(Table {
         key: format!("verify:{id}"),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![
                 fill("Check", 18, 1),
@@ -2123,7 +2158,7 @@ fn verify_body(app: &App, id: &str, value: &Value) -> Body {
                 col("When", 6, 4),
             ],
             rows: rows.into_iter().map(|(_, r)| r).collect(),
-        }],
+        }]),
         empty: (
             "No verification has run for this pack.".into(),
             "Seal the pack, then run verification or language checks from Actions.".into(),
@@ -2312,7 +2347,7 @@ fn evidence_tab(app: &App, id: &str, pack: &Value) -> Body {
     }
     Body::Table(Table {
         key: format!("evidence:{id}"),
-        sections,
+        sections: Rc::new(sections),
         empty: (
             "No evidence is attached to this ChangePack.".into(),
             format!("Required {satisfied} / {} satisfied.", satisfied + missing),
@@ -2496,11 +2531,11 @@ fn baselines(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "baselines".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![col("ID", 16, 1), fill("Label", 12, 1), col("Aliases", 12, 3), col("Packs", 6, 2), col("State", 11, 1), col("", 7, 2), col("Created", 8, 4)],
             rows,
-        }],
+        }]),
         empty: ("No Baselines yet.".into(), "A Baseline is an independent composition of promoted ChangePacks. Create one with :baseline create <label> <promoted digest…>.".into()),
         chips: vec![],
         total: None,
@@ -2652,7 +2687,7 @@ fn baseline(app: &App, id: &str) -> Screen {
                 .collect();
             Body::Table(Table {
                 key: format!("baseline-packs:{id}"),
-                sections: vec![Section {
+                sections: Rc::new(vec![Section {
                     title: None,
                     columns: vec![
                         col("Pack", 16, 1),
@@ -2662,7 +2697,7 @@ fn baseline(app: &App, id: &str) -> Screen {
                         col("Promoted digest", 22, 4),
                     ],
                     rows,
-                }],
+                }]),
                 empty: ("This Baseline has no members.".into(), String::new()),
                 chips: vec![],
                 total: None,
@@ -2685,11 +2720,11 @@ fn baseline(app: &App, id: &str) -> Screen {
                     .collect();
                 Body::Table(Table {
                     key: format!("baseline-history:{id}"),
-                    sections: vec![Section {
+                    sections: Rc::new(vec![Section {
                         title: None,
                         columns: activity_columns(),
                         rows,
-                    }],
+                    }]),
                     empty: (
                         "No recorded history for this Baseline.".into(),
                         String::new(),
@@ -2908,7 +2943,7 @@ fn baseline_list_fallback(app: &App, id: &str, value: &Value) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: format!("baseline-graph:{id}"),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![
                 fill("Pack", 18, 1),
@@ -2917,7 +2952,7 @@ fn baseline_list_fallback(app: &App, id: &str, value: &Value) -> Screen {
                 col("Order", 6, 3),
             ],
             rows,
-        }],
+        }]),
         empty: ("This Baseline has no members.".into(), String::new()),
         chips: vec![],
         total: None,
@@ -3008,7 +3043,7 @@ fn evidence(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "evidence".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![
                 col("ID", 16, 1),
@@ -3019,7 +3054,7 @@ fn evidence(app: &App) -> Screen {
                 col("Created", 8, 2),
             ],
             rows,
-        }],
+        }]),
         empty: (
             "No evidence recorded yet.".into(),
             "Evidence is registered against sealed candidates by checks, reviews and tools.".into(),
@@ -3107,11 +3142,11 @@ fn events(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "events".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: activity_columns(),
             rows,
-        }],
+        }]),
         empty: ("No events yet.".into(), String::new()),
         chips: vec![],
         total: None,
@@ -3250,7 +3285,7 @@ fn projects(app: &App) -> Screen {
     };
     let mut screen = Screen::new(Body::Table(Table {
         key: "projects".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title,
             columns: vec![
                 fill("Project", 14, 1),
@@ -3259,7 +3294,7 @@ fn projects(app: &App) -> Screen {
                 col("", 8, 2),
             ],
             rows,
-        }],
+        }]),
         empty,
         chips: vec![],
         total: None,
@@ -3401,7 +3436,7 @@ fn inbox(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "inbox".into(),
-        sections: vec![Section { title: None, columns: vec![col("Severity", 11, 1), col("Type", 18, 2), fill("Message", 20, 1), col("", 4, 3), col("Age", 6, 2)], rows }],
+        sections: Rc::new(vec![Section { title: None, columns: vec![col("Severity", 11, 1), col("Type", 18, 2), fill("Message", 20, 1), col("", 4, 3), col("Age", 6, 2)], rows }]),
         empty: ("Inbox is clear.".into(), "Attention items appear when executions fail, packs are quarantined or reviews go stale.".into()),
         chips: vec![],
         total: None,
@@ -3483,15 +3518,29 @@ fn doctor(app: &App) -> Screen {
             },
             str_of(&value["product_db"], "integrity").to_owned(),
         ),
+        // PASS only for what doctor checked: the runtime answering with its Namespace. Versions
+        // are reported facts, shown as INFO (§46, §99 rule 1).
         (
             "OpenAEVC runtime",
-            "PASS",
-            format!("protocol {}", str_of(&value["compatibility"], "protocol")),
+            if value["namespace"]["id"].is_string() {
+                "PASS"
+            } else {
+                "FAIL"
+            },
+            format!(
+                "answered · {} {} · protocol {}",
+                str_of(&value["compatibility"], "runtime_name"),
+                str_of(&value["compatibility"], "runtime_version"),
+                str_of(&value["compatibility"], "protocol")
+            ),
         ),
         (
             "Extension contract",
-            "PASS",
-            str_of(&value["compatibility"], "extension_contract").to_owned(),
+            "INFO",
+            format!(
+                "version {} (reported)",
+                str_of(&value["compatibility"], "extension_contract")
+            ),
         ),
     ];
     for extension in value["extensions"].as_array().into_iter().flatten() {
@@ -3526,7 +3575,7 @@ fn doctor(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "doctor".into(),
-        sections: vec![Section {
+        sections: Rc::new(vec![Section {
             title: None,
             columns: vec![
                 col("Check", 20, 1),
@@ -3534,7 +3583,7 @@ fn doctor(app: &App) -> Screen {
                 fill("Detail", 20, 2),
             ],
             rows,
-        }],
+        }]),
         empty: ("No diagnostics.".into(), String::new()),
         chips: vec![],
         total: None,
@@ -3594,10 +3643,7 @@ fn extensions(app: &App) -> Screen {
         Err(screen) => return *screen,
     };
     let health = app.value("extension-health").cloned().unwrap_or(json!([]));
-    let catalog = app
-        .value("extension-catalog")
-        .cloned()
-        .unwrap_or(json!({"packages":[]}));
+    let catalog = app.value("extension-catalog").cloned().unwrap_or(json!([]));
     let mut rows = Vec::new();
     let enabled: Vec<&Value> = value.as_array().into_iter().flatten().collect();
     for entry in &enabled {
@@ -3608,11 +3654,8 @@ fn extensions(app: &App) -> Screen {
             .flatten()
             .find(|h| h["id"] == id)
             .is_none_or(|h| h["healthy"] == true);
-        let newer = catalog["packages"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|p| p["id"] == id && p["version"].as_str() > entry["version"].as_str());
+        let newer = latest_version(&catalog, id)
+            .is_some_and(|v| semver_cmp(&v, str_of(entry, "version")).is_gt());
         let state = if !healthy {
             "ERROR"
         } else if newer {
@@ -3636,10 +3679,8 @@ fn extensions(app: &App) -> Screen {
             search: search(&[("text", id), ("status", state)]),
         });
     }
-    let available: Vec<Row> = catalog["packages"]
-        .as_array()
+    let available: Vec<Row> = catalog_entries(&catalog)
         .into_iter()
-        .flatten()
         .filter(|p| !enabled.iter().any(|e| e["id"] == p["id"]))
         .map(|p| {
             let id = str_of(p, "id");
@@ -3647,9 +3688,9 @@ fn extensions(app: &App) -> Screen {
                 id: format!("available:{id}"),
                 cells: vec![
                     plain(app, id),
-                    muted(app, str_of(p, "version")),
+                    muted(app, latest_version(&catalog, id).unwrap_or_default()),
                     muted(app, format!("○ {}", str_of(p, "catalog"))),
-                    muted(app, p["summary"].as_str().unwrap_or("")),
+                    muted(app, p["package"]["publisher"].as_str().unwrap_or("")),
                 ],
                 copy: None,
                 tab: None,
@@ -3660,7 +3701,7 @@ fn extensions(app: &App) -> Screen {
         .collect();
     let mut screen = Screen::new(Body::Table(Table {
         key: "extensions".into(),
-        sections: vec![
+        sections: Rc::new(vec![
             Section {
                 title: Some("Enabled in this Project".into()),
                 columns: vec![
@@ -3677,11 +3718,11 @@ fn extensions(app: &App) -> Screen {
                     fill("Extension", 18, 1),
                     col("Version", 9, 2),
                     col("Source", 12, 1),
-                    col("Summary", 18, 3),
+                    col("Publisher", 18, 3),
                 ],
                 rows: available,
             },
-        ],
+        ]),
         empty: (
             "No extensions.".into(),
             "Enable the software extension with :extension enable.".into(),
@@ -3710,22 +3751,7 @@ fn extensions(app: &App) -> Screen {
                 ),
             )];
         } else if let Some(entry) = enabled.iter().find(|e| e["id"] == id.as_str()) {
-            screen.inspector = vec![
-                heading(app, &id),
-                blank(),
-                field(app, "Version", str_of(entry, "version")),
-                field(
-                    app,
-                    "Manifest",
-                    text::middle(str_of(entry, "manifest"), 26, app.symbols.ellipsis()),
-                ),
-                field(app, "Granted", scalar(&entry["granted_host_capabilities"])),
-                field(
-                    app,
-                    "Active",
-                    if entry["active"] == true { "yes" } else { "no" },
-                ),
-            ];
+            screen.inspector = extension_inspector(app, entry, &catalog, &health);
             screen.actions = vec![
                 item(
                     "Permissions",
@@ -3795,6 +3821,153 @@ pub fn raw_body(app: &App, key: String, value: &Value) -> Body {
     }
 }
 
+/// Catalog search results as a list, whichever envelope the backend used.
+fn catalog_entries(catalog: &Value) -> Vec<&Value> {
+    catalog
+        .as_array()
+        .or_else(|| catalog["packages"].as_array())
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// The newest version a trusted catalog offers for `id`, by semantic version.
+fn latest_version(catalog: &Value, id: &str) -> Option<String> {
+    catalog_entries(catalog)
+        .into_iter()
+        .filter(|p| p["id"] == id)
+        .flat_map(|p| {
+            p["package"]["versions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v["version"].as_str())
+                .chain(p["version"].as_str())
+        })
+        .max_by(|a, b| semver_cmp(a, b))
+        .map(str::to_owned)
+}
+
+/// Semantic-version order (§47): numeric parts compare as numbers (1.10.0 > 1.9.0) and a
+/// pre-release sorts before its release.
+pub fn semver_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let split = |v: &str| {
+        let v = v.trim_start_matches('v');
+        let (core, pre) = match v.split_once('-') {
+            Some((core, pre)) => (core, Some(pre.to_owned())),
+            None => (v.split('+').next().unwrap_or(v), None),
+        };
+        let nums: Vec<u64> = core.split('.').map(|p| p.parse().unwrap_or(0)).collect();
+        (nums, pre)
+    };
+    let (an, ap) = split(a);
+    let (bn, bp) = split(b);
+    an.cmp(&bn).then(match (ap, bp) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (Some(x), Some(y)) => x.cmp(&y),
+    })
+}
+
+/// Extension inspector (§47): version and digests, trust source, granted and unsupported
+/// capabilities, contributed kinds, health errors.
+fn extension_inspector(
+    app: &App,
+    entry: &Value,
+    catalog: &Value,
+    health: &Value,
+) -> Vec<Line<'static>> {
+    let id = str_of(entry, "id");
+    let info = app.value(&format!("extension-info:{id}"));
+    let manifest = info.map(|i| &i["manifest"]);
+    let source = catalog_entries(catalog)
+        .into_iter()
+        .find(|p| p["id"] == id)
+        .map(|p| {
+            format!(
+                "catalog {} · publisher {}",
+                str_of(p, "catalog"),
+                p["package"]["publisher"].as_str().unwrap_or("?")
+            )
+        })
+        .unwrap_or_else(|| "not offered by a trusted catalog".into());
+    let mut lines = vec![
+        heading(app, id),
+        blank(),
+        field(app, "Version", str_of(entry, "version")),
+        field(app, "Source", source),
+        field(
+            app,
+            "Manifest",
+            text::middle(str_of(entry, "manifest"), 26, app.symbols.ellipsis()),
+        ),
+    ];
+    if let Some(m) = manifest {
+        lines.push(field(
+            app,
+            "Artifact",
+            text::middle(str_of(m, "artifact_digest"), 26, app.symbols.ellipsis()),
+        ));
+        lines.push(field(app, "Contract", str_of(m, "contract")));
+    }
+    lines.push(field(
+        app,
+        "Granted",
+        scalar(&entry["granted_host_capabilities"]),
+    ));
+    if entry["unsupported_host_capabilities"]
+        .as_array()
+        .is_some_and(|u| !u.is_empty())
+    {
+        lines.push(toned(
+            app,
+            Tone::Warning,
+            format!(
+                "Declared but unsupported: {}",
+                scalar(&entry["unsupported_host_capabilities"])
+            ),
+        ));
+    }
+    lines.push(field(
+        app,
+        "Active",
+        if entry["active"] == true { "yes" } else { "no" },
+    ));
+    match manifest {
+        Some(m) => {
+            lines.push(blank());
+            lines.push(heading(app, "Contributes"));
+            for (name, key) in [
+                ("Effects", "effect_kinds"),
+                ("Resources", "resource_kinds"),
+                ("Verifiers", "verifier_kinds"),
+                ("Evaluators", "evaluator_kinds"),
+                ("Modes", "execution_modes"),
+            ] {
+                if m[key].as_array().is_some_and(|a| !a.is_empty()) {
+                    lines.push(field(app, name, scalar(&m[key])));
+                }
+            }
+        }
+        None => lines.push(muted_line(
+            app,
+            format!("Loading manifest{}", app.symbols.ellipsis()),
+        )),
+    }
+    if let Some(problem) = health
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|h| h["id"] == id)
+        .and_then(|h| h["problem"].as_str())
+    {
+        lines.push(blank());
+        lines.push(toned(app, Tone::Danger, problem));
+    }
+    lines
+}
+
 /// JSON with key/value coloring; the escape hatch, never the primary view (§24).
 pub fn raw_lines(app: &App, value: &Value) -> Vec<Line<'static>> {
     let text = serde_json::to_string_pretty(value).unwrap_or_default();
@@ -3814,6 +3987,22 @@ pub fn raw_lines(app: &App, value: &Value) -> Vec<Line<'static>> {
 
 fn sanitize_raw(raw: &str) -> String {
     text::sanitize(raw)
+}
+
+/// Sections of a large table, built once per (data version, clock second) and shared by every
+/// later build until a response arrives (§71: navigation never rebuilds 10,000 rows).
+fn memo(app: &App, key: &str, build: impl FnOnce() -> Vec<Section>) -> Rc<Vec<Section>> {
+    let stamp = (app.data_version, app.now);
+    if let Some((at, sections)) = app.memo.borrow().get(key)
+        && *at == stamp
+    {
+        return sections.clone();
+    }
+    let sections = Rc::new(build());
+    app.memo
+        .borrow_mut()
+        .insert(key.to_owned(), (stamp, sections.clone()));
+    sections
 }
 
 /// The selected row id of a collection, resolved against the current rows.
@@ -4058,6 +4247,18 @@ mod tests {
             unknown_fields(&[&row], "risk:high type:x after:1h"),
             vec!["risk"]
         );
+    }
+
+    #[test]
+    fn versions_compare_semantically() {
+        use std::cmp::Ordering::*;
+        assert_eq!(semver_cmp("1.10.0", "1.9.0"), Greater);
+        assert_eq!(semver_cmp("0.2.0", "0.10.0"), Less);
+        assert_eq!(semver_cmp("1.0.0-rc.1", "1.0.0"), Less);
+        assert_eq!(semver_cmp("v1.2.3", "1.2.3"), Equal);
+        let catalog =
+            json!([{"id":"x","package":{"versions":[{"version":"1.9.0"},{"version":"1.10.0"}]}}]);
+        assert_eq!(latest_version(&catalog, "x").as_deref(), Some("1.10.0"));
     }
 
     #[test]

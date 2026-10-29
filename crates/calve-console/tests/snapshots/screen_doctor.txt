@@ -1,9 +1,9 @@
  Calve  project: openaevc  workspace: main  Doctor   ● healthy                                                                      v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Doctor ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Check                Status     Detail                                                     ││Project                                    │
-│  Overview        5 ││Product database     ✓ PASS     ok                                                         ││prj_01a18476-eb57-769d-8864-970b09c914ad   │
-│  Work              ││OpenAEVC runtime     ✓ PASS     protocol 0.1.0                                             ││Overall     ✓ HEALTHY                      │
-│  Change Graph      ││Extension contract   ✓ PASS     0.1.0                                                      ││                                           │
+│  Overview        5 ││Product database     ✓ PASS     ok                                                         ││prj_01a18481-b9da-7206-a903-ee96bb4ec558   │
+│  Work              ││OpenAEVC runtime     ✓ PASS     answered · openaevc-runtime 0.1.0 · protocol 0.1.0         ││Overall     ✓ HEALTHY                      │
+│  Change Graph      ││Extension contract   ○ INFO     version 0.1.0 (reported)                                   ││                                           │
 │  ChangePacks       ││Extension            ✓ PASS     org.calve.rust                                             ││Actions                                    │
 │  Baselines         ││Extension            ✓ PASS     org.calve.software                                         ││  Maintenance check                        │
 │  Evidence          ││                                                                                           ││  Recovery plan                            │

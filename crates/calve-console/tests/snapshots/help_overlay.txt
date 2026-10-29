@@ -1,16 +1,16 @@
- Calve  project: openaev┌ ChangePack cpk_agqyi52bez3vdapulahnhyhuxy shortcuts ─────────────────┐y
+ Calve  project: openaev┌ ChangePack cpk_agqyjaotoz2wbfnghkfn65l6ke shortcuts ─────────────────┐y
 ┌ Navigation ────────┐┌ │NAVIGATION                                                            │ector ─────────────────┐
 │ PROJECT            ││ │  j / ↓       next                                                    │ary  Relations         │
 │  Overview        5 ││ │  k / ↑       previous                                                │bility  Raw  [ ]       │
-│  Work              ││c│  gg / G      first / last                                            │bez3vdapulahnhyhuxy    │
+│  Work              ││c│  gg / G      first / last                                            │toz2wbfnghkfn65l6ke    │
 │  Change Graph      ││ │  h l         outward / inward                                        │tor verification rules │
 │› ChangePacks       ││C│  enter       open                                                    │                       │
 │  Baselines         ││ │  esc         back / close                                            │       ○ OPEN          │
 │  Evidence          ││ │  tab         next pane or tab                                        │       not evaluated   │
 │  Events            ││ │  g           go to                                                   │ation  2               │
 │                    ││ │  alt+← →     history                                                 │ed     1m ago ·        │
-│ SYSTEM             ││ │                                                                      │10-28 21:42:50 UTC by  │
-│  Projects          ││ │THIS SCREEN                                                           │dtjmva33cz5tu          │
+│ SYSTEM             ││ │                                                                      │10-28 21:54:23 UTC by  │
+│  Projects          ││ │THIS SCREEN                                                           │fucg5zvgsh3wu          │
 │  Inbox           2 ││ │  tab         tabs                                                    │ed     1 files  +1 -0  │
 │  Doctor            ││ │  a           actions                                                 │nce    0               │
 │  Extensions        ││ │  x           explain                                                 │                       │
@@ -26,10 +26,10 @@
 │                    ││ │  /           filter (field:value, updated:<1h)                       │                       │
 │                    ││ │  :           command mode                                            │                       │
 │                    ││ │  z           fullscreen    ┌────────────────────────────────────────────────────────────────┐│
-│                    ││ │  r           refresh (also │ ● :pack abandon cpk_agqyi52bez3vdapulahnhyhuxy --generation 2… ││
+│                    ││ │  r           refresh (also │ ● :pack abandon cpk_agqyjaotoz2wbfnghkfn65l6ke --generation 2… ││
 │                    ││ │  y           copy reference└────────────────────────────────────────────────────────────────┘│
 │                    ││ │  ctrl+l      activity       ┌───────────────────────────────────────────────────────────────┐│
-│                    ││ │  ctrl+b      hide side pane │ ✓ :pack abandon cpk_agqyi52bez3vdapulahnhyhuxy --generation 2 ││
+│                    ││ │  ctrl+b      hide side pane │ ✓ :pack abandon cpk_agqyjaotoz2wbfnghkfn65l6ke --generation 2 ││
 │                    ││ └─────────────────────────────└───────────────────────────────────────────────────────────────┘│
 └────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
  tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

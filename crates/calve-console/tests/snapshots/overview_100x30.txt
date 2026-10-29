@@ -1,30 +1,30 @@
  Calve  project: openaevc  workspace: main  Overview   ● healthy        v0.1.0  ^P Commands  ? Help
 ┌ Overview ──────────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
-│Needs attention ────────────────────────────────────────────││openaevc                            │
-│    Subject                                                 ││prj_01a18476-eb57-769d-8864-970b09c9│
-│×   exe_…7flr6veqe   Execution FAILED                1m     ││14ad                                │
-│!   tsk_…3f92defed   Daemon hardening is blocked     1m     ││                                    │
-│◆   cpk_…fwyx6w5aa   Fix daemon race condition awai… 1m     ││ChangePacks 6                       │
-│◆   cpk_…dhjmmfudm   Add remote conformance runner … 1m     ││Intents     2                       │
-│!   cpk_…wj4m3zu7q   Pack is quarantined             1m     ││Baselines   1                       │
-│                                                            ││Attention   5                       │
-│Active work ────────────────────────────────────────────────││                                    │
-│Intent                         Tasks   Packs  State         ││                                    │
-│SDK compatibility              0/1     1      ● RUNNING     ││                                    │
-│HTTP conformance               1/4     2      ! BLOCKED     ││                                    │
-│                                                            ││                                    │
-│Recent activity ────────────────────────────────────────────││                                    │
-│Time      Actor          Event                              ││                                    │
-│21:42:57Z pri_…va33cz5tu execution.finished                 ││                                    │
-│21:42:57Z pri_…va33cz5tu execution.failed                   ││                                    │
-│21:42:51Z pri_…va33cz5tu object.imported                    ││                                    │
-│21:42:51Z pri_…va33cz5tu pack.created                       ││                                    │
-│21:42:51Z pri_…va33cz5tu changepack.created                 ││                                    │
-│21:42:51Z pri_…va33cz5tu changepack.quarantined             ││                                    │
-│21:42:51Z pri_…va33cz5tu pack.created                       ││                                    │
-│21:42:51Z pri_…va33cz5tu changepack.created                 ││                                    │
-│21:42:51Z pri_…va33cz5tu file.captured                      ││                                    │
-│21:42:51Z pri_…va33cz5tu execution.succeeded                ││                                    │
-│21:42:51Z pri_…va33cz5tu effect.applied                 1/19││                                    │
+│Needs attention ───────────────────────────────────────────█││openaevc                            │
+│    Subject                                                █││prj_01a18481-b9da-7206-a903-ee96bb4e│
+│×   exe_…b4civrno4   Execution FAILED                1m    █││c558                                │
+│!   tsk_…7fb11b3df   Daemon hardening is blocked     1m    █││                                    │
+│◆   cpk_…aipmqieqe   Fix daemon race condition awai… 1m    █││ChangePacks 6                       │
+│◆   cpk_…etppeyqhq   Add remote conformance runner … 1m    █││Intents     2                       │
+│!   cpk_…gckyz3sxq   Pack is quarantined             1m    █││Baselines   1                       │
+│                                                           █││Attention   5                       │
+│Active work ───────────────────────────────────────────────█││                                    │
+│Intent                         Tasks   Packs  State        █││                                    │
+│SDK compatibility              0/1     1      ● RUNNING    █││                                    │
+│HTTP conformance               1/4     2      ! BLOCKED    █││                                    │
+│                                                           █││                                    │
+│Recent activity ───────────────────────────────────────────█││                                    │
+│Time      Actor          Event                             █││                                    │
+│21:54:30Z pri_…5zvgsh3wu execution.finished                █││                                    │
+│21:54:30Z pri_…5zvgsh3wu execution.failed                  █││                                    │
+│21:54:24Z pri_…5zvgsh3wu object.imported                   █││                                    │
+│21:54:24Z pri_…5zvgsh3wu pack.created                      █││                                    │
+│21:54:24Z pri_…5zvgsh3wu changepack.created                █││                                    │
+│21:54:24Z pri_…5zvgsh3wu changepack.quarantined            █││                                    │
+│21:54:24Z pri_…5zvgsh3wu pack.created                      █││                                    │
+│21:54:24Z pri_…5zvgsh3wu changepack.created                █││                                    │
+│21:54:24Z pri_…5zvgsh3wu file.captured                     █││                                    │
+│21:54:24Z pri_…5zvgsh3wu execution.succeeded               █││                                    │
+│21:54:24Z pri_…5zvgsh3wu effect.applied                 1/19││                                    │
 └────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

@@ -331,8 +331,13 @@ pub struct CollectionState {
 #[derive(Debug, Clone)]
 pub enum Hit {
     Nav(usize),
-    Row { key: String, id: String },
+    Row {
+        key: String,
+        id: String,
+    },
     Tab(usize),
+    /// The n-th inspector action (§53: inspector actions are clickable).
+    Action(usize),
 }
 
 pub struct App {
@@ -410,6 +415,13 @@ pub struct App {
     pub panes_hidden: bool,
     /// The pack inspector's tab: Summary, Relations, Eligibility, Raw (§30.2); `[` `]`.
     pub inspector_tab: usize,
+    /// Bumped on every read-model response; memoized tables are valid for one version.
+    pub data_version: u64,
+    /// Table sections built for (data version, clock second), reused by navigation keys.
+    #[allow(clippy::type_complexity)]
+    pub memo: std::cell::RefCell<
+        BTreeMap<String, ((u64, i64), std::rc::Rc<Vec<crate::screens::Section>>)>,
+    >,
 }
 
 impl App {
@@ -471,6 +483,8 @@ impl App {
             quit_armed: false,
             panes_hidden: false,
             inspector_tab: 0,
+            data_version: 0,
+            memo: std::cell::RefCell::new(BTreeMap::new()),
         };
         app.load_route();
         app.request("status", status_action());
@@ -512,12 +526,25 @@ impl App {
         });
     }
 
+    /// Requests a key that has never answered; a failed automatic load is not retried until
+    /// an explicit refresh, so a failing read model cannot loop (R16).
+    pub fn request_once(&mut self, key: &str, action: Action) {
+        if self
+            .data
+            .get(key)
+            .is_none_or(|l| l.value.is_none() && l.error.is_none())
+        {
+            self.request(key, action);
+        }
+    }
+
     pub fn take_requests(&mut self) -> Vec<Request> {
         std::mem::take(&mut self.outbox)
     }
 
     pub fn respond(&mut self, key: &str, result: Result<Value, String>) {
         let now = self.now;
+        self.data_version += 1;
         let entry = self.data.entry(key.to_owned()).or_default();
         entry.loading = false;
         match result {
@@ -629,7 +656,7 @@ impl App {
         if let Some(cursor) = self.pages(key).next {
             let mut words: Vec<&str> = args.to_vec();
             words.extend([*flag, cursor.as_str()]);
-            self.request(&format!("{key}@{cursor}"), action(&words));
+            self.request_once(&format!("{key}@{cursor}"), action(&words));
         }
     }
 
@@ -671,6 +698,7 @@ impl App {
     pub fn switch_project(&mut self, root: String) {
         self.open_project = Some(root);
         self.epoch += 1;
+        self.data_version += 1;
         self.data.clear();
         self.outbox.clear();
         self.collections.clear();
@@ -886,6 +914,10 @@ pub fn detail_request(route: &Route, id: &str) -> Option<(String, Action)> {
         Route::Evidence => Some((
             format!("evidence-refs:{id}"),
             action(&["activity", "--pack", id]),
+        )),
+        Route::Extensions if !id.starts_with("available:") => Some((
+            format!("extension-info:{id}"),
+            action(&["extension", "info", id]),
         )),
         _ => None,
     }

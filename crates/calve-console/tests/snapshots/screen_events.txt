@@ -1,45 +1,45 @@
  Calve  project: openaevc  workspace: main  Events   ● healthy                                                                      v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Events ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││Time      Actor          Event                                            Object           ││execution.finished                         │
-│  Overview        5 ││21:42:57Z pri_…va33cz5tu execution.finished                               exe_…7flr6veqe   ││calve:38                                   │
-│  Work              ││21:42:57Z pri_…va33cz5tu execution.failed                                 exe_…7flr6veqe   ││                                           │
-│  Change Graph      ││21:42:57Z pri_…va33cz5tu observation.appended                             exe_…7flr6veqe   ││Time        1m ago · 2026-10-28 21:42:57   │
-│  ChangePacks       ││21:42:57Z pri_…va33cz5tu execution.heartbeat                              exe_…7flr6veqe   ││UTC                                        │
-│  Baselines         ││21:42:51Z pri_…va33cz5tu execution.heartbeat                              exe_…7flr6veqe   ││Actor       pri_agqyi5xlkb3lndtjmva33cz5tu │
-│  Evidence          ││21:42:51Z pri_…va33cz5tu execution.running                                exe_…7flr6veqe   ││Source      calve                          │
-│› Events            ││21:42:51Z pri_…va33cz5tu execution.starting                               exe_…7flr6veqe   ││                                           │
-│                    ││21:42:51Z pri_…va33cz5tu execution.admitted                               exe_…7flr6veqe   ││Objects                                    │
-│ SYSTEM             ││21:42:51Z pri_…va33cz5tu object.imported                                  sha256:…5cf6fb   ││  → exe_agqyi52fyf23pfvwj7flr6veqe         │
-│  Projects          ││21:42:51Z pri_…va33cz5tu workunit.added                                   cpk_…ak6mqqmkm   ││Detail      FAILED                         │
-│  Inbox           2 ││21:42:51Z pri_…va33cz5tu provider.registered                              org.cal….shell   ││                                           │
-│  Doctor            ││21:42:51Z pri_…va33cz5tu pack.created                                     cpk_…ak6mqqmkm   ││Raw                                        │
-│  Extensions        ││21:42:51Z pri_…va33cz5tu changepack.created                               cpk_…ak6mqqmkm   ││{                                          │
-│                    ││21:42:51Z pri_…va33cz5tu changepack.quarantined                           cpk_…wj4m3zu7q   ││  "actor":                                 │
-│                    ││21:42:51Z pri_…va33cz5tu pack.created                                     cpk_…wj4m3zu7q   ││"pri_agqyi5xlkb3lndtjmva33cz5tu",          │
-│                    ││21:42:51Z pri_…va33cz5tu changepack.created                               cpk_…wj4m3zu7q   ││  "body": null,                            │
-│                    ││21:42:51Z pri_…va33cz5tu file.captured                                    rules.txt        ││  "detail": "FAILED",                      │
-│                    ││21:42:51Z pri_…va33cz5tu execution.succeeded                              exe_…wtosluc3e   ││  "id": "calve:38",                        │
-│                    ││21:42:51Z pri_…va33cz5tu observation.appended                             exe_…wtosluc3e   ││  "kind": "execution.finished",            │
-│                    ││21:42:51Z pri_…va33cz5tu observation.appended                             exe_…wtosluc3e   ││  "namespace_id":                          │
-│                    ││21:42:51Z pri_…va33cz5tu effect.applied                                   exe_…wtosluc3e   ││"ns_agqyi5xlkb7s7gju47o2dndxdm",           │
-│                    ││21:42:51Z pri_…va33cz5tu execution.heartbeat                              exe_…wtosluc3e   ││  "project_id":                            │
-│                    ││21:42:51Z pri_…va33cz5tu execution.running                                exe_…wtosluc3e   ││"prj_01a18476-eb57-769d-8864-970b09c914ad",│
-│                    ││21:42:51Z pri_…va33cz5tu execution.starting                               exe_…wtosluc3e   ││  "source": "calve",                       │
-│                    ││21:42:51Z pri_…va33cz5tu execution.admitted                               exe_…wtosluc3e   ││  "source_event_id": "38",                 │
-│                    ││21:42:51Z pri_…va33cz5tu workunit.added                                   cpk_…ahnhyhuxy   ││  "source_sequence": 38,                   │
-│                    ││21:42:51Z pri_…va33cz5tu provider.registered                              org.cal….local   ││  "subject":                               │
-│                    ││21:42:50Z pri_…va33cz5tu pack.created                                     cpk_…ahnhyhuxy   ││"exe_agqyi52fyf23pfvwj7flr6veqe",          │
-│                    ││21:42:50Z pri_…va33cz5tu changepack.created                               cpk_…ahnhyhuxy   ││  "subjects": [                            │
-│                    ││21:42:50Z pri_…va33cz5tu task.pack.linked                                 tsk_…3f92defed   ││    "exe_agqyi52fyf23pfvwj7flr6veqe"       │
-│                    ││21:42:50Z pri_…va33cz5tu review.recorded                                  cpk_…fwyx6w5aa   ││  ],                                       │
-│                    ││21:42:50Z pri_…va33cz5tu evidence.registered                              cpk_…fwyx6w5aa   ││  "summary": "execution.finished           │
-│                    ││21:42:50Z pri_…va33cz5tu changepack.sealed                                cpk_…fwyx6w5aa   ││exe_agqyi52fyf23pfvwj7flr6veqe",           │
-│                    ││21:42:50Z pri_…va33cz5tu file.captured                                    crates/…mon.rs   ││  "timestamp":                             │
-│                    ││21:42:50Z pri_…va33cz5tu execution.succeeded                              exe_…d7plsdv6i   ││"2026-10-28T21:42:57.729084484Z"           │
-│                    ││21:42:50Z pri_…va33cz5tu observation.appended                             exe_…d7plsdv6i   ││}                                          │
-│                    ││21:42:50Z pri_…va33cz5tu observation.appended                             exe_…d7plsdv6i   ││                                           │
-│                    ││21:42:50Z pri_…va33cz5tu effect.applied                                   exe_…d7plsdv6i   ││Actions                                    │
-│                    ││21:42:50Z pri_…va33cz5tu execution.heartbeat                              exe_…d7plsdv6i   ││  Open object                              │
-│                    ││21:42:50Z pri_…va33cz5tu execution.running                                exe_…d7plsdv1/100││  a all actions                            │
+│ PROJECT            ││Time      Actor          Event                                            Object          █││execution.finished                         │
+│  Overview        5 ││21:54:30Z pri_…5zvgsh3wu execution.finished                               exe_…b4civrno4  █││calve:38                                   │
+│  Work              ││21:54:30Z pri_…5zvgsh3wu execution.failed                                 exe_…b4civrno4  █││                                           │
+│  Change Graph      ││21:54:29Z pri_…5zvgsh3wu observation.appended                             exe_…b4civrno4  █││Time        1m ago · 2026-10-28 21:54:30   │
+│  ChangePacks       ││21:54:29Z pri_…5zvgsh3wu execution.heartbeat                              exe_…b4civrno4  █││UTC                                        │
+│  Baselines         ││21:54:24Z pri_…5zvgsh3wu execution.heartbeat                              exe_…b4civrno4  █││Actor       pri_agqyjanz3f6vdfucg5zvgsh3wu │
+│  Evidence          ││21:54:24Z pri_…5zvgsh3wu execution.running                                exe_…b4civrno4  █││Source      calve                          │
+│› Events            ││21:54:24Z pri_…5zvgsh3wu execution.starting                               exe_…b4civrno4  █││                                           │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.admitted                               exe_…b4civrno4  █││Objects                                    │
+│ SYSTEM             ││21:54:24Z pri_…5zvgsh3wu object.imported                                  sha256:…e13974  █││  → exe_agqyjaox7fya3aqvtb4civrno4         │
+│  Projects          ││21:54:24Z pri_…5zvgsh3wu workunit.added                                   cpk_…os3cz5rxi  █││Detail      FAILED                         │
+│  Inbox           2 ││21:54:24Z pri_…5zvgsh3wu provider.registered                              org.cal….shell  █││                                           │
+│  Doctor            ││21:54:24Z pri_…5zvgsh3wu pack.created                                     cpk_…os3cz5rxi  █││Raw                                        │
+│  Extensions        ││21:54:24Z pri_…5zvgsh3wu changepack.created                               cpk_…os3cz5rxi  █││{                                          │
+│                    ││21:54:24Z pri_…5zvgsh3wu changepack.quarantined                           cpk_…gckyz3sxq  █││  "actor":                                 │
+│                    ││21:54:24Z pri_…5zvgsh3wu pack.created                                     cpk_…gckyz3sxq  █││"pri_agqyjanz3f6vdfucg5zvgsh3wu",          │
+│                    ││21:54:24Z pri_…5zvgsh3wu changepack.created                               cpk_…gckyz3sxq  │││  "body": null,                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu file.captured                                    rules.txt       │││  "detail": "FAILED",                      │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.succeeded                              exe_…4kv34s5hi  │││  "id": "calve:38",                        │
+│                    ││21:54:24Z pri_…5zvgsh3wu observation.appended                             exe_…4kv34s5hi  │││  "kind": "execution.finished",            │
+│                    ││21:54:24Z pri_…5zvgsh3wu observation.appended                             exe_…4kv34s5hi  │││  "namespace_id":                          │
+│                    ││21:54:24Z pri_…5zvgsh3wu effect.applied                                   exe_…4kv34s5hi  │││"ns_agqyjanz3bzmfn7pr7zzmfqclq",           │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.heartbeat                              exe_…4kv34s5hi  │││  "project_id":                            │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.running                                exe_…4kv34s5hi  │││"prj_01a18481-b9da-7206-a903-ee96bb4ec558",│
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.starting                               exe_…4kv34s5hi  │││  "source": "calve",                       │
+│                    ││21:54:24Z pri_…5zvgsh3wu execution.admitted                               exe_…4kv34s5hi  │││  "source_event_id": "38",                 │
+│                    ││21:54:24Z pri_…5zvgsh3wu workunit.added                                   cpk_…kfn65l6ke  │││  "source_sequence": 38,                   │
+│                    ││21:54:24Z pri_…5zvgsh3wu provider.registered                              org.cal….local  │││  "subject":                               │
+│                    ││21:54:23Z pri_…5zvgsh3wu pack.created                                     cpk_…kfn65l6ke  │││"exe_agqyjaox7fya3aqvtb4civrno4",          │
+│                    ││21:54:23Z pri_…5zvgsh3wu changepack.created                               cpk_…kfn65l6ke  │││  "subjects": [                            │
+│                    ││21:54:23Z pri_…5zvgsh3wu task.pack.linked                                 tsk_…7fb11b3df  │││    "exe_agqyjaox7fya3aqvtb4civrno4"       │
+│                    ││21:54:23Z pri_…5zvgsh3wu review.recorded                                  cpk_…aipmqieqe  │││  ],                                       │
+│                    ││21:54:23Z pri_…5zvgsh3wu evidence.registered                              cpk_…aipmqieqe  │││  "summary": "execution.finished           │
+│                    ││21:54:23Z pri_…5zvgsh3wu changepack.sealed                                cpk_…aipmqieqe  │││exe_agqyjaox7fya3aqvtb4civrno4",           │
+│                    ││21:54:23Z pri_…5zvgsh3wu file.captured                                    crates/…mon.rs  │││  "timestamp":                             │
+│                    ││21:54:23Z pri_…5zvgsh3wu execution.succeeded                              exe_…sxdzzga5u  │││"2026-10-28T21:54:30.447891607Z"           │
+│                    ││21:54:23Z pri_…5zvgsh3wu observation.appended                             exe_…sxdzzga5u  │││}                                          │
+│                    ││21:54:23Z pri_…5zvgsh3wu observation.appended                             exe_…sxdzzga5u  │││                                           │
+│                    ││21:54:22Z pri_…5zvgsh3wu effect.applied                                   exe_…sxdzzga5u  │││Actions                                    │
+│                    ││21:54:22Z pri_…5zvgsh3wu execution.heartbeat                              exe_…sxdzzga5u  │││  Open object                              │
+│                    ││21:54:22Z pri_…5zvgsh3wu execution.running                                exe_…sxdzzga1/100││  a all actions                            │
 └────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
  paused · f follow  ↑↓ navigate  / filter actor: type: object: after:  f live  ^P commands  : command  ? help
