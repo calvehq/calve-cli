@@ -117,6 +117,7 @@ put("doctor", "doctor")
 put("extensions", "extension", "list")
 put("extension-health", "extension", "health")
 put("extension-catalog", "extension", "search")
+put("extension-catalogs", "extension", "catalog", "list")
 for pack in data["packs"]["items"]:
     pid = pack["id"]
     put(f"pack:{pid}", "view", "pack", pid)
@@ -135,6 +136,7 @@ put(f"execution:{os.environ['CALVE_EXECUTION']}", "view", "execution", os.enviro
 # Paths and machine-specific values are replaced so fixtures are portable.
 text = json.dumps({"now": int(time.time()), "data": data}, indent=1, sort_keys=True)
 text = text.replace(proj, "/home/dev/openaevc")
+text = text.replace(os.path.expanduser("~"), "/home/dev")
 open(out, "w").write(text)
 print(f"wrote {len(data)} read models to {out}")
 PY

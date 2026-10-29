@@ -121,6 +121,8 @@ fn destructive(args: &[String]) -> bool {
         "remove",
         "gc",
         "identity-remove",
+        "rollback",
+        "resolve",
     ];
     words.iter().take(3).any(|w| risky.contains(w))
         || words.contains(&"--apply")
@@ -293,7 +295,7 @@ fn issue_with(app: &mut App, label: &str, args: &[String], show_result: bool, co
             }
             app.commands += 1;
             let key = format!("cmd:{}:{}:{label}", app.commands, u8::from(show_result));
-            app.in_flight.insert(key.clone());
+            app.in_flight.insert(key.clone(), args.to_vec());
             app.outbox.push(Request { key, action });
             app.notify(Tone::Running, format!("{label}…"));
         }
@@ -308,7 +310,7 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
         sync(app);
         return;
     };
-    app.in_flight.remove(key);
+    let sent = app.in_flight.remove(key).unwrap_or_default();
     let mut parts = rest.splitn(3, ':');
     let (_, show, label) = (
         parts.next(),
@@ -361,6 +363,27 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
             sync(app);
         }
         Err(error) => {
+            // A native extension needs the same explicit acknowledgment as the CLI's
+            // --acknowledge-native: the dialog states the backend's reason first.
+            if error.contains("T2_ACKNOWLEDGMENT_REQUIRED") && !sent.is_empty() {
+                let mut args = sent;
+                args.push("--acknowledge-native".into());
+                app.overlays.push(Overlay::Confirm {
+                    title: "Native extension (T2)".into(),
+                    lines: vec![
+                        crate::text::line(&error),
+                        String::new(),
+                        "Enter acknowledges that it runs unconfined with your permissions,".into(),
+                        "and enables it.".into(),
+                        String::new(),
+                        format!("calve {}", args.join(" ")),
+                    ],
+                    args,
+                    label: label.to_owned(),
+                    preflight: None,
+                });
+                return;
+            }
             // Stale state is explained, never retried silently (§61).
             if error.contains("generation") || error.contains("CONFLICT") {
                 app.overlays.push(Overlay::Explain {

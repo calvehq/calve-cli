@@ -1,15 +1,15 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
-│  Overview        5 ││                                                                                           ││cpk_…g3f5llgmcqetppeyqhq                   │
-│  Work              ││cpk_…f5llgmcqetppeyqhq · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
+│  Overview        5 ││                                                                                           ││cpk_…hmr5jvoqyrbvmvpg3ea                   │
+│  Work              ││cpk_…r5jvoqyrbvmvpg3ea · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
 │  Change Graph      ││                                                                                           ││                                           │
 │› ChangePacks       ││Intent                                                                                     ││State       ◆ SEALED                       │
 │  Baselines         ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
 │  Evidence          ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
-│  Events            ││                                                                                           ││Created     1m ago · 2026-10-28 21:54:19   │
-│                    ││Changes                                                                                    ││UTC by pri_…fucg5zvgsh3wu                  │
-│ SYSTEM             ││  2 files   +7 -2    ┌ Why is cpk_…gmcqetppeyqhq SEALED? ───────────────────────────────────┐Changed     2 files  +7 -2                 │
+│  Events            ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:10   │
+│                    ││Changes                                                                                    ││UTC by pri_…d7lklnzq6eeeu                  │
+│ SYSTEM             ││  2 files   +7 -2    ┌ Why is cpk_…oqyrbvmvpg3ea SEALED? ───────────────────────────────────┐Changed     2 files  +7 -2                 │
 │  Projects          ││                     │State: SEALED                                                         │Checks      1/1                            │
 │  Inbox           2 ││Verification         │                                                                      │Evidence    0                              │
 │  Doctor            ││  ✓ Verify           │Satisfied                                                             │Review      ◆ WAITING                      │

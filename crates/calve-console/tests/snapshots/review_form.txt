@@ -1,8 +1,8 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq ───────────────────────┐┌ Inspector ─────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
 │  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
-│  Work              ││Review      ◆ WAITING                                             ││cpk_…g3f5llgmcqetppeyqhq    │
+│  Work              ││Review      ◆ WAITING                                             ││cpk_…hmr5jvoqyrbvmvpg3ea    │
 │  Change Graph      ││Required    yes, by pack policy                                   ││Add remote conformance      │
 │› ChangePacks       ││ ┌ Review ──────────────────────────────────────────────────────────────┐r                      │
 │  Baselines         ││D│Decision                                                              │                       │
@@ -10,15 +10,15 @@
 │  Events            ││ │  ( ) Reject                                                          │       ✓ ALLOW         │
 │                    ││E│  ( ) Comment                                                         │ation  2               │
 │ SYSTEM             ││✓│                                                                      │ed     1m ago ·        │
-│  Projects          ││✓│Comment                                                               │10-28 21:54:19 UTC by  │
-│  Inbox           2 ││×│>                                                                     │fucg5zvgsh3wu          │
+│  Projects          ││✓│Comment                                                               │10-29 00:35:10 UTC by  │
+│  Inbox           2 ││×│>                                                                     │d7lklnzq6eeeu          │
 │  Doctor            ││ │                                                                      │ed     2 files  +7 -2  │
 │  Extensions        ││r│Evidence on this candidate                                            │s      1/1             │
 │                    ││ │  none                                                                │nce    0               │
 │                    ││ │Required reviewers: one approval by a principal with review authority │w      ◆ WAITING       │
 │                    ││ │(pack policy)                                                         │                       │
 │                    ││ │                                                                      │t                      │
-│                    ││ │Binds to generation 2 of cpk_…llgmcqetppeyqhq                         │conformance            │
+│                    ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │conformance            │
 │                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
 │                    ││                                                                  ││! Promote: missing: approved│
 │                    ││                                                                  ││review                      │

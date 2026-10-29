@@ -408,7 +408,8 @@ pub struct App {
     /// Objects opened recently, newest last; the palette ranks them up (§10.2).
     pub recent: Vec<String>,
     /// Commands sent and not answered yet; q and Ctrl+C say so before quitting (§9.2).
-    pub in_flight: BTreeSet<String>,
+    /// key -> CLI-grammar args, so a refusal can be answered (T2 acknowledgment).
+    pub in_flight: BTreeMap<String, Vec<String>>,
     /// The next q / Ctrl+C quits even with commands in flight.
     pub quit_armed: bool,
     /// Ctrl+B: hide the navigation (wide) or inspector (medium) pane (§5.1).
@@ -479,7 +480,7 @@ impl App {
             open_project: None,
             epoch: 0,
             recent: Vec::new(),
-            in_flight: BTreeSet::new(),
+            in_flight: BTreeMap::new(),
             quit_armed: false,
             panes_hidden: false,
             inspector_tab: 0,
@@ -898,6 +899,10 @@ pub fn route_requests(route: &Route) -> Vec<(String, Action)> {
             ("extensions".into(), action(&["extension", "list"])),
             ("extension-health".into(), action(&["extension", "health"])),
             ("extension-catalog".into(), action(&["extension", "search"])),
+            (
+                "extension-catalogs".into(),
+                action(&["extension", "catalog", "list"]),
+            ),
         ],
     }
 }

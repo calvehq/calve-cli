@@ -1,18 +1,18 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaotoz2wbfnghkfn65l6ke   ● healthy
-┌ Navigation ────────┐┌ ChangePack cpk_agqyjaotoz2wbfnghkfn65l6ke ───────────────────────┐┌ Inspector ─────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfiufbyifoybnnpkrzexje   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfiufbyifoybnnpkrzexje ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
 │  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
-│  Work              ││cpk_…z2wbfnghkfn65l6ke · Refactor verification rules   ○ OPEN     ││cpk_…toz2wbfnghkfn65l6ke    │
+│  Work              ││cpk_…byifoybnnpkrzexje · Refactor verification rules   ○ OPEN     ││cpk_…ufbyifoybnnpkrzexje    │
 │  Change Graph      ││                                                                  ││Refactor verification rules │
 │› ChangePacks       ││Changes                                                           ││                            │
 │  Baselines         ││  1 files   +1 -0                                                 ││State       ○ OPEN          │
 │  Evidence          ││ ┌ Run command? ────────────────────────────────────────────────────────┐       not evaluated   │
 │  Events            ││ │Closes the pack without promoting it; its history is kept.            │ation  2               │
 │                    ││ │                                                                      │ed     1m ago ·        │
-│ SYSTEM             ││ │Target      cpk_agqyjaotoz2wbfnghkfn65l6ke                            │10-28 21:54:23 UTC by  │
-│  Projects          ││ │× sealed candidate                                                    │fucg5zvgsh3wu          │
+│ SYSTEM             ││ │Target      cpk_agqykfiufbyifoybnnpkrzexje                            │10-29 00:35:13 UTC by  │
+│  Projects          ││ │× sealed candidate                                                    │d7lklnzq6eeeu          │
 │  Inbox           2 ││ │                                                                      │ed     1 files  +1 -0  │
-│  Doctor            ││ │calve pack abandon cpk_agqyjaotoz2wbfnghkfn65l6ke --generation 2      │nce    0               │
+│  Doctor            ││ │calve pack abandon cpk_agqykfiufbyifoybnnpkrzexje --generation 2      │nce    0               │
 │  Extensions        ││ │                                                                      │                       │
 │                    ││ │Enter confirm     Esc cancel                                          │mote: pack is OPEN;    │
 │                    ││ └──────────────────────────────────────────────────────────────────────┘and qualify it first   │

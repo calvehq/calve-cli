@@ -1,12 +1,12 @@
  Calve  project: openaevc  workspace: main  Evidence   ● healthy                                                                    v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Evidence ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││ID               Type             Producer       Attached to          Status      Created  ││Evidence evd_agqyjaotgf6c3i7wmefsvydsoi    │
-│  Overview        5 ││evd_…efsvydsoi   Rejection/v1     pri_…5zvgsh3wu Fix daemon race con… ✓ VALID     1m       ││                                           │
+│ PROJECT            ││ID               Type             Producer       Attached to          Status      Created  ││Evidence evd_agqykfit4b7ohcwcdd3j4phcju    │
+│  Overview        5 ││evd_…d3j4phcju   Rejection/v1     pri_…lnzq6eeeu Fix daemon race con… ✓ VALID     1m       ││                                           │
 │  Work              ││                                                                                           ││Type        Rejection/v1                   │
-│  Change Graph      ││                                                                                           ││Digest      sha256:7aa7968f…34e8d7f714f1e0 │
-│  ChangePacks       ││                                                                                           ││Created     1m ago · 2026-10-28 21:54:23   │
+│  Change Graph      ││                                                                                           ││Digest      sha256:b11d06b0…fb8ec2ee7bdda3 │
+│  ChangePacks       ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:13   │
 │  Baselines         ││                                                                                           ││UTC                                        │
-│› Evidence          ││                                                                                           ││Producer    pri_agqyjanz3f6vdfucg5zvgsh3wu │
+│› Evidence          ││                                                                                           ││Producer    pri_agqykfh2bj3htd7lklnzq6eeeu │
 │  Events            ││                                                                                           ││Media                                      │
 │                    ││                                                                                           ││application/vnd.calve.review+json          │
 │ SYSTEM             ││                                                                                           ││Attached to Fix daemon race condition      │

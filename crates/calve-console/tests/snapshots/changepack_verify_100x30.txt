@@ -1,11 +1,11 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq   ● healthy
-┌ ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq ─────────────────┐┌ Inspector ─────────────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy
+┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ─────────────────┐┌ Inspector ─────────────────────────┐
 │ Summary  Diff  Verify  Risk  Evidence  Review  Receipts ›  ││Verification summary                │
 │                                                            ││                                    │
 │Check                       Status           Output         ││✓ All checks passed                 │
 │Verify                      ✓ PASS           no findings    ││1 / 1 checks                        │
-│                                                            ││Last run    1m ago · 2026-10-28     │
-│                                                            ││21:54:21 UTC                        │
+│                                                            ││Last run    1m ago · 2026-10-29     │
+│                                                            ││00:35:12 UTC                        │
 │                                                            ││                                    │
 │                                                            ││Verify                              │
 │                                                            ││Status      ✓ PASS                  │

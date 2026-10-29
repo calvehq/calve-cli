@@ -2,11 +2,11 @@
 ┌ Overview ────────────────────────────────────────────────────────────────────┐
 │Needs attention ─────────────────────────────────────────────────────────────█│
 │    Subject                                                                  █│
-│×   exe_…b4civrno4   Execution FAILED                                  1m    █│
-│!   tsk_…7fb11b3df   Daemon hardening is blocked                       1m    █│
-│◆   cpk_…aipmqieqe   Fix daemon race condition awaits verification an… 1m    █│
-│◆   cpk_…etppeyqhq   Add remote conformance runner awaits verificatio… 1m    █│
-│!   cpk_…gckyz3sxq   Pack is quarantined                               1m    █│
+│×   exe_…2sfes5ou4   Execution FAILED                                  1m    █│
+│!   tsk_…43ccc188f   Daemon hardening is blocked                       1m    █│
+│◆   cpk_…k4tzmcxqu   Fix daemon race condition awaits verification an… 1m    █│
+│◆   cpk_…bvmvpg3ea   Add remote conformance runner awaits verificatio… 1m    █│
+│!   cpk_…wnokrbreu   Pack is quarantined                               1m    █│
 │                                                                             █│
 │Active work ─────────────────────────────────────────────────────────────────█│
 │Intent                                           Tasks   Packs  State        █│
@@ -15,10 +15,10 @@
 │                                                                             █│
 │Recent activity ─────────────────────────────────────────────────────────────█│
 │Time      Actor          Event                               Object          ││
-│21:54:30Z pri_…5zvgsh3wu execution.finished                  exe_…b4civrno4  ││
-│21:54:30Z pri_…5zvgsh3wu execution.failed                    exe_…b4civrno4  ││
-│21:54:24Z pri_…5zvgsh3wu object.imported                     sha256:…e13974  ││
-│21:54:24Z pri_…5zvgsh3wu pack.created                        cpk_…os3cz5rxi  ││
-│21:54:24Z pri_…5zvgsh3wu changepack.created                  cpk_…os3cz5rx1/19│
+│00:35:20Z pri_…lnzq6eeeu execution.finished                  exe_…2sfes5ou4  ││
+│00:35:20Z pri_…lnzq6eeeu execution.failed                    exe_…2sfes5ou4  ││
+│00:35:14Z pri_…lnzq6eeeu object.imported                     sha256:…4b9ec4  ││
+│00:35:14Z pri_…lnzq6eeeu pack.created                        cpk_…bo4xbjbpu  ││
+│00:35:14Z pri_…lnzq6eeeu changepack.created                  cpk_…bo4xbjbp1/19│
 └──────────────────────────────────────────────────────────────────────────────┘
  ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

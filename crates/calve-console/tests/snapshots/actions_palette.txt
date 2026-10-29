@@ -1,14 +1,14 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyjaog3f5llgmcqetppeyqhq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
-│  Overview        5 ││                                                                                           ││cpk_…g3f5llgmcqetppeyqhq                   │
-│  Work              ││cpk_…f5llgmcqetppeyqhq · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
+│  Overview        5 ││                                                                                           ││cpk_…hmr5jvoqyrbvmvpg3ea                   │
+│  Work              ││cpk_…r5jvoqyrbvmvpg3ea · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
 │  Change Graph      ││                                                                                           ││                                           │
 │› ChangePacks       ││Intent                                                                                     ││State       ◆ SEALED                       │
 │  Baselines         ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
 │  Evidence          ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
-│  Events            ││                     ┌ Actions · cpk_…llgmcqetppeyqhq ──────────────────────────────────────┐Created     1m ago · 2026-10-28 21:54:19   │
-│                    ││Changes              │Actions                                                               │UTC by pri_…fucg5zvgsh3wu                  │
+│  Events            ││                     ┌ Actions · cpk_…jvoqyrbvmvpg3ea ──────────────────────────────────────┐Created     1m ago · 2026-10-29 00:35:10   │
+│                    ││Changes              │Actions                                                               │UTC by pri_…d7lklnzq6eeeu                  │
 │ SYSTEM             ││  2 files   +7 -2    │  Run snapshot verification       key v                               │Changed     2 files  +7 -2                 │
 │  Projects          ││                     │  Run language checks             key c                               │Checks      1/1                            │
 │  Inbox           2 ││Verification         │  Evaluate change size            key e                               │Evidence    0                              │

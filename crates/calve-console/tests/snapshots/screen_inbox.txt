@@ -1,21 +1,21 @@
  Calve  project: openaevc  workspace: main  Inbox   ● healthy                                                                       v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Inbox ────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
-│ PROJECT            ││Severity    Type               Message                                              Age    ││Select an item to inspect it.              │
-│  Overview        5 ││× danger    Execution          Execution FAILED                                     1m     ││                                           │
-│  Work              ││! warning   Quarantined pack   Pack is quarantined                                  1m     ││Actions                                    │
-│  Change Graph      ││                                                                                           ││  Acknowledge                              │
-│  ChangePacks       ││                                                                                           ││  Unacknowledge                            │
-│  Baselines         ││                                                                                           ││  Snooze                                   │
-│  Evidence          ││                                                                                           ││  Clear resolved                           │
-│  Events            ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
+│ PROJECT            ││Severity    Type               Message                                              Age    ││Execution                                  │
+│  Overview        5 ││× danger    Execution          Execution FAILED                                     1m     ││execution:exe_agqykfiyxv5qrdbj22sfes5ou4:FA│
+│  Work              ││! warning   Quarantined pack   Pack is quarantined                                  1m     ││ILED                                       │
+│  Change Graph      ││                                                                                           ││                                           │
+│  ChangePacks       ││                                                                                           ││Execution FAILED                           │
+│  Baselines         ││                                                                                           ││                                           │
+│  Evidence          ││                                                                                           ││Severity    danger                         │
+│  Events            ││                                                                                           ││First seen  1m ago · 2026-10-29 00:35:21   │
+│                    ││                                                                                           ││UTC                                        │
 │ SYSTEM             ││                                                                                           ││                                           │
-│  Projects          ││                                                                                           ││                                           │
-│› Inbox           2 ││                                                                                           ││                                           │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Projects          ││                                                                                           ││Actions                                    │
+│› Inbox           2 ││                                                                                           ││  Acknowledge                              │
+│  Doctor            ││                                                                                           ││  Unacknowledge                            │
+│  Extensions        ││                                                                                           ││  Snooze                                   │
+│                    ││                                                                                           ││  Clear resolved                           │
+│                    ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

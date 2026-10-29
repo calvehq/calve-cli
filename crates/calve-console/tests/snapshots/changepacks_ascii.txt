@@ -2,15 +2,15 @@
 + Navigation --------++ ChangePacks -----------------------------------------------------++ Inspector -----------------+
 | PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  || Summary  Relations         |
 |  Overview        5 ||                                                                  ||Eligibility  Raw  [ ]       |
-|  Work              ||ID               State           Title                   Updated  ||cpk_...ryy5hnlnos3cz5rxi    |
-|  Change Graph      ||cpk_...3cz5rxi   [ ] OPEN        Lint sweep              1m       ||Lint sweep                  |
-|> ChangePacks     6 ||cpk_...kyz3sxq   [!] QUARANTINED Experimental transport  1m       ||                            |
-|  Baselines         ||cpk_...n65l6ke   [ ] OPEN        Refactor verificatio... 1m       ||State       [ ] OPEN        |
-|  Evidence          ||cpk_...pmqieqe   [?] SEALED      Fix daemon race cond... 1m       ||Risk        not evaluated   |
-|  Events            ||cpk_...ppeyqhq   [?] SEALED      Add remote conforman... 1m       ||Generation  2               |
-|                    ||cpk_...ajn4v3u   [ok] PROMOTED   Update protocol schemas 1m       ||Created     1m ago -        |
-| SYSTEM             ||                                                                  ||2026-10-28 21:54:24 UTC by  |
-|  Projects          ||                                                                  ||pri_...cg5zvgsh3wu          |
+|  Work              ||ID               State           Title                   Updated  ||cpk_...zy2zlzm3bo4xbjbpu    |
+|  Change Graph      ||cpk_...4xbjbpu   [ ] OPEN        Lint sweep              1m       ||Lint sweep                  |
+|> ChangePacks     6 ||cpk_...okrbreu   [!] QUARANTINED Experimental transport  1m       ||                            |
+|  Baselines         ||cpk_...krzexje   [ ] OPEN        Refactor verificatio... 1m       ||State       [ ] OPEN        |
+|  Evidence          ||cpk_...tzmcxqu   [?] SEALED      Fix daemon race cond... 1m       ||Risk        not evaluated   |
+|  Events            ||cpk_...mvpg3ea   [?] SEALED      Add remote conforman... 1m       ||Generation  2               |
+|                    ||cpk_...2gzmn7e   [ok] PROMOTED   Update protocol schemas 1m       ||Created     1m ago -        |
+| SYSTEM             ||                                                                  ||2026-10-29 00:35:14 UTC by  |
+|  Projects          ||                                                                  ||pri_...lklnzq6eeeu          |
 |  Inbox           2 ||                                                                  ||Changed     0 files  +0 -0  |
 |  Doctor            ||                                                                  ||Evidence    0               |
 |  Extensions        ||                                                                  ||                            |

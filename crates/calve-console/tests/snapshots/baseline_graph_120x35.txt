@@ -1,7 +1,7 @@
- Calve  project: openaevc  workspace: main  Baseline bsl_agqyjaognf5yhg5yhpafw5qfoi   ● healthy
-┌ Navigation ────────┐┌ Baseline bsl_agqyjaognf5yhg5yhpafw5qfoi ─────────────────────────┐┌ Inspector ─────────────────┐
+ Calve  project: openaevc  workspace: main  Baseline bsl_agqykfig5z4rnhbjixbszifs2i   ● healthy
+┌ Navigation ────────┐┌ Baseline bsl_agqykfig5z4rnhbjixbszifs2i ─────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Graph  Packs  Relations  History  Explain  Raw                   ││Baseline                    │
-│  Overview        5 ││                                                                  ││bsl_…yhg5yhpafw5qfoi        │
+│  Overview        5 ││                                                                  ││bsl_…rnhbjixbszifs2i        │
 │  Work              ││[✓ Update protocol …]                                             ││staging                     │
 │  Change Graph      ││                                                                  ││                            │
 │  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
@@ -12,8 +12,8 @@
 │ SYSTEM             ││                                                                  ││Update protocol schemas     │
 │  Projects          ││                                                                  ││State       ✓ PROMOTED      │
 │  Inbox           2 ││                                                                  ││Pack                        │
-│  Doctor            ││                                                                  ││cpk_agqyjan7ybydtbaagyjajn4v│
-│  Extensions        ││                                                                  ││3u                          │
+│  Doctor            ││                                                                  ││cpk_agqykfiaa54c5gmyaxc2gzmn│
+│  Extensions        ││                                                                  ││7e                          │
 │                    ││                                                                  ││Head        yes             │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││Used by                     │

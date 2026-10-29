@@ -1,14 +1,14 @@
- Calve  project: openaevc  workspace: main  ChangePack cpk_agqyjaoxj5z35nusagckyz3sxq   ● healthy                                   v0.1.0  ^P Commands  ? Help
-┌ Navigation ────────┐┌ ChangePack cpk_agqyjaoxj5z35nusagckyz3sxq ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfiycb375huv2wnokrbreu   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfiycb375huv2wnokrbreu ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
-│  Overview        5 ││                                                                                           ││cpk_…xj5z35nusagckyz3sxq                   │
-│  Work              ││cpk_…5z35nusagckyz3sxq · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
+│  Overview        5 ││                                                                                           ││cpk_…ycb375huv2wnokrbreu                   │
+│  Work              ││cpk_…b375huv2wnokrbreu · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
 │  Change Graph      ││                                                                                           ││                                           │
 │› ChangePacks     6 ││Changes                                                                                    ││State       ! QUARANTINED                  │
 │  Baselines         ││  0 files   +0 -0                                                                          ││Risk        not evaluated                  │
 │  Evidence          ││                                                                                           ││Generation  1                              │
-│  Events            ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-28 21:54:24   │
-│                    ││                                                                                           ││UTC by pri_…fucg5zvgsh3wu                  │
+│  Events            ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-29 00:35:14   │
+│                    ││                                                                                           ││UTC by pri_…d7lklnzq6eeeu                  │
 │ SYSTEM             ││                                                                                           ││Changed     0 files  +0 -0                 │
 │  Projects          ││                                                                                           ││Evidence    0                              │
 │  Inbox           2 ││                                                                                           ││                                           │

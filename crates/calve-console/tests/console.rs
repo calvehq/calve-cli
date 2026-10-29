@@ -1207,7 +1207,7 @@ fn direct_keys_quit_and_panes() {
     h.key_with(KeyCode::Char('b'), KeyModifiers::CONTROL);
     assert!(h.render().contains("Navigation"));
     // A command still in flight: the first q warns, the second quits.
-    h.app.in_flight.insert("cmd:99:0:test".into());
+    h.app.in_flight.insert("cmd:99:0:test".into(), vec![]);
     h.key(KeyCode::Char('q'));
     assert!(!h.app.quit);
     assert!(
@@ -1739,4 +1739,76 @@ proptest::proptest! {
             proptest::prop_assert!(!line.chars().any(|c| c.is_control()));
         }
     }
+}
+
+/// New states (M6): recovery items open their own object and offer their remedies behind
+/// confirmation; catalogs show stale/expired; a T2 refusal asks for the acknowledgment and
+/// re-issues with --acknowledge-native only after Enter; Overview names recovery.
+#[test]
+fn recovery_catalog_and_t2_surfaces() {
+    let mut h = Harness::new(160, 45);
+    let pack = h.pack_id("Lint sweep");
+    let items = json!([
+        {"source_key":"materialize:mop_aaaaaaaaaaaaaaaaaaaaaaaaaa","kind":"materialization_divergence",
+         "subject":"mop_aaaaaaaaaaaaaaaaaaaaaaaaaa","summary":"Materialization mop_a found concurrent changes",
+         "severity":"danger","first_seen":h.app.now - 30,"acknowledged_at":null},
+        {"source_key":"capture:cap_1","kind":"recovery_required","subject":pack,
+         "summary":"Capture session cap_1 is Uploading","severity":"danger",
+         "first_seen":h.app.now - 30,"acknowledged_at":null}
+    ]);
+    h.data.insert("inbox".into(), items);
+    let mut status = h.data["status"].clone();
+    status["recovery"] = json!([{"kind":"recovery_required","pack":pack,
+        "summary":"Capture session cap_1 is Uploading","source_key":"capture:cap_1"}]);
+    h.data.insert("status".into(), status);
+    h.key(KeyCode::Char('r'));
+    let screen = h.render();
+    assert!(
+        screen.contains("Recovery required (1)") && screen.contains("! degraded"),
+        "{screen}"
+    );
+    h.app.navigate(Route::Inbox);
+    h.pump();
+    // The materialization item: Enter does not open a pack; Resolve keep theirs confirms.
+    h.key(KeyCode::Enter);
+    assert_eq!(h.app.route, Route::Inbox);
+    h.key(KeyCode::Char('a')).keys("theirs").key(KeyCode::Enter);
+    let screen = h.render();
+    assert!(
+        screen.contains("--keep theirs") && screen.contains("Enter confirm"),
+        "{screen}"
+    );
+    h.key(KeyCode::Esc);
+    h.key(KeyCode::Char('j')).key(KeyCode::Enter);
+    assert_eq!(h.app.route, Route::ChangePack(pack));
+    // Catalog freshness.
+    let mut catalogs = h.data["extension-catalogs"].clone();
+    catalogs[0]["state"] = json!("expired");
+    h.data.insert("extension-catalogs".into(), catalogs);
+    h.app.navigate(Route::Extensions);
+    h.pump();
+    let row = h
+        .render()
+        .lines()
+        .position(|l| l.contains("! EXPIRED") || l.contains("EXPIRED"))
+        .is_some();
+    assert!(row, "{}", h.render());
+    // T2: the refusal becomes an acknowledgment dialog; nothing re-runs until Enter.
+    h.app.in_flight.insert(
+        "cmd:90:0:Enable x".into(),
+        vec!["extension".into(), "enable".into(), "org.x".into()],
+    );
+    calve_console::input::on_response(
+        &mut h.app,
+        "cmd:90:0:Enable x",
+        Err("T2_ACKNOWLEDGMENT_REQUIRED: org.x@1 runs as native code with your user permissions (not confined)".into()),
+    );
+    let screen = h.render();
+    assert!(
+        screen.contains("Native extension (T2)") && screen.contains("--acknowledge-native"),
+        "{screen}"
+    );
+    let before = h.commands.len();
+    h.key(KeyCode::Enter);
+    assert_eq!(h.commands.len(), before + 1);
 }

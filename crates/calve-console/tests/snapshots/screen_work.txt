@@ -1,11 +1,11 @@
  Calve  project: openaevc  workspace: main  Work   ● healthy                                                                        v0.1.0  ^P Commands  ? Help
 ┌ Navigation ────────┐┌ Work ─────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││HTTP conformance  1/4 · ! BLOCKED ─────────────────────────────────────────────────────────││Write transport spec                       │
-│  Overview        5 ││Task                                        Actor        Priority  State          Updated  ││tsk_01a18481-be5e-7015-91d5-ad255346fa06   │
+│  Overview        5 ││Task                                        Actor        Priority  State          Updated  ││tsk_01a18514-fea6-721f-b733-ea21d52bdd7c   │
 │› Work              ││Write transport spec                        shiv         normal    ✓ COMPLETE     1m       ││                                           │
 │  Change Graph      ││Runtime HTTP support                        codex        high      ● IN_PROGRESS  1m       ││State       ✓ COMPLETE                     │
 │  ChangePacks       ││Daemon hardening                            codex        normal    ! BLOCKED      1m       ││Intent                                     │
-│  Baselines         ││Remote conformance runner                   —            normal    ○ OPEN         1m       ││int_01a18481-be18-72b1-ab99-593936d08184   │
+│  Baselines         ││Remote conformance runner                   —            normal    ○ OPEN         1m       ││int_01a18514-fe64-72a2-ae08-654d46c2566f   │
 │  Evidence          ││                                                                                           ││Actor       shiv                           │
 │  Events            ││SDK compatibility  0/1 · ● RUNNING ────────────────────────────────────────────────────────││Priority    normal                         │
 │                    ││Task                                        Actor        Priority  State          Updated  ││Updated     1m                             │

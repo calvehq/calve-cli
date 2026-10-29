@@ -1,8 +1,8 @@
  Calve  project: openaevc  workspace: main  Change Graph   ● healthy    v0.1.0  ^P Commands  ? Help
 ┌ Change Graph ──────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
 │[✓ Write transport …] ─────▶[● Runtime HTTP sup…] ───┬─▶[! D││Write transport spec                │
-│                                                     │      ││tsk_01a18481-be5e-7015-91d5-ad255346│
-│[● Update SDK bindi…] ─────▶[✓ Update protocol …]    └─▶[○ R││fa06                                │
+│                                                     │      ││tsk_01a18514-fea6-721f-b733-ea21d52b│
+│[● Update SDK bindi…] ─────▶[✓ Update protocol …]    └─▶[○ R││dd7c                                │
 │                                                            ││                                    │
 │                                                            ││State       ✓ COMPLETE              │
 │● running  ✓ complete  ! blocked  ◆ review  ○ pending       ││Kind        Task                    │

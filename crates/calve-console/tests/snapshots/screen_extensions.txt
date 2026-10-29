@@ -4,21 +4,21 @@
 │  Overview        5 ││Extension                                        Version   Status       Granted            ││                                           │
 │  Work              ││org.calve.rust                                   0.1.0     ✓ ACTIVE                        ││Version     0.1.0                          │
 │  Change Graph      ││org.calve.software                               0.1.0     ✓ ACTIVE                        ││Source      catalog calve · publisher calve│
-│  ChangePacks       ││                                                                                           ││Manifest    sha256:6b4425…78b8a1dfc6b3     │
-│  Baselines         ││Available ─────────────────────────────────────────────────────────────────────────────────││Artifact    sha256:227c37…b8064ebb7079     │
-│  Evidence          ││Extension                                        Version   Source       Publisher          ││Contract                                   │
-│  Events            ││org.calve.c-cpp                                  0.1.0     ○ calve      calve              ││Granted                                    │
-│                    ││org.calve.general                                0.1.0     ○ calve      calve              ││Active      yes                            │
-│ SYSTEM             ││org.calve.go                                     0.1.0     ○ calve      calve              ││                                           │
-│  Projects          ││org.calve.hcl                                    0.1.0     ○ calve      calve              ││Contributes                                │
-│  Inbox           2 ││org.calve.java                                   0.1.0     ○ calve      calve              ││Verifiers   org.calve.rust.checks          │
-│  Doctor            ││org.calve.javascript-typescript                  0.1.0     ○ calve      calve              ││Modes       subprocess                     │
-│› Extensions        ││org.calve.python                                 0.1.0     ○ calve      calve              ││                                           │
-│                    ││org.calve.shell                                  0.1.0     ○ calve      calve              ││Actions                                    │
-│                    ││                                                                                           ││  Permissions                              │
-│                    ││                                                                                           ││  Update                                   │
-│                    ││                                                                                           ││  Disable                                  │
-│                    ││                                                                                           ││  a all actions                            │
+│  ChangePacks       ││                                                                                           ││Manifest    sha256:5c8a0e…a0e82fde99ff     │
+│  Baselines         ││Catalogs ──────────────────────────────────────────────────────────────────────────────────││Artifact    sha256:227c37…b8064ebb7079     │
+│  Evidence          ││Catalog                                       Generation State                Last refresh ││Contract                                   │
+│  Events            ││calve                                         18         ○ FRESH              1m           ││Granted                                    │
+│                    ││                                                                                           ││Active      yes                            │
+│ SYSTEM             ││Available ─────────────────────────────────────────────────────────────────────────────────││                                           │
+│  Projects          ││Extension                                        Version   Source       Publisher          ││Contributes                                │
+│  Inbox           2 ││org.calve.c-cpp                                  0.1.0     ○ calve      calve              ││Verifiers   org.calve.rust.checks          │
+│  Doctor            ││org.calve.general                                0.1.0     ○ calve      calve              ││Modes       subprocess                     │
+│› Extensions        ││org.calve.go                                     0.1.0     ○ calve      calve              ││                                           │
+│                    ││org.calve.hcl                                    0.1.0     ○ calve      calve              ││Actions                                    │
+│                    ││org.calve.java                                   0.1.0     ○ calve      calve              ││  Permissions                              │
+│                    ││org.calve.javascript-typescript                  0.1.0     ○ calve      calve              ││  Update                                   │
+│                    ││org.calve.python                                 0.1.0     ○ calve      calve              ││  Disable                                  │
+│                    ││org.calve.shell                                  0.1.0     ○ calve      calve              ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

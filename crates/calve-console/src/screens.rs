@@ -676,6 +676,35 @@ fn overview(app: &App) -> Screen {
                 .to_string(),
         ),
     ];
+    // Recovery-required states from status: named, with the way to act on them.
+    let recovery = app
+        .value("status")
+        .and_then(|s| s["recovery"].as_array())
+        .cloned()
+        .unwrap_or_default();
+    if !recovery.is_empty() {
+        screen.inspector.push(blank());
+        screen.inspector.push(toned(
+            app,
+            Tone::Danger,
+            format!("Recovery required ({})", recovery.len()),
+        ));
+        for r in recovery.iter().take(5) {
+            screen.inspector.push(muted_line(
+                app,
+                format!(
+                    "  {}",
+                    r["summary"]
+                        .as_str()
+                        .or(r["source_key"].as_str())
+                        .unwrap_or("")
+                ),
+            ));
+        }
+        screen
+            .inspector
+            .push(muted_line(app, "  Inbox lists the remedy for each"));
+    }
     screen
 }
 
@@ -3421,10 +3450,13 @@ fn inbox(app: &App) -> Screen {
                 ],
                 copy: None,
                 tab: None,
-                open: match str_of(i, "kind") {
-                    "execution" => Some(Route::Execution(subject.to_owned())),
-                    "task_inconsistency" => Some(Route::Task(subject.to_owned())),
-                    _ => Some(Route::ChangePack(subject.to_owned())),
+                // The item's own object: an operation id is not a pack (§12 recovery states).
+                open: match (key.split(':').next().unwrap_or(""), str_of(i, "kind")) {
+                    ("materialize", _) => None,
+                    ("identity", _) => Some(Route::Projects),
+                    (_, "execution") => Some(Route::Execution(subject.to_owned())),
+                    (_, "task_inconsistency") => Some(Route::Task(subject.to_owned())),
+                    _ => route_for_id(subject),
                 },
                 search: search(&[
                     ("type", str_of(i, "kind")),
@@ -3461,6 +3493,21 @@ fn inbox(app: &App) -> Screen {
         ));
     }
     if let Some(key) = selected_row_id(app, "inbox") {
+        if let Some(item) = value
+            .as_array()
+            .and_then(|v| v.iter().find(|i| i["source_key"] == key.as_str()))
+        {
+            screen.inspector = vec![
+                heading(app, label(str_of(item, "kind"))),
+                muted_line(app, &key),
+                blank(),
+                text_line(app, str_of(item, "summary")),
+                blank(),
+                field(app, "Severity", str_of(item, "severity")),
+                field(app, "First seen", exact(app, &item["first_seen"])),
+            ];
+            screen.actions.extend(recovery_actions(&key));
+        }
         screen.actions.extend([
             item(
                 "Acknowledge",
@@ -3501,6 +3548,72 @@ fn inbox(app: &App) -> Screen {
         ("a", "actions"),
     ];
     screen
+}
+
+/// The remedy commands of a recovery item, by its source (`calve capture|materialize|supersede`).
+fn recovery_actions(key: &str) -> Vec<PaletteItem> {
+    let Some((source, id)) = key.split_once(':') else {
+        return vec![];
+    };
+    let id = id.split(':').next().unwrap_or(id);
+    match source {
+        "capture" => vec![
+            item(
+                "Resume capture",
+                "capture resume",
+                run("Resume capture", &["capture", "resume", id], false),
+            ),
+            item(
+                "Roll back capture",
+                "capture rollback (replaces the pack)",
+                run("Roll back capture", &["capture", "rollback", id], true),
+            ),
+        ],
+        "supersede" => vec![item(
+            "Resume supersession",
+            "supersede resume",
+            run("Resume supersession", &["supersede", "resume", id], false),
+        )],
+        "materialize" => vec![
+            item(
+                "Resume materialization",
+                "materialize resume",
+                run(
+                    "Resume materialization",
+                    &["materialize", "resume", id],
+                    false,
+                ),
+            ),
+            item(
+                "Resolve: keep ours",
+                "the planned content",
+                run(
+                    "Resolve keeping ours",
+                    &["materialize", "resolve", id, "--keep", "ours"],
+                    true,
+                ),
+            ),
+            item(
+                "Resolve: keep theirs",
+                "the concurrent writer's bytes",
+                run(
+                    "Resolve keeping theirs",
+                    &["materialize", "resolve", id, "--keep", "theirs"],
+                    true,
+                ),
+            ),
+            item(
+                "Roll back materialization",
+                "rewrites working-tree files",
+                run(
+                    "Roll back materialization",
+                    &["materialize", "rollback", id],
+                    true,
+                ),
+            ),
+        ],
+        _ => vec![],
+    }
 }
 
 fn doctor(app: &App) -> Screen {
@@ -3713,6 +3826,37 @@ fn extensions(app: &App) -> Screen {
                 rows,
             },
             Section {
+                title: Some("Catalogs".into()),
+                columns: vec![
+                    fill("Catalog", 18, 1),
+                    col("Generation", 10, 3),
+                    col("State", 20, 1),
+                    col("Last refresh", 12, 2),
+                ],
+                rows: app
+                    .value("extension-catalogs")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(|c| {
+                        let name = str_of(c, "name");
+                        Row {
+                            id: format!("catalog:{name}"),
+                            cells: vec![
+                                plain(app, name),
+                                muted(app, scalar(&c["generation"])),
+                                state_cell(app, &str_of(c, "state").to_uppercase()),
+                                age_cell(app, &c["last_success"]),
+                            ],
+                            copy: Some(name.to_owned()),
+                            tab: None,
+                            open: None,
+                            search: search(&[("text", name), ("status", str_of(c, "state"))]),
+                        }
+                    })
+                    .collect(),
+            },
+            Section {
                 title: Some("Available".into()),
                 columns: vec![
                     fill("Extension", 18, 1),
@@ -3731,7 +3875,57 @@ fn extensions(app: &App) -> Screen {
         total: None,
     }));
     if let Some(id) = selected_row_id(app, "extensions") {
-        if let Some(name) = id.strip_prefix("available:") {
+        if let Some(name) = id.strip_prefix("catalog:") {
+            let c = app
+                .value("extension-catalogs")
+                .and_then(Value::as_array)
+                .and_then(|v| v.iter().find(|c| c["name"] == name));
+            screen.inspector = vec![heading(app, name), blank()];
+            if let Some(c) = c {
+                screen.inspector.push(field_state(
+                    app,
+                    "State",
+                    &str_of(c, "state").to_uppercase(),
+                ));
+                screen
+                    .inspector
+                    .push(field(app, "Last refresh", exact(app, &c["last_success"])));
+                screen.inspector.push(field(
+                    app,
+                    "Root",
+                    text::middle(str_of(c, "root_digest"), 26, app.symbols.ellipsis()),
+                ));
+                screen.inspector.push(muted_line(app, str_of(c, "url")));
+                // Stale or expired metadata blocks installs until a refresh succeeds.
+                match str_of(c, "state") {
+                    "stale" => screen.inspector.push(toned(
+                        app,
+                        Tone::Warning,
+                        "Stale: refresh before installing or updating",
+                    )),
+                    "expired" => screen.inspector.push(toned(
+                        app,
+                        Tone::Danger,
+                        "Expired: installs and updates are refused until a refresh succeeds",
+                    )),
+                    "recovery_required" => {
+                        screen
+                            .inspector
+                            .push(toned(app, Tone::Danger, str_of(c, "problem")))
+                    }
+                    _ => {}
+                }
+            }
+            screen.actions = vec![item(
+                "Refresh catalog",
+                "extension catalog refresh",
+                run(
+                    &format!("Refresh {name}"),
+                    &["extension", "catalog", "refresh", name],
+                    false,
+                ),
+            )];
+        } else if let Some(name) = id.strip_prefix("available:") {
             screen.inspector = vec![
                 heading(app, name),
                 blank(),
