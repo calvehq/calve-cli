@@ -197,7 +197,9 @@ async fn console_read_models_at_ten_thousand_packs() {
         "view pack after one change (receipt top-up)",
         p.view_pack(&mid),
     )
-    .await;
+    .await
+    .0
+    .unwrap();
     let filter = calve_api::ActivityFilter {
         pack: Some(mid.clone()),
         ..Default::default()

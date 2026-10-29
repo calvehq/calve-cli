@@ -997,9 +997,11 @@ fn read_model_schema(tx: &rusqlite::Transaction) -> Result<()> {
 fn migrate_read_model_indexes(db: &mut Connection) -> Result<()> {
     let tx = db.transaction()?;
     read_model_schema(&tx)?;
-    // pack_files gained `size`: the pack projection rebuilds itself from OpenAEVC once.
+    // pack_files gained `size`: the pack projection rebuilds itself from OpenAEVC once. The
+    // checkpoint goes to 0 rather than away, so `recover inspect` still reports the lag.
     tx.execute_batch(
-        "DELETE FROM projection_checkpoints WHERE name='packs';
+        "INSERT INTO projection_checkpoints VALUES ('packs',0)
+           ON CONFLICT(name) DO UPDATE SET sequence=0;
          DELETE FROM pack_summaries; DELETE FROM pack_files;
          INSERT INTO schema_migrations VALUES (16);
          PRAGMA user_version=16;",

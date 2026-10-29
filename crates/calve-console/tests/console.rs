@@ -673,6 +673,8 @@ fn ascii_and_monochrome_remain_legible() {
 #[test]
 fn every_screen_renders() {
     let mut h = Harness::new(160, 45);
+    // Extension ids come from the fixture: domain names live in calve-extensions (INV-022).
+    let extension = h.data["extensions"][0]["id"].as_str().unwrap().to_owned();
     let expectations = [
         (Route::Work, "HTTP conformance"),
         (Route::ChangeGraph, "running"),
@@ -681,7 +683,7 @@ fn every_screen_renders() {
         (Route::Projects, "openaevc"),
         (Route::Inbox, "Execution FAILED"),
         (Route::Doctor, "Product database"),
-        (Route::Extensions, "org.calve.software"),
+        (Route::Extensions, extension.as_str()),
     ];
     for (route, needle) in expectations {
         h.app.navigate(route.clone());
@@ -833,8 +835,8 @@ fn verification_runs_update_in_place_and_open_details() {
     let key = format!("pack:{id}");
     let mut pack = h.data[&key].clone();
     let started = h.app.now - 12;
-    pack["running"] = json!([{"id":"exe_aaaaaaaaaaaaaaaaaaaaaaaaaa","harness":"org.calve.harness.lint",
-        "state":"RUNNING","started_at":started,"provider":"org.calve.provider.shell"}]);
+    pack["running"] = json!([{"id":"exe_aaaaaaaaaaaaaaaaaaaaaaaaaa","harness":"example.harness.lint",
+        "state":"RUNNING","started_at":started,"provider":"example.provider.shell"}]);
     h.data.insert(key.clone(), pack.clone());
     h.app.navigate(Route::ChangePack(id.clone()));
     h.pump();
@@ -859,7 +861,7 @@ fn verification_runs_update_in_place_and_open_details() {
     // The run finishes: the row stays where it was, now with its result.
     pack["running"] = json!([]);
     let mut finished = pack["verifications"][0].clone();
-    finished["verifier"] = json!("org.calve.harness.lint");
+    finished["verifier"] = json!("example.harness.lint");
     finished["digest"] = json!(format!("sha256:{}", "c".repeat(64)));
     pack["verifications"].as_array_mut().unwrap().push(finished);
     h.data.insert(key.clone(), pack);
@@ -924,7 +926,7 @@ fn evidence_catalog_pages_and_reverse_references() {
     let mut second = first.clone();
     second["digest"] = json!(format!("sha256:{}", "d".repeat(64)));
     second["evidence"]["id"] = json!("evd_zzzzzzzzzzzzzzzzzzzzzzzzzz");
-    second["evidence"]["kind"] = json!("org.calve.check.report/v1");
+    second["evidence"]["kind"] = json!("example.check.report/v1");
     h.data.insert(
         "evidence".into(),
         json!({"items":[first.clone()],"next":"100:1"}),
