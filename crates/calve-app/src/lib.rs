@@ -965,6 +965,8 @@ const READ_MODEL_INDEXES: &str = "
     CREATE INDEX IF NOT EXISTS pack_summaries_promoted ON pack_summaries(promoted_digest);
     CREATE INDEX IF NOT EXISTS pack_files_from ON pack_files(from_path);
     CREATE INDEX IF NOT EXISTS intents_order ON intents(created_at, id);
+    CREATE INDEX IF NOT EXISTS product_events_subject ON product_events(subject, seq);
+    CREATE INDEX IF NOT EXISTS product_events_detail ON product_events(detail, seq);
 ";
 
 /// Request id → receipt (OpenAEVC stores receipts under their request id but cannot look
@@ -4085,20 +4087,30 @@ impl Project {
 
     pub fn product_activity(&self, limit: u16) -> Result<Vec<Value>> {
         let mut rows = Vec::new();
-        self.for_each_product_activity(i64::from(limit), |row| {
+        self.for_each_product_activity(i64::from(limit), None, |row| {
             rows.push(row);
             Ok(())
         })?;
         Ok(rows)
     }
 
+    /// Product events newest first; `reference` narrows to rows whose subject or detail is it,
+    /// the only fields a reference filter can match on a product row (indexed, M6 R5).
     fn for_each_product_activity(
         &self,
         limit: i64,
+        reference: Option<&str>,
         mut visit: impl FnMut(Value) -> Result<()>,
     ) -> Result<()> {
-        let mut stmt = self.db.prepare("SELECT seq,kind,subject,detail,created_at,created_at_ns,actor FROM product_events ORDER BY seq DESC LIMIT ?1")?;
-        let rows = stmt.query_map([limit], |r| Ok(json!({"sequence":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"subject":r.get::<_,String>(2)?,"detail":r.get::<_,String>(3)?,"created_at":r.get::<_,u64>(4)?,"created_at_ns":r.get::<_,i64>(5)?,"actor":r.get::<_,Option<String>>(6)?})))?;
+        // Separate statements: an `?2 IS NULL OR …` term would keep SQLite off the indexes.
+        let mut stmt = self.db.prepare(if reference.is_some() {
+            "SELECT seq,kind,subject,detail,created_at,created_at_ns,actor FROM product_events
+             WHERE subject=?2 OR detail=?2 ORDER BY seq DESC LIMIT ?1"
+        } else {
+            "SELECT seq,kind,subject,detail,created_at,created_at_ns,actor FROM product_events
+             WHERE ?2 IS NULL ORDER BY seq DESC LIMIT ?1"
+        })?;
+        let rows = stmt.query_map(params![limit, reference], |r| Ok(json!({"sequence":r.get::<_,i64>(0)?,"kind":r.get::<_,String>(1)?,"subject":r.get::<_,String>(2)?,"detail":r.get::<_,String>(3)?,"created_at":r.get::<_,u64>(4)?,"created_at_ns":r.get::<_,i64>(5)?,"actor":r.get::<_,Option<String>>(6)?})))?;
         for row in rows {
             visit(row?)?;
         }
@@ -4191,7 +4203,12 @@ impl Project {
             i64::from(limit)
         };
         if filter.source.as_deref() != Some("openaevc") {
-            self.for_each_product_activity(product_limit, |product| {
+            let reference = [&filter.pack, &filter.task, &filter.execution]
+                .into_iter()
+                .flatten()
+                .next()
+                .map(String::as_str);
+            self.for_each_product_activity(product_limit, reference, |product| {
             let sequence = product["sequence"]
                 .as_u64()
                 .ok_or_else(|| invalid("invalid product activity sequence"))?;

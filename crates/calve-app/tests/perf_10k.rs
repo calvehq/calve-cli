@@ -181,16 +181,23 @@ async fn console_read_models_at_ten_thousand_packs() {
     )
     .await;
     warm("view packs state filter", d);
-    let (_, cold) = timed_async("view evidence (cold)", p.view_evidence(None, Some(100))).await;
+    let (_, cold) = timed_async("view evidence (cold)", p.view_evidence(None, None)).await;
     let _ = cold;
-    let (ev, d) = timed_async("view evidence first page", p.view_evidence(None, Some(100))).await;
+    let (ev, d) = timed_async("view evidence first page", p.view_evidence(None, None)).await;
     let ev = ev.unwrap();
-    assert_eq!(ev["items"].as_array().unwrap().len(), 100.min(reviewed));
+    assert_eq!(ev["items"].as_array().unwrap().len(), 50.min(reviewed));
     warm("view evidence first page", d);
     let (_, cold) = timed_async("view pack (cold receipts)", p.view_pack(&mid)).await;
     let _ = cold;
     let (_, d) = timed_async("view pack", p.view_pack(&mid)).await;
     warm("view pack", d);
+    // The receipt shortcut: after any journal advance a pack view re-lists receipt digests.
+    p.create_pack("one more change", None).await.unwrap();
+    timed_async(
+        "view pack after one change (receipt top-up)",
+        p.view_pack(&mid),
+    )
+    .await;
     let filter = calve_api::ActivityFilter {
         pack: Some(mid.clone()),
         ..Default::default()
@@ -210,7 +217,7 @@ async fn console_read_models_at_ten_thousand_packs() {
         p.status(None).await.unwrap();
         p.view_overview().await.unwrap();
         p.view_packs(None, Some(200), None).await.unwrap();
-        p.view_evidence(None, Some(100)).await.unwrap();
+        p.view_evidence(None, None).await.unwrap();
     }
     let after = rss_kib();
     println!("perf: RSS before/after 20 warm rounds: {before:?} / {after:?} KiB");

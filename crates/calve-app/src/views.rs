@@ -987,7 +987,8 @@ impl Project {
     /// `next`): registrations come from the event index and staleness from the pack
     /// summaries, so a page costs its own rows, never the store (§41, M6 R5).
     pub async fn view_evidence(&self, before: Option<&str>, limit: Option<u32>) -> Result<Value> {
-        let limit = limit.unwrap_or(100).clamp(1, 500);
+        // One evidence object is read per row, so the default page is one screenful.
+        let limit = limit.unwrap_or(50).clamp(1, 500);
         let before = match before {
             None => None,
             Some(cursor) => {

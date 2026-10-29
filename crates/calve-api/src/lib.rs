@@ -312,7 +312,7 @@ pub enum ViewQuery {
         /// The previous page's `next`.
         #[arg(long)]
         before: Option<String>,
-        /// Page size (default 100, at most 500).
+        /// Page size (default 50, at most 500).
         #[arg(long)]
         limit: Option<u32>,
     },
