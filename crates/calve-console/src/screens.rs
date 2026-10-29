@@ -279,7 +279,7 @@ fn search(pairs: &[(&'static str, &str)]) -> Vec<(&'static str, String)> {
 }
 
 fn heading(app: &App, text: impl Into<String>) -> Line<'static> {
-    Line::from(Span::styled(text.into(), app.theme.heading()))
+    Line::from(Span::styled(line(&text.into()), app.theme.heading()))
 }
 
 fn field(app: &App, name: &str, value: impl AsRef<str>) -> Line<'static> {

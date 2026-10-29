@@ -1,0 +1,30 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ● healthy     v0.1.0  ^P Commands  ? Help
+┌ ChangePacks ───────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
+│ All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantin││ Summary  Relations  Eligibility    │
+│                                                            ││Raw  [ ]                            │
+│ID               State           Title                      ││cpk_…xyryy5hnlnos3cz5rxi            │
+│cpk_…os3cz5rxi   ○ OPEN          Lint sweep                 ││Lint sweep                          │
+│cpk_…gckyz3sxq   ! QUARANTINED   Experimental transport     ││                                    │
+│cpk_…kfn65l6ke   ○ OPEN          Refactor verification rul… ││State       ○ OPEN                  │
+│cpk_…aipmqieqe   ◆ SEALED        Fix daemon race condition  ││Risk        not evaluated           │
+│cpk_…etppeyqhq   ◆ SEALED        Add remote conformance ru… ││Generation  2                       │
+│cpk_…yjajn4v3u   ✓ PROMOTED      Update protocol schemas    ││Created     1m ago · 2026-10-28     │
+│                                                            ││21:54:24 UTC by pri_…fucg5zvgsh3wu  │
+│                                                            ││Changed     0 files  +0 -0          │
+│                                                            ││Evidence    0                       │
+│                                                            ││                                    │
+│                                                            ││! Promote: pack is OPEN; seal and   │
+│                                                            ││qualify it first                    │
+│                                                            ││x explain                           │
+│                                                            ││                                    │
+│                                                            ││Actions                             │
+│                                                            ││  Seal candidate                    │
+│                                                            ││  Abandon                           │
+│                                                            ││  Quarantine                        │
+│                                                            ││  a all actions                     │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+└────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
+ ↑↓ select  enter open  a actions  x explain  / filter  ^P commands  : command  ? help

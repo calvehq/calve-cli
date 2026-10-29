@@ -110,8 +110,12 @@ impl Harness {
         let mut out = String::new();
         for y in 0..height {
             let mut row = String::new();
-            for x in 0..width {
-                row.push_str(buffer[(x, y)].symbol());
+            let mut x = 0;
+            while x < width {
+                let symbol = buffer[(x, y)].symbol();
+                row.push_str(symbol);
+                // A wide character owns the next cell too, as on a terminal.
+                x += calve_console::text::width(symbol).max(1) as u16;
             }
             out.push_str(row.trim_end());
             out.push('\n');
@@ -1593,5 +1597,146 @@ fn large_datasets_stay_windowed() {
     });
     for (name, took) in &worst {
         println!("§96 {name}: {took:?}");
+    }
+}
+
+/// Every rendered row fits the terminal: no line wider than the screen (§76.2 layout).
+fn assert_fits(screen: &str, width: u16) {
+    for line in screen.lines() {
+        assert!(
+            calve_console::text::width(line) <= width as usize,
+            "line wider than {width}: {line:?}"
+        );
+    }
+}
+
+/// CT6 (§91.2): ChangePacks at every size; empty and error states at every size; Verify and
+/// Graph at 100x30.
+#[test]
+fn sizes_and_states_snapshots() {
+    for (width, height) in [(160, 45), (120, 35), (100, 30), (80, 24)] {
+        let mut h = Harness::new(width, height);
+        h.app.navigate(Route::ChangePacks);
+        h.pump();
+        let screen = h.render();
+        assert_fits(&screen, width);
+        snapshot(&format!("changepacks_{width}x{height}_sizes"), &screen);
+        let mut h = Harness::new(width, height);
+        h.data
+            .insert("packs".into(), json!({"items":[],"next":null,"counts":{}}));
+        h.app.navigate(Route::ChangePacks);
+        h.pump();
+        let screen = h.render();
+        assert!(screen.contains("No ChangePacks yet."), "{screen}");
+        snapshot(&format!("empty_{width}x{height}"), &screen);
+        let mut h = Harness::new(width, height);
+        h.data.remove("packs");
+        h.app.navigate(Route::ChangePacks);
+        h.pump();
+        let screen = h.render();
+        assert!(screen.contains("Could not load ChangePacks"), "{screen}");
+        assert!(screen.contains("r refresh"), "{screen}");
+        snapshot(&format!("error_{width}x{height}"), &screen);
+    }
+    let mut h = Harness::new(100, 30);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner));
+    h.pump();
+    h.keys("3");
+    snapshot("changepack_verify_100x30", &h.render());
+    h.app.navigate(Route::ChangeGraph);
+    h.pump();
+    let screen = h.render();
+    assert_fits(&screen, 100);
+    snapshot("change_graph_100x30", &screen);
+}
+
+/// CT2 (Scenario F): keyboard navigation moves the selection and the inspector follows it.
+#[test]
+fn keyboard_navigation_updates_inspector() {
+    let mut h = Harness::new(160, 45);
+    h.app.navigate(Route::ChangePacks);
+    h.pump();
+    let titles: Vec<String> = h.data["packs"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["title"].as_str().unwrap().to_owned())
+        .collect();
+    for (i, title) in titles.iter().enumerate().take(4) {
+        if i > 0 {
+            h.key(KeyCode::Char('j'));
+        }
+        let inspector: String = h
+            .render()
+            .lines()
+            .map(|l| l.chars().skip(115).collect::<String>())
+            .collect();
+        assert!(
+            inspector.contains(title.as_str()),
+            "row {i} {title}:\n{inspector}"
+        );
+    }
+    h.key(KeyCode::Char('k'));
+    let inspector: String = h
+        .render()
+        .lines()
+        .map(|l| l.chars().skip(115).collect::<String>())
+        .collect();
+    assert!(inspector.contains(titles[2].as_str()));
+}
+
+/// CT5 (Scenario J) and CT8 (§91.5): hostile text arriving in an event (escapes, bidi,
+/// zero-width, combining marks, wide CJK) renders inert and never breaks the layout.
+#[test]
+fn hostile_event_text_stays_inert_and_in_layout() {
+    let mut h = Harness::new(120, 35);
+    let mut events = h.data["events"].as_array().unwrap().clone();
+    let mut e = events[0].clone();
+    e["id"] = json!("calve:hostile");
+    e["kind"] = json!(
+        "evil\u{1b}]52;c;cm0=\u{7}\u{1b}[2J\u{202e}kind\u{200d}\u{feff}e\u{301}\u{301}\u{301}"
+    );
+    e["subject"] = json!("日本語のとても長い対象名日本語のとても長い対象名");
+    e["actor"] = json!("act\u{200b}or\u{2066}");
+    events.insert(0, e);
+    h.data.insert("events".into(), Value::Array(events));
+    h.app.navigate(Route::Events);
+    h.pump();
+    let screen = h.render();
+    assert!(
+        !screen.contains('\u{1b}') && !screen.contains('\u{202e}'),
+        "{screen}"
+    );
+    assert!(
+        !screen.contains('\u{200d}')
+            && !screen.contains('\u{feff}')
+            && !screen.contains('\u{2066}')
+    );
+    assert!(screen.contains("evil"), "{screen}");
+    assert_fits(&screen, 120);
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(48))]
+    /// CT9 (§91.6): arbitrary pack titles and filters never break rendering or the layout.
+    #[test]
+    fn arbitrary_titles_and_filters_render_within_bounds(
+        title in "\\PC{0,60}",
+        filter in "[a-z:<>*0-9 ]{0,12}",
+        width in 80u16..170,
+    ) {
+        let mut h = Harness::new(width, 30);
+        let mut packs = h.data["packs"].clone();
+        packs["items"][0]["title"] = json!(title);
+        h.data.insert("packs".into(), packs);
+        h.app.navigate(Route::ChangePacks);
+        h.pump();
+        h.app.collection("packs").filter = filter;
+        let screen = h.render();
+        for line in screen.lines() {
+            proptest::prop_assert!(calve_console::text::width(line) <= width as usize);
+            proptest::prop_assert!(!line.chars().any(|c| c.is_control()));
+        }
     }
 }

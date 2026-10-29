@@ -40,7 +40,7 @@ tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
 toml = "0.8"
-unicode-width = "0.1"
+unicode-width = "0.2"
 uuid = { version = "1", features = ["v7", "serde"] }
 wasmi = "=2.0.0"
 wasmi_core = "=2.0.0"

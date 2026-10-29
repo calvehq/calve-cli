@@ -1,0 +1,30 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ● healthy     v0.1.0  ^P Commands  ? Help
+┌ ChangePacks ───────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
+│                                                            ││Select an item to inspect it.       │
+│× Could not load ChangePacks                                ││                                    │
+│                                                            ││                                    │
+│fixture missing packs                                       ││                                    │
+│                                                            ││                                    │
+│r refresh                                                   ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+└────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

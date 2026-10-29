@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ● healthy                         v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePacks ─────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ All 0  Open 0  Sealed 0  Qualified 0  Promoted 0  Quarantined 0  ││Select an item to inspect   │
+│  Overview        5 ││                                                                  ││it.                         │
+│  Work              ││                                                                  ││                            │
+│  Change Graph      ││No ChangePacks yet.                                               ││                            │
+│› ChangePacks     0 ││                                                                  ││                            │
+│  Baselines         ││Create one with :pack create "title", capture files, then seal it ││                            │
+│  Evidence          ││to start review.                                                  ││                            │
+│  Events            ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│ SYSTEM             ││                                                                  ││                            │
+│  Projects          ││                                                                  ││                            │
+│  Inbox           2 ││                                                                  ││                            │
+│  Doctor            ││                                                                  ││                            │
+│  Extensions        ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ ↑↓ select  enter open  a actions  x explain  / filter  ^P commands  : command  ? help

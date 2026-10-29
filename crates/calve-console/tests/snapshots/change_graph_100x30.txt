@@ -1,0 +1,30 @@
+ Calve  project: openaevc  workspace: main  Change Graph   ● healthy    v0.1.0  ^P Commands  ? Help
+┌ Change Graph ──────────────────────────────────────────────┐┌ Inspector ─────────────────────────┐
+│[✓ Write transport …] ─────▶[● Runtime HTTP sup…] ───┬─▶[! D││Write transport spec                │
+│                                                     │      ││tsk_01a18481-be5e-7015-91d5-ad255346│
+│[● Update SDK bindi…] ─────▶[✓ Update protocol …]    └─▶[○ R││fa06                                │
+│                                                            ││                                    │
+│                                                            ││State       ✓ COMPLETE              │
+│● running  ✓ complete  ! blocked  ◆ review  ○ pending       ││Kind        Task                    │
+│                                                            ││                                    │
+│                                                            ││Relationships                       │
+│                                                            ││  → Runtime HTTP support (depends   │
+│                                                            ││on)                                 │
+│                                                            ││e next edge · enter edge detail     │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+└────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
+ hjkl move  tab next node  e edges  f neighborhood  v list/graph  enter open  ^P commands  : command

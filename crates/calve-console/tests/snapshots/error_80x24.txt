@@ -1,0 +1,24 @@
+ Calve  project: openaevc  workspace: main  ChangePacks   ● healthy
+┌ ChangePacks ─────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│× Could not load ChangePacks                                                  │
+│                                                                              │
+│fixture missing packs                                                         │
+│                                                                              │
+│r refresh                                                                     │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help
