@@ -21,6 +21,8 @@ use crate::{Error, Result};
 
 /// The hidden helper mode: `calve __exec-confined <parent pid> <spawn dir> <id> -- <argv>`.
 pub const HELPER_MODE: &str = "__exec-confined";
+/// Trampoline that sets the worker's resource limits on itself, then becomes the worker.
+pub const RLIMIT_MODE: &str = "__exec-limited";
 
 /// How a supervised process ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,13 +73,23 @@ pub fn spawn_dir() -> Result<PathBuf> {
 impl Supervised {
     /// Spawns `argv` in `cwd` with exactly `env`, stdio piped, under supervision.
     pub fn spawn(argv: &[String], env: &[(&str, &str)], cwd: &Path) -> Result<Self> {
+        Self::spawn_limited(argv, env, cwd, &Default::default())
+    }
+
+    /// As [`Supervised::spawn`], with OS-enforced resource limits on the worker.
+    pub fn spawn_limited(
+        argv: &[String],
+        env: &[(&str, &str)],
+        cwd: &Path,
+        limits: &crate::config::ResourceLimits,
+    ) -> Result<Self> {
         if argv.is_empty() {
             return Err(coded("INVALID_ARGUMENT", "empty command"));
         }
         #[cfg(unix)]
-        return unix::spawn(argv, env, cwd);
+        return unix::spawn(argv, env, cwd, limits);
         #[cfg(windows)]
-        return windows::spawn(argv, env, cwd);
+        return windows::spawn(argv, env, cwd, limits);
     }
 
     /// Waits for the end and classifies it.
@@ -192,7 +204,18 @@ mod unix {
         }
     }
 
-    pub fn spawn(argv: &[String], env: &[(&str, &str)], cwd: &Path) -> Result<Supervised> {
+    pub fn spawn(
+        argv: &[String],
+        env: &[(&str, &str)],
+        cwd: &Path,
+        limits: &crate::config::ResourceLimits,
+    ) -> Result<Supervised> {
+        if limits.processes.is_some() {
+            return Err(coded(
+                "CONTAINMENT_UNAVAILABLE",
+                "a per-worker process limit cannot be enforced on this platform",
+            ));
+        }
         let dir = spawn_dir()?;
         let id = uuid::Uuid::now_v7().simple().to_string();
         let sock = dir.join(format!("{id}.sock"));
@@ -210,6 +233,7 @@ mod unix {
             .arg(std::process::id().to_string())
             .arg(&dir)
             .arg(&id)
+            .arg(limit_arg(limits))
             .arg("--")
             .args(argv)
             .current_dir(cwd)
@@ -442,9 +466,10 @@ mod unix {
     /// The helper. Returns its exit code only on set-up failure; otherwise it ends by killing
     /// its own group.
     pub fn helper(args: &[String]) -> i32 {
-        let [parent, dir, id, dashdash, argv @ ..] = args else {
+        let [parent, dir, id, limits, dashdash, argv @ ..] = args else {
             return 2;
         };
+        let limited = limits != "-";
         if dashdash != "--" || argv.is_empty() {
             return 2;
         }
@@ -497,13 +522,24 @@ mod unix {
         };
         // 4. Landlock: the worker can read system paths and work in its directory, temp and
         // home; the spawn directory (runtime dir) is outside every rule.
+        // A limited worker starts through the trampoline, which must stay executable too.
+        let me = std::env::current_exe().ok();
         #[cfg(target_os = "linux")]
-        let landlock = restrict_worker(&dir, Path::new(&argv[0]));
+        let landlock =
+            restrict_worker(&dir, Path::new(&argv[0]), me.as_deref().filter(|_| limited));
         #[cfg(not(target_os = "linux"))]
         let landlock = "unsupported";
         // 5. The worker inherits the helper's group, stdio, environment and directory.
         let started = Instant::now();
-        let status = Command::new(&argv[0]).args(&argv[1..]).status();
+        let status = match (&me, limited) {
+            (Some(me), true) => Command::new(me)
+                .arg(RLIMIT_MODE)
+                .arg(limits)
+                .arg("--")
+                .args(argv)
+                .status(),
+            _ => Command::new(&argv[0]).args(&argv[1..]).status(),
+        };
         let result = match status {
             Ok(s) => {
                 json!({"exit_code": s.code(), "signal": s.signal(), "wall_ms": started.elapsed().as_millis() as u64, "landlock": landlock})
@@ -534,7 +570,11 @@ mod unix {
 
     /// Applies the worker ruleset; returns how far the kernel enforced it.
     #[cfg(target_os = "linux")]
-    fn restrict_worker(spawn_dir: &Path, program: &Path) -> &'static str {
+    fn restrict_worker(
+        spawn_dir: &Path,
+        program: &Path,
+        trampoline: Option<&Path>,
+    ) -> &'static str {
         use landlock::{
             ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
         };
@@ -604,11 +644,13 @@ mod unix {
         }
         // The worker's own program, wherever it is installed (outside every root above, a
         // configured provider could not even start).
-        if let Ok(fd) = PathFd::new(program) {
-            r = match r.add_rule(PathBeneath::new(fd, AccessFs::Execute | AccessFs::ReadFile)) {
-                Ok(r) => r,
-                Err(_) => return "none",
-            };
+        for exe in std::iter::once(program).chain(trampoline) {
+            if let Ok(fd) = PathFd::new(exe) {
+                r = match r.add_rule(PathBeneath::new(fd, AccessFs::Execute | AccessFs::ReadFile)) {
+                    Ok(r) => r,
+                    Err(_) => return "none",
+                };
+            }
         }
         match r.restrict_self().map(|st| st.ruleset) {
             Ok(landlock::RulesetStatus::FullyEnforced) => "full",
@@ -621,12 +663,74 @@ mod unix {
 #[cfg(unix)]
 pub use unix::{helper, reap};
 
+/// The helper's limits argument: `<memory bytes>,<cpu seconds>` (`-` for none), or `-`.
+#[cfg(unix)]
+fn limit_arg(limits: &crate::config::ResourceLimits) -> String {
+    if limits.memory_bytes.is_none() && limits.cpu_seconds.is_none() {
+        return "-".into();
+    }
+    let part = |v: Option<u64>| v.map_or("-".to_owned(), |n| n.to_string());
+    format!("{},{}", part(limits.memory_bytes), part(limits.cpu_seconds))
+}
+
+/// `calve __exec-limited <limits> -- <argv>`: sets the limits on itself (hard and soft, so the
+/// worker cannot raise them) and replaces itself with the worker; limits survive `exec`.
+/// The worker's command is built before the limits apply, so nothing here allocates after.
+#[cfg(unix)]
+pub fn rlimit_exec(args: &[String]) -> i32 {
+    use std::os::unix::process::CommandExt;
+    let [limits, dashdash, argv @ ..] = args else {
+        return 2;
+    };
+    if dashdash != "--" || argv.is_empty() {
+        return 2;
+    }
+    let mut parts = limits.split(',').map(|p| p.parse::<u64>().ok());
+    let (memory, cpu) = (parts.next().flatten(), parts.next().flatten());
+    let mut command = Command::new(&argv[0]);
+    command.args(&argv[1..]);
+    for (resource, value) in [
+        (rustix::process::Resource::As, memory),
+        (rustix::process::Resource::Cpu, cpu),
+    ] {
+        if let Some(n) = value {
+            let limit = rustix::process::Rlimit {
+                current: Some(n),
+                maximum: Some(n),
+            };
+            if let Err(e) = rustix::process::setrlimit(resource, limit) {
+                eprintln!("calve: cannot apply the worker resource limit: {e}");
+                return 126;
+            }
+        }
+    }
+    let e = command.exec();
+    // Fail closed: a worker that cannot start within its limits does not run unlimited.
+    eprintln!("calve: worker did not start within its resource limits: {e}");
+    127
+}
+
 #[cfg(windows)]
 mod windows {
     use super::*;
 
-    pub fn spawn(argv: &[String], env: &[(&str, &str)], cwd: &Path) -> Result<Supervised> {
-        let job = calve_win_sec::Job::new(calve_win_sec::Limits::default()).map_err(|e| {
+    pub fn spawn(
+        argv: &[String],
+        env: &[(&str, &str)],
+        cwd: &Path,
+        limits: &crate::config::ResourceLimits,
+    ) -> Result<Supervised> {
+        if limits.cpu_seconds.is_some() {
+            return Err(coded(
+                "CONTAINMENT_UNAVAILABLE",
+                "a per-worker CPU limit cannot be enforced on this platform",
+            ));
+        }
+        let job = calve_win_sec::Job::new(calve_win_sec::Limits {
+            memory_bytes: limits.memory_bytes,
+            active_processes: limits.processes,
+        })
+        .map_err(|e| {
             coded(
                 "CONTAINMENT_UNAVAILABLE",
                 format!("cannot create a Job Object: {e}"),

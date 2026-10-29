@@ -520,6 +520,15 @@ fn provider_command(
         if fields.timeout_ms.is_some() {
             profile.timeout_ms = fields.timeout_ms;
         }
+        if fields.memory_limit_bytes.is_some()
+            || fields.cpu_limit_seconds.is_some()
+            || fields.process_limit.is_some()
+        {
+            let limits = profile.limits.get_or_insert_with(Default::default);
+            limits.memory_bytes = fields.memory_limit_bytes.or(limits.memory_bytes);
+            limits.cpu_seconds = fields.cpu_limit_seconds.or(limits.cpu_seconds);
+            limits.processes = fields.process_limit.or(limits.processes);
+        }
         if fields.max_output_bytes.is_some() {
             profile.max_output_bytes = fields.max_output_bytes;
         }
@@ -564,6 +573,7 @@ fn provider_command(
                 timeout_ms: None,
                 max_output_bytes: None,
                 projects: vec![],
+                limits: None,
             };
             apply(&mut profile, fields)?;
             providers::put_provider(&paths, Some(scope.parse()?), &id, profile)

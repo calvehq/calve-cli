@@ -533,6 +533,8 @@ pub fn hidden_mode() -> Option<i32> {
         Some(SANDBOX_MODE) => Some(serve_child(&args[2..])),
         #[cfg(unix)]
         Some(crate::supervise::HELPER_MODE) => Some(crate::supervise::helper(&args[2..])),
+        #[cfg(unix)]
+        Some(crate::supervise::RLIMIT_MODE) => Some(crate::supervise::rlimit_exec(&args[2..])),
         _ => None,
     }
 }

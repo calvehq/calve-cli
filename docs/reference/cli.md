@@ -336,8 +336,8 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 |---|---|
 | `calve provider list` | List provider profiles |
 | `calve provider show <id>` | Show a provider profile and its harnesses |
-| `calve provider add <id> [--kind <kind>] [--name <name>] [--executable <executable>] [--arg <args>] [--env <env>] [--secret <secrets>] [--default-harness <default_harness>] [--timeout-ms <timeout_ms>] [--max-output-bytes <max_output_bytes>] [--allow-project <projects>] [--scope <scope>]` | Add a provider profile |
-| `calve provider edit <id> [--kind <kind>] [--name <name>] [--executable <executable>] [--arg <args>] [--env <env>] [--secret <secrets>] [--default-harness <default_harness>] [--timeout-ms <timeout_ms>] [--max-output-bytes <max_output_bytes>] [--allow-project <projects>]` | Change a provider profile |
+| `calve provider add <id> [--kind <kind>] [--name <name>] [--executable <executable>] [--arg <args>] [--env <env>] [--secret <secrets>] [--default-harness <default_harness>] [--timeout-ms <timeout_ms>] [--max-output-bytes <max_output_bytes>] [--allow-project <projects>] [--memory-limit-bytes <memory_limit_bytes>] [--cpu-limit-seconds <cpu_limit_seconds>] [--process-limit <process_limit>] [--scope <scope>]` | Add a provider profile |
+| `calve provider edit <id> [--kind <kind>] [--name <name>] [--executable <executable>] [--arg <args>] [--env <env>] [--secret <secrets>] [--default-harness <default_harness>] [--timeout-ms <timeout_ms>] [--max-output-bytes <max_output_bytes>] [--allow-project <projects>] [--memory-limit-bytes <memory_limit_bytes>] [--cpu-limit-seconds <cpu_limit_seconds>] [--process-limit <process_limit>]` | Change a provider profile |
 | `calve provider test <id>` | Check executable, secrets and references without running |
 | `calve provider enable <id>` | Enable a provider |
 | `calve provider disable <id>` | Disable a provider |

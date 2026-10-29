@@ -422,3 +422,107 @@ fn keyring_secrets_resolve_at_launch() {
     );
     assert_eq!(run(&["provider", "test", "sh"]).1["healthy"], false);
 }
+
+/// M6 R7: limits configured on a provider (`provider add --memory-limit-bytes`) reach the OS
+/// supervisor: the same check harness passes on an unlimited provider and fails on a limited
+/// one; a limit the platform cannot enforce is refused at configuration.
+#[test]
+#[cfg(target_os = "linux")]
+fn provider_limits_reach_the_worker() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path();
+    let root = data.join("project");
+    let p = root.to_str().unwrap();
+    ok(data, &["init", p]);
+    let catalog = calve_testkit::ToyCatalog::new();
+    ok(
+        data,
+        &catalog
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    );
+    ok(
+        data,
+        &[&["--project", p][..], &calve_testkit::ENABLE_TOY[..]].concat(),
+    );
+    ok(
+        data,
+        &[
+            "provider",
+            "add",
+            "free",
+            "--kind",
+            "local-process",
+            "--executable",
+            "sh",
+        ],
+    );
+    ok(
+        data,
+        &[
+            "provider",
+            "add",
+            "small",
+            "--kind",
+            "local-process",
+            "--executable",
+            "sh",
+            "--memory-limit-bytes",
+            "67108864",
+        ],
+    );
+    let (refused, _, stderr) = calve(
+        data,
+        &[
+            "provider",
+            "add",
+            "nproc",
+            "--kind",
+            "local-process",
+            "--executable",
+            "sh",
+            "--process-limit",
+            "4",
+        ],
+    );
+    assert!(
+        !refused && stderr.contains("CONTAINMENT_UNAVAILABLE"),
+        "{stderr}"
+    );
+    let config = ok(
+        data,
+        &["--project", p, "config", "edit-path", "--scope", "project"],
+    );
+    let alloc = "[\"-c\", \"dd if=/dev/zero of=/dev/null bs=200M count=1\"]";
+    fs::write(
+        config["path"].as_str().unwrap(),
+        format!(
+            "format_version = 1\n[harnesses.free]\nprovider = \"free\"\nmode = \"check\"\ncommand = {alloc}\n\
+             [harnesses.small]\nprovider = \"small\"\nmode = \"check\"\ncommand = {alloc}\n"
+        ),
+    )
+    .unwrap();
+    for (harness, expected) in [("free", "SUCCEEDED"), ("small", "FAILED")] {
+        let pack = ok(data, &["--project", p, "pack", "create", harness])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (_, run, stderr) = calve(
+            data,
+            &[
+                "--project",
+                p,
+                "execution",
+                "start",
+                &pack,
+                "--harness",
+                harness,
+                "--generation",
+                "1",
+            ],
+        );
+        assert_eq!(run["state"], expected, "{harness}: {run} {stderr}");
+    }
+}

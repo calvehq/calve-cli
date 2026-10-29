@@ -73,6 +73,27 @@ pub struct ProviderProfile {
     /// Project IDs allowed to use this profile; empty allows every Project.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub projects: Vec<String>,
+    /// OS-enforced limits for every worker this provider runs (M6 R7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<ResourceLimits>,
+}
+
+/// Worker resource limits, enforced by the supervisor: Unix `RLIMIT_AS` / `RLIMIT_CPU`,
+/// Windows Job Object memory and active-process limits. A limit the platform cannot enforce is
+/// refused when the provider is configured, never ignored.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceLimits {
+    /// Address space (Unix) or committed memory (Windows job) in bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_bytes: Option<u64>,
+    /// CPU seconds (Unix only); the worker is stopped by SIGXCPU/SIGKILL past it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_seconds: Option<u64>,
+    /// Concurrent processes in the worker's job (Windows only: Unix `RLIMIT_NPROC` counts
+    /// every process of the user, so it cannot bound one worker).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processes: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -524,6 +545,27 @@ fn env_name_ok(name: &str) -> bool {
 pub fn validate_profile(id: &str, profile: &ProviderProfile) -> Result<()> {
     if !valid_id(id) {
         return Err(invalid(format!("invalid provider id {id:?}")));
+    }
+    if let Some(limits) = &profile.limits {
+        if limits.memory_bytes.is_some_and(|b| b < 16 * 1024 * 1024)
+            || limits.cpu_seconds == Some(0)
+            || limits.processes == Some(0)
+        {
+            return Err(invalid(format!(
+                "provider {id}: limits must be positive (memory_bytes at least 16 MiB)"
+            )));
+        }
+        let unenforceable = if cfg!(windows) {
+            limits.cpu_seconds.map(|_| "cpu_seconds")
+        } else {
+            limits.processes.map(|_| "processes")
+        };
+        if let Some(name) = unenforceable {
+            return Err(crate::coded(
+                "CONTAINMENT_UNAVAILABLE",
+                format!("provider {id}: limits.{name} cannot be enforced on this platform"),
+            ));
+        }
     }
     if let Some(executable) = &profile.executable
         && (executable.trim().is_empty() || executable.contains('\0'))

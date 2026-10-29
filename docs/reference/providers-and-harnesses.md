@@ -13,7 +13,17 @@ calve provider test agent          # executable, secrets and references, without
 calve provider disable agent
 ```
 
-Profiles live in configuration (`[providers.<id>]`, global scope by default; `--scope workspace|project` on `add`). Fields: `kind`, `executable`, `args`, `env` (variables inherited from Calve's environment, everything else is cleared), `secrets` (child variable → `env:NAME` reference, resolved at launch and never stored), `default_harness`, `timeout_ms`, `max_output_bytes`, and `projects` (allowed Project IDs; empty allows all).
+Profiles live in configuration (`[providers.<id>]`, global scope by default; `--scope workspace|project` on `add`). Fields: `kind`, `executable`, `args`, `env` (variables inherited from Calve's environment, everything else is cleared), `secrets` (child variable → `env:NAME` reference, resolved at launch and never stored), `default_harness`, `timeout_ms`, `max_output_bytes`, `projects` (allowed Project IDs; empty allows all), and `limits`.
+
+`[providers.<id>.limits]` (or `provider add|edit --memory-limit-bytes N --cpu-limit-seconds N --process-limit N`) are enforced by the operating system for every worker the provider runs:
+
+| Limit | Unix | Windows |
+|---|---|---|
+| `memory_bytes` (≥ 16 MiB) | `RLIMIT_AS` (address space), hard and soft | Job Object memory limit |
+| `cpu_seconds` | `RLIMIT_CPU`; past it the kernel stops the worker | refused (`CONTAINMENT_UNAVAILABLE`) |
+| `processes` | refused: `RLIMIT_NPROC` counts every process of the user | Job Object active-process limit |
+
+A limit the platform cannot enforce is refused when the provider is configured or launched, never ignored. On Unix the limits are applied by `calve __exec-limited`, which sets them on itself and then `exec`s the worker under the same supervision and Landlock rules; a worker that cannot start within its limits fails instead of running unlimited.
 
 Two adapters ship:
 

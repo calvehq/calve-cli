@@ -218,6 +218,8 @@ struct Launch {
     env: BTreeMap<String, Zeroizing<String>>,
     timeout: Duration,
     max_output: u64,
+    /// The provider's OS-enforced worker limits (M6 R7).
+    limits: crate::config::ResourceLimits,
     /// Redacts this launch's secrets from its output streams (§16.1).
     redactor: crate::redact::Redactor,
     /// Keeps the secrets registered for this process's other sinks while the launch lives.
@@ -274,6 +276,7 @@ fn launch_plan(
         env,
         timeout: Duration::from_millis(timeout),
         max_output: profile.max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT),
+        limits: profile.limits.clone().unwrap_or_default(),
         redactor: crate::redact::Redactor::new(secrets.iter().map(|s| s.as_bytes())),
         _registered: crate::redact::register(secrets.iter().map(|s| s.as_bytes())),
     })
@@ -299,7 +302,7 @@ fn spawn(
         .collect();
     // Stale records of dead parents first (cheap: one small directory).
     let _ = crate::supervise::reap();
-    crate::supervise::Supervised::spawn(&launch.argv, &env, cwd)
+    crate::supervise::Supervised::spawn_limited(&launch.argv, &env, cwd, &launch.limits)
 }
 
 /// Exit status of a supervised run; a lost supervisor is a failure with its reason.
@@ -590,6 +593,7 @@ pub fn run_command(
             .collect(),
         timeout,
         max_output: u64::MAX,
+        limits: Default::default(),
         // Checks get no provider secrets; anything registered in this process is still redacted.
         redactor: crate::redact::active(),
         _registered: crate::redact::register(Vec::<Vec<u8>>::new()),

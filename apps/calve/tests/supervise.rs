@@ -468,3 +468,62 @@ fn a_program_outside_every_root_runs_but_cannot_write_beside_itself() {
     );
     assert!(ok);
 }
+
+/// M6 R7: a provider's resource limits reach the OS. Under the real helper and Landlock, a
+/// 200 MB allocation succeeds unlimited and fails under a 64 MiB memory limit; a busy loop is
+/// stopped by a 1-second CPU limit; a process-count limit is refused on Unix, never ignored.
+#[test]
+fn provider_resource_limits_are_enforced_by_the_os() {
+    if inside() {
+        use calve_app::config::ResourceLimits;
+        let w = work();
+        let alloc = sh("dd if=/dev/zero of=/dev/null bs=200M count=1 2>/dev/null");
+        let mut free = Supervised::spawn(&alloc, &env(), &w).unwrap();
+        assert_eq!(
+            free.wait().unwrap(),
+            Termination::Finished {
+                exit_code: Some(0),
+                signal: None
+            },
+            "unlimited: the allocation succeeds"
+        );
+        let memory = ResourceLimits {
+            memory_bytes: Some(64 * 1024 * 1024),
+            ..Default::default()
+        };
+        let mut limited = Supervised::spawn_limited(&alloc, &env(), &w, &memory).unwrap();
+        match limited.wait().unwrap() {
+            Termination::Finished { exit_code, .. } => {
+                assert_ne!(exit_code, Some(0), "64 MiB: the allocation fails")
+            }
+            other => panic!("{other:?}"),
+        }
+        let cpu = ResourceLimits {
+            cpu_seconds: Some(1),
+            ..Default::default()
+        };
+        let started = Instant::now();
+        let mut spin =
+            Supervised::spawn_limited(&sh("while :; do :; done"), &env(), &w, &cpu).unwrap();
+        match spin.wait().unwrap() {
+            Termination::Finished { exit_code, signal } => assert!(
+                signal.is_some() || exit_code.is_some_and(|c| c != 0),
+                "stopped by the CPU limit: {exit_code:?} {signal:?}"
+            ),
+            other => panic!("{other:?}"),
+        }
+        assert!(started.elapsed() < Duration::from_secs(30));
+        let processes = ResourceLimits {
+            processes: Some(4),
+            ..Default::default()
+        };
+        let refused = Supervised::spawn_limited(&sh("true"), &env(), &w, &processes);
+        assert!(
+            refused.is_err(),
+            "a process limit Unix cannot bound is refused"
+        );
+        return;
+    }
+    let (ok, _root, _t) = isolated("provider_resource_limits_are_enforced_by_the_os", &[]);
+    assert!(ok);
+}

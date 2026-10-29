@@ -353,6 +353,15 @@ pub struct ProviderFields {
     /// Restrict to these Project IDs (repeatable).
     #[arg(long = "allow-project")]
     pub projects: Vec<String>,
+    /// OS limit on each worker's memory in bytes (Unix address space, Windows job memory).
+    #[arg(long)]
+    pub memory_limit_bytes: Option<u64>,
+    /// OS limit on each worker's CPU seconds (Unix).
+    #[arg(long)]
+    pub cpu_limit_seconds: Option<u64>,
+    /// OS limit on each worker's concurrent processes (Windows job).
+    #[arg(long)]
+    pub process_limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, Subcommand, Serialize, Deserialize)]
