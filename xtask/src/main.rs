@@ -638,7 +638,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
 const RESTRICTED: &[(&str, &[&str])] = &[
     ("ratatui", &["calve-console"]),
     ("crossterm", &["calve-console"]),
-    ("rusqlite", &["calve-app", "calve"]),
+    ("rusqlite", &["calve-app"]),
 ];
 
 /// The contract crate's whole dependency set (plan §4): no `calve-*`, tokio or rusqlite.
@@ -693,28 +693,7 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
             )
             .into());
         }
-        let allowed = ALLOWED
-            .iter()
-            .find(|(crate_name, _)| *crate_name == name)
-            .ok_or_else(|| format!("{name} is not listed in the architecture DAG"))?
-            .1;
-        for section in ["dependencies", "dev-dependencies"] {
-            let Some(deps) = package.get(section).and_then(toml::Value::as_table) else {
-                continue;
-            };
-            for dep in deps.keys() {
-                if dep.starts_with("calve-") && !allowed.contains(&dep.as_str()) {
-                    return Err(format!("{name} may not depend on {dep}").into());
-                }
-                if section == "dependencies"
-                    && let Some((_, owners)) =
-                        RESTRICTED.iter().find(|(crate_name, _)| crate_name == dep)
-                    && !owners.contains(&name)
-                {
-                    return Err(format!("{name} may not depend on {dep}").into());
-                }
-            }
-        }
+        check_member_deps(name, &package)?;
         // ADR 0007: the TUF library is replaceable — only the adapter and the trust-state
         // module may name it.
         scan_verifier_use(&root.join(&member).join("src"))?;
@@ -728,6 +707,33 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
         scan_domain_literals(&root.join(dir))?;
     }
     scan_sources(&root.join("apps/calved"))?;
+    Ok(())
+}
+
+/// The internal DAG (§49 rule 2) and the crates only some members may link (rules 3 and 9).
+fn check_member_deps(name: &str, package: &toml::Value) -> Result<(), Box<dyn std::error::Error>> {
+    let allowed = ALLOWED
+        .iter()
+        .find(|(crate_name, _)| *crate_name == name)
+        .ok_or_else(|| format!("{name} is not listed in the architecture DAG"))?
+        .1;
+    for section in ["dependencies", "dev-dependencies"] {
+        let Some(deps) = package.get(section).and_then(toml::Value::as_table) else {
+            continue;
+        };
+        for dep in deps.keys() {
+            if dep.starts_with("calve-") && !allowed.contains(&dep.as_str()) {
+                return Err(format!("{name} may not depend on {dep}").into());
+            }
+            if section == "dependencies"
+                && let Some((_, owners)) =
+                    RESTRICTED.iter().find(|(crate_name, _)| crate_name == dep)
+                && !owners.contains(&name)
+            {
+                return Err(format!("{name} may not depend on {dep}").into());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -821,25 +827,75 @@ fn scan_sources(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let source = fs::read_to_string(&path)?;
-        for forbidden in [
-            "openaevc::runtime::handlers",
-            "openaevc::store::sqlite::",
-            "FROM changepacks",
-            "INTO changepacks",
-            "UPDATE changepacks",
-            "FROM executions",
-            "INTO executions",
-            "UPDATE executions",
-            "FROM baselines",
-            "INTO baselines",
-            "UPDATE baselines",
+        check_store_access(&path.to_string_lossy().replace('\\', "/"), &source)?;
+    }
+    Ok(())
+}
+
+/// OpenAEVC's own tables (v0.1.0 schema), plus the protocol nouns a product table must not copy.
+const STORE_TABLES: &[&str] = &[
+    "objects",
+    "object_index",
+    "event_journal",
+    "aggregates",
+    "runtime_snapshots",
+    "request_nonce_window",
+    "changepacks",
+    "executions",
+    "baselines",
+];
+
+/// The one direct read of `.calve/openaevc/`: §44.3 needs a dry-run count and bytes, and
+/// OpenAEVC v0.1.0 has no API listing what `collect_garbage` would remove.
+/// shortcut: read-only SQL on the runtime's schema, drop it when OpenAEVC offers a GC plan.
+const GC_PLAN: (&str, &[&str]) = (
+    "crates/calve-app/src/gc.rs",
+    &["runtime.sqlite3", "FROM objects", "FROM object_index"],
+);
+
+/// §49 rules 1, 4, 7 and 10: no OpenAEVC internals, no SQL on or tables copying its store, and
+/// no protocol mutation except the commands the runtime applies.
+fn check_store_access(file: &str, source: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut forbidden: Vec<String> = [
+        "openaevc::internal",
+        "openaevc::runtime::handlers",
+        "openaevc::store::sqlite::",
+        "runtime.sqlite3",
+        "WriteBatch",
+    ]
+    .map(String::from)
+    .to_vec();
+    for table in STORE_TABLES {
+        for verb in [
+            "DELETE FROM ",
+            "FROM ",
+            "JOIN ",
+            "INTO ",
+            "UPDATE ",
+            "CREATE TABLE ",
+            "CREATE TABLE IF NOT EXISTS ",
         ] {
-            if source.contains(forbidden) {
-                return Err(
-                    format!("{} contains forbidden access: {forbidden}", path.display()).into(),
-                );
-            }
+            forbidden.push(format!("{verb}{table}"));
         }
+    }
+    let excepted: &[&str] = if file.ends_with(GC_PLAN.0) {
+        GC_PLAN.1
+    } else {
+        &[]
+    };
+    if let Some(hit) = forbidden
+        .iter()
+        .find(|f| source.contains(f.as_str()) && !excepted.contains(&f.as_str()))
+    {
+        return Err(format!("{file} contains forbidden access: {hit}").into());
+    }
+    // Review decisions reach the protocol only as commands.
+    if file.ends_with("calve-app/src/promotion.rs")
+        && let Some(m) = openaevc_rules::RESTRICTED_MODULES
+            .iter()
+            .find(|m| source.contains(*m))
+    {
+        return Err(format!("{file} names {m}; review code submits commands").into());
     }
     Ok(())
 }
@@ -1001,5 +1057,60 @@ mod tests {
         )
         .unwrap();
         assert!(scan_domain_literals(d.path()).is_err());
+    }
+
+    fn member(deps: &str) -> toml::Value {
+        format!("[dependencies]\n{deps}").parse().unwrap()
+    }
+
+    /// §49 rules 2, 3 and 9: the console reaches no product store, SQL or foreign terminal.
+    #[test]
+    fn member_dependency_rules() {
+        assert!(check_member_deps("calve-console", &member("ratatui = \"1\"")).is_ok());
+        for (name, dep) in [
+            ("calve-console", "calve-app"),
+            ("calve-console", "rusqlite"),
+            ("calve-client", "rusqlite"),
+            ("calve", "rusqlite"),
+            ("calve-app", "ratatui"),
+            ("calve-app", "crossterm"),
+            ("calve-console", "calve-ipc"),
+        ] {
+            assert!(
+                check_member_deps(name, &member(&format!("{dep} = \"1\""))).is_err(),
+                "{name} -> {dep}"
+            );
+        }
+        assert!(check_member_deps("calve-ext-x", &member("")).is_err());
+    }
+
+    /// §49 rules 1, 4, 7 and 10.
+    #[test]
+    fn store_access_rules() {
+        let f = "crates/calve-app/src/ops.rs";
+        assert!(check_store_access(f, "SELECT * FROM pack_files").is_ok());
+        for bad in [
+            "use openaevc::internal::x;",
+            "use openaevc::store::sqlite::Pool;",
+            "root.join(\"runtime.sqlite3\")",
+            "SELECT * FROM event_journal",
+            "SELECT 1 FROM a JOIN object_index",
+            "INSERT INTO objects VALUES (1)",
+            "UPDATE aggregates SET x=1",
+            "CREATE TABLE objects (d TEXT)",
+            "CREATE TABLE IF NOT EXISTS changepacks (d TEXT)",
+            "let b = openaevc::store::WriteBatch::default();",
+        ] {
+            assert!(check_store_access(f, bad).is_err(), "{bad}");
+        }
+        let gc = "/w/crates/calve-app/src/gc.rs";
+        assert!(check_store_access(gc, "runtime.sqlite3 SELECT 1 FROM objects").is_ok());
+        assert!(check_store_access(gc, "DELETE FROM objects").is_err());
+        assert!(check_store_access(gc, "UPDATE objects SET x=1").is_err());
+        assert!(check_store_access(gc, "INSERT INTO objects VALUES (1)").is_err());
+        assert!(check_store_access(gc, "SELECT 1 FROM event_journal").is_err());
+        let review = "crates/calve-app/src/promotion.rs";
+        assert!(check_store_access(review, "use openaevc::protocol::Command;").is_ok());
+        assert!(check_store_access(review, "use openaevc::store::Store;").is_err());
     }
 }
