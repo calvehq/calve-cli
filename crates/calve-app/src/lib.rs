@@ -2575,9 +2575,15 @@ impl Project {
         }
         // The file domain classifies file effects; without one no files are indexed.
         let domain = self.file_domain().await.ok();
-        let tx = self.db.unchecked_transaction()?;
+        // Every pack is read from OpenAEVC first; the rows are written afterwards in one short
+        // transaction with no await inside, so requests sharing this connection meanwhile run
+        // their own transactions (M7: a transaction held across awaits made them fail).
+        let mut packs = Vec::new();
         for id in dirty.into_iter().filter(|id| known.contains(id)) {
-            let pack = self.pack(&id).await?;
+            packs.push((id.clone(), self.pack(&id).await?));
+        }
+        let tx = self.db.unchecked_transaction()?;
+        for (id, pack) in packs {
             // The intent link is OpenAEVC's (`pack.intent`); a crash after the update but
             // before Calve recorded it is reconciled here.
             let intent = pack
