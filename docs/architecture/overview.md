@@ -1,6 +1,6 @@
 # Architecture
 
-Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signed command path, execution leases and provenance, evidence, policy decisions, promotion and Baselines. Calve owns Projects and Workspaces, Intents and Tasks, reviews, provider profiles, extension catalogs, read models and the terminal experience. Calve never reads or writes OpenAEVC tables; it uses the public SDK, runtime API and extension contract.
+Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signed command path, execution leases and provenance, evidence, policy decisions, promotion and Baselines. Calve owns Projects and Workspaces, Intents and Tasks, reviews, provider profiles, extension catalogs, read models and the terminal experience. Calve changes OpenAEVC state only through its commands, and reads through its APIs. The one exception is a read-only count in `maintenance gc --dry-run` ([ADR 0022](../adr/0022-gc-dry-run-read.md)). See [state ownership](state-ownership.md).
 
 ## Crates
 
@@ -8,10 +8,10 @@ Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signe
 apps/calve ──────────┐                 (binaries: calve, calved)
                      ├──> calve-client ──> calve-ipc ──> calve-api
 calve-console ───────┘         │
-                               └──────────> calve-app ──> calve-api, calve-domain
+                               └──────────> calve-app ──> calve-api, calve-integration-contract
                                                  │
-                                   OpenAEVC SDK, runtime, store, contract
-extensions/* ──> calve-domain ──> OpenAEVC protocol + extension contract
+                                   OpenAEVC SDK, runtime, store
+calve-extensions (separate repository) ──> calve-integration-contract, by pinned commit
 ```
 
 | Crate | Owns |
@@ -21,11 +21,12 @@ extensions/* ──> calve-domain ──> OpenAEVC protocol + extension contract
 | `calve-ipc` | Local framing, peer checks, handshake, replay protection; it takes the request handler as a parameter |
 | `calve-client` | One client with daemon and embedded backends, daemon lifecycle |
 | `calve-console` | Terminal state, rendering, input; reads models through `calve-client` only |
-| `calve-domain` | First-party domain logic compiled into extension binaries |
+| `calve-integration-contract` | The versioned contract shared with extensions |
+| `calve-win-sec` | Windows security FFI, the single crate allowed `unsafe` |
 | `calve-testkit` | Shared integration-test helpers |
 | `xtask` | Architecture enforcement, CLI reference generation, catalog signing |
 
-`cargo run -p xtask -- check-architecture` fails CI on a forbidden dependency edge (for example the console depending on `calve-app`), a terminal crate outside the console, SQL or runtime crates outside `calve-app`, OpenAEVC path dependencies, direct access to OpenAEVC storage internals, or an extension importing Calve internals.
+`cargo run -p xtask -- check-architecture` fails CI on a forbidden dependency edge (for example the console depending on `calve-app`), a terminal crate outside the console, SQL or runtime crates outside `calve-app`, OpenAEVC path dependencies, or direct access to OpenAEVC storage. calve-extensions enforces its own dependency allowlist, which excludes Calve's private crates.
 
 ## Processes
 

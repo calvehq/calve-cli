@@ -23,7 +23,7 @@ Intent → Task → ChangePack → capture / agent run → seal → verify & rev
 cargo build --workspace --locked      # Rust 1.95+; builds calve and calved
 ```
 
-Calve currently tracks the `main` branch of OpenAEVC over SSH until a release tag exists; see [compatibility](docs/compatibility/openaevc.md).
+Calve pins OpenAEVC `v0.1.0` from its public tag; see [compatibility](docs/compatibility/openaevc.md). To install a release and verify it, see the [install guide](docs/guides/install.md).
 
 ## A first change
 
@@ -63,7 +63,7 @@ Every command is listed in the generated [CLI reference](docs/reference/cli.md).
 
 ## Design
 
-[Architecture](docs/architecture/overview.md) describes the crate boundaries (enforced in CI by `cargo run -p xtask -- check-architecture`), the daemon and embedded execution modes, and the on-disk layout. [Vocabulary](docs/concepts/vocabulary.md) defines the terms, and the [ADRs](docs/adr) record the OpenAEVC boundary and product-state ownership.
+[Architecture](docs/architecture/overview.md) describes the crate boundaries (enforced in CI by `cargo run -p xtask -- check-architecture`), the daemon and embedded execution modes, and the on-disk layout. [Vocabulary](docs/concepts/vocabulary.md) defines the terms, each [concept](docs/concepts) has its own page, the [guides](docs/guides) walk through real work, and the [ADRs](docs/adr) record the decisions. Security limits are stated in the [threat model](docs/security/threat-model.md).
 
 ## Contributing
 

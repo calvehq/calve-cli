@@ -5,6 +5,22 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
 
 ## Unreleased
 
+### Added
+
+- **Acceptance scenarios** A–P run as tests, and `xtask acceptance` reports them with an environment
+  fingerprint, keeping deviations apart from passes.
+- **`CAPABILITY_DENIED`**: a host call OpenAEVC denies now reports the extension, the capability and
+  the grant command.
+- Concept, architecture, guide, reference and security documentation.
+
+### Fixed
+
+- A pack refresh no longer holds a transaction across awaits, which made concurrent writes fail.
+- `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
+  receipts.
+- `execution start` refuses any pack with effects. An execution would start a new generation and
+  make those effects unpromotable.
+
 ### Changed (approved contract corrections)
 
 - **Bundled extensions removed.** Calve ships only `calve` and `calved`. Extensions come from signed

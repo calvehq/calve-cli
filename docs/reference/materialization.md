@@ -23,4 +23,4 @@ calve materialize rollback <op> --yes
 
 These are check-then-act steps, not compare-and-swap: a concurrent writer is detected after the fact, never prevented, and no lost-update freedom is claimed on any platform.
 
-**Filesystems without exchange/no-replace** (macOS and Windows until M5, and weak Linux filesystems): replacing or deleting existing files is refused with `MATERIALIZE_CONFLICT(unsafe_fs)`; new files are still created without replacing. `--allow-unsafe-fs` applies anyway with plain renames, records the choice in the journal and warns: the original is still backed up, but a write in the final window before the rename is lost.
+**Filesystems without exchange/no-replace** (weak filesystems, and any platform where the primitives are unavailable): replacing or deleting existing files is refused with `MATERIALIZE_CONFLICT(unsafe_fs)`; new files are still created without replacing. `--allow-unsafe-fs` applies anyway with plain renames, records the choice in the journal and warns: the original is still backed up, but a write in the final window before the rename is lost.
