@@ -1,26 +1,26 @@
 # Acceptance scenarios (§57 A–P)
 
-Status: map created at M0; test ids are assigned when each scenario is implemented. `xtask acceptance --scenario <A..P> [--report out.json]` (M7) runs a scenario from a clean checkout and records an environment fingerprint (OS, toolchain, lock hashes, OpenAEVC rev, contract rev, `CALVE_BIN` digest).
+`cargo run -p xtask -- acceptance --scenario <A..P|all> [--report out.json]` runs scenarios from this checkout, one complete test each, and records an environment fingerprint (OS, kernel, toolchain, commit, Cargo.lock hash, OpenAEVC revision, `calve` binary digest). A and B need the first-party catalog in `CALVE_CATALOG_ADD` (arguments of `calve extension catalog add`, one per line); without it they are reported `not-run`, never passed. The report separates `pass` from `pass-with-deviation`: a scenario with a deviation below is not a full pass even when its test is green.
 
-| Scenario | Repository | Test ids (current) | Status | Missing steps / owner |
-|---|---|---|---|---|
-| A — Fresh installation and generic Project | calve-cli + calve-extensions e2e | `examples::scenario_a` (`examples/scenario-a/run.sh`, first-party catalog; run by calve-extensions `scripts/bump-contract.sh`) | **Pass** (2026-10-17, local Linux) | — step 9 is OpenAEVC's policy evaluation (general-project declares no verifier or evaluator); step 14 restarts a real daemon (stop + start) |
-| B — Software project without Git | calve-extensions e2e | `examples::software_project` (fixture and first-party catalog) | Partial | 5 `status` shows uncaptured change, 7 diff, 8 tests through a provider/harness (uses `pack check`), 9 review, 11–12 materialize into a clean copied directory (the example restores into the same tree) — M4/M7 |
-| C — Pre-promotion reopen | calve-cli | `workflow::stale_generation_cannot_seal_after_reopen`, `workflow::review_policy_gates_promotion_and_old_decisions_do_not_cross_candidates` | Partial | no single test of steps 1–8; 4 stale display, 8 generation-1 history inspectable — M4 |
-| D — Independent Baselines | calve-cli (+ e2e) | `examples::scenario_d` (fixture and first-party catalog) | **Pass** (2026-10-17, local Linux) | — B0→B1 touches only file2/file3; shared files keep their inodes |
-| E — Revision | calve-cli (+ e2e) | `examples::scenario_e` (fixture and first-party catalog) | **Pass** (2026-10-17, local Linux) | — |
-| F — Parallel agent work | calve-cli | `examples::parallel_intents`, `workflow::cross_intent_task_dependencies_block_completion_and_reject_cycles` | Partial | 5 dependency-aware UI (console) — M6 |
-| G — Capability denial | calve-cli | — (`extensions::catalog_install_grant_update_rollback_and_uninstall` covers grants at activation only) | Missing | the deny → grant → retry → revoke → deny run with `process.execute` — G2 gate |
-| H — Extension permission widening | calve-cli | `extensions::catalog_install_grant_update_rollback_and_uninstall` | Exercised, not yet run as a scenario | 7 the grant's binding to the new digest is not asserted — M7 |
-| I — Project relocation | calve-cli (+ e2e) | `examples::scenario_i` (fixture and first-party catalog) | **Pass** (2026-10-17, local Linux) | — |
-| J — Copied Project | calve-cli | `adopt::copied_project_is_adopted_with_new_identity`, `registry::copied_identity_is_blocked_until_original_is_relocated` | Partial | 8 active executions not cloned as live; depends on FG16 — M4 |
-| K — Crash during execution | calve-cli | `recovery::crash_during_execution_is_reported_lost` | Exercised, not yet run as a scenario | 6 "no duplicate successful execution" not asserted — M4 |
-| L — Crash during extension install | calve-cli | `recovery::interrupted_extension_install_is_recoverable`, `install::a_crash_at_every_install_step_converges` | Partial | 3 a previous valid version stays active (no prior version in the e2e) — M4 |
-| M — Unsafe Baseline materialization | calve-cli | `materialize::baseline_materialization_protects_uncaptured_work` | Exercised, not yet run as a scenario | 4 the explanation offering capture/reconcile choices is not asserted — M4 |
-| N — Third-party OpenAEVC extension without Calve-specific renderer | calve-cli | `extensions::catalog_install_grant_update_rollback_and_uninstall` (`openaevc-only` package) | Partial | 3–4 create/view its resources/evidence through the generic renderer — M6 |
-| O — Console reconnect | calve-cli | — | Missing | all — M6 |
-| P — Version incompatibility | calve-cli | — (`app::application_envelope_correlates_success_and_version_error` is the API version, not OpenAEVC) | Missing | all — M4 (P15) |
+| Scenario | Test | Status | Notes |
+|---|---|---|---|
+| A — Fresh installation and generic Project | `examples::scenario_a` | Pass (Linux) | Step 9 is OpenAEVC's policy evaluation (general-project declares no verifier or evaluator); step 14 restarts a real daemon. |
+| B — Software project without Git | `examples::scenario_b` | Pass (Linux) | First-party software and Rust extensions. Step 8 runs the harness in its own pack over the same working tree (an execution on the candidate would make it unpromotable, and Calve refuses it) and the candidate's checks through `pack check`. Step 11 copies the Project, relocates the registration to the copy, removes its working files and materializes. |
+| C — Pre-promotion reopen | `examples::scenario_c` | **Deviation** | Steps 1–4 and 8 hold. Steps 5–7 cannot run on the same pack: OpenAEVC v0.1.0 keeps a pack's effects on reopen and promotes only effects of the current generation, so a pack with effects cannot be promoted after a reopen. The script asserts that refusal, then runs 5–7 on a superseding pack. |
+| D — Independent Baselines | `examples::scenario_d` | Pass (Linux) | B0→B1 touches only file2/file3; shared files keep their inodes. |
+| E — Revision | `examples::scenario_e` | Pass (Linux) | |
+| F — Parallel agent work | `examples::scenario_f` | Pass (Linux) | The console engine reads a real daemon for step 5. Writes to one Project are serialized: two simultaneous executions meet the retryable `PROJECT_LOCKED` and run one after the other. |
+| G — Capability denial | `acceptance::scenario_g_capability_denial` | Pass (Linux) | A fixture extension's real `process.execute` host call; OpenAEVC denies it and Calve reports `CAPABILITY_DENIED` with the grant command. |
+| H — Extension permission widening | `extensions::scenario_h_permission_widening` | Pass (Linux) | |
+| I — Project relocation | `examples::scenario_i` | Pass (Linux) | |
+| J — Copied Project | `examples::scenario_j` | Pass (Linux) | The active execution is left RUNNING by killing its daemon before the copy. Imported objects are inert history: they verify, and appear in no Baseline list. |
+| K — Crash during execution | `examples::scenario_k` | Pass (Linux) | A real daemon killed with SIGKILL. |
+| L — Crash during extension install | `extensions::scenario_l_crash_during_extension_install` | Pass (Linux) | The crash is the debug-build fault point after the first durable install record. |
+| M — Unsafe Baseline materialization | `examples::scenario_m` | Pass (Linux) | |
+| N — Third-party extension | `extensions::scenario_n_third_party_extension` | **Deviation** | An openaevc-only extension enables and its evidence is created and read generically. Creating resource instances needs integration metadata (`resource set` refuses kinds no metadata declares), so step 3 covers evidence only. |
+| O — Console reconnect | `examples::scenario_o` | Pass (Linux) | The console engine against a real calved, without a terminal. |
+| P — Version incompatibility | `acceptance::scenario_p_version_incompatibility` | **Deviation** | Only one OpenAEVC exists to link, so the unsupported runtime is a debug-only report override; the real check runs on it. Doctor reports the mismatch as a structured error, because every command refuses at open. |
 
-A scenario passes only when one test (or the M7 `xtask acceptance` run) performs every step; A, D, E and I do (M4). Windows, macOS and aarch64 runs are pending. Scenarios that use adopt-copy or Baseline transfer depend on FG16 (PASS).
+Windows, macOS and aarch64 runs of these scenarios are pending; they need a shell, daemon lifecycle and the catalog on those hosts. Scenarios that use adopt-copy or Baseline transfer depend on FG16 (PASS).
 
-Source (2026-10-15, M2 closeout): the scenario titles and steps are the original product plan's §57 (`tmp/PLAN.md` L4255–4431, untracked); the gaps above re-check the 2026-10-13 core audit against the current tests. An earlier M2 note said the definitions were missing from the repository; they were recovered from that file.
+Source: the scenario titles and steps are the original product plan's §57.

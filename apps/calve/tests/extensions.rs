@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use calve_testkit::Env;
 use calve_testkit::tuf::{Package, Repo, sha};
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn fixture_ext() -> PathBuf {
     Path::new(env!("CARGO_BIN_EXE_calve"))
@@ -463,4 +463,224 @@ fn uuid_like(seed: &str) -> String {
         out.push_str(&format!("{:016x}", h.finish()));
     }
     out
+}
+
+/// The catalog with `org.example.fixture` 1.0.0 requesting `clock.read`, enabled in a Project.
+fn fixture_project(env: &Env, r: &mut Repo) -> String {
+    r.add_package("targets", openaevc_only("1.0.0", &["clock.read"]));
+    r.targets.insert(
+        "index.json".into(),
+        br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
+    );
+    r.publish();
+    trust(env, "example", r);
+    let project = env.path().join("project");
+    let p = project.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.ok(&[
+        "--project",
+        &p,
+        "extension",
+        "enable",
+        "org.example.fixture",
+        "--acknowledge-native",
+    ]);
+    p
+}
+
+fn registered(env: &Env, p: &str) -> Value {
+    env.ok(&["--project", p, "extension", "list"])[0].clone()
+}
+
+/// §57 H: v1 granted A; v2 requests A+B; the update check detects the widening and activation
+/// is blocked; approving B updates, and the grant binds to the new version and digest.
+#[test]
+fn scenario_h_permission_widening() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut r = Repo::new();
+    // 1–2. v1 installed with capability set A, granted.
+    let p = fixture_project(&env, &mut r);
+    env.ok(&[
+        "--project",
+        &p,
+        "extension",
+        "grant",
+        "org.example.fixture",
+        "clock.read",
+    ]);
+    let v1 = registered(&env, &p);
+    assert_eq!(v1["version"], "1.0.0");
+    // 3. v2 requires A+B.
+    r.add_package(
+        "targets",
+        openaevc_only("1.1.0", &["clock.read", "process.execute"]),
+    );
+    r.publish();
+    // 4–5. The update detects the widening; automatic activation is blocked.
+    let held = env.ok(&[
+        "--project",
+        &p,
+        "extension",
+        "update",
+        "org.example.fixture",
+        "--acknowledge-native",
+    ]);
+    assert_eq!(
+        held["permission_widening"],
+        json!(["process.execute"]),
+        "{held}"
+    );
+    assert_eq!(registered(&env, &p), v1, "nothing activated");
+    // 6–7. The user approves B: new version, new digest, grant bound to them.
+    let updated = env.ok(&[
+        "--project",
+        &p,
+        "extension",
+        "update",
+        "org.example.fixture",
+        "--grant",
+        "process.execute",
+        "--acknowledge-native",
+    ]);
+    assert_eq!(updated["version"], "1.1.0", "{updated}");
+    let v2 = registered(&env, &p);
+    assert_eq!(v2["version"], "1.1.0");
+    assert_ne!(v2["manifest"], v1["manifest"], "the digest changed");
+    assert_eq!(
+        v2["granted_host_capabilities"],
+        json!(["process.execute", "clock.read"]),
+        "{v2}"
+    );
+    assert_eq!(v2["active"], true);
+}
+
+/// §57 L: an update interrupted after the first durable install record leaves the previous
+/// version active and valid; recovery cleans up; the catalog stays valid; a retry succeeds.
+#[test]
+fn scenario_l_crash_during_extension_install() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut r = Repo::new();
+    let p = fixture_project(&env, &mut r);
+    let v1 = registered(&env, &p);
+    r.add_package("targets", openaevc_only("1.1.0", &["clock.read"]));
+    r.publish();
+    env.ok(&["extension", "catalog", "refresh", "example"]);
+    // 1. Interrupted after download, before activation.
+    let crashed = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", env.path().join("d"))
+        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .env("CALVE_FAULT", "append.after_fsync")
+        .args(["--json", "--no-daemon-start", "--project", &p])
+        .args([
+            "extension",
+            "update",
+            "org.example.fixture",
+            "--acknowledge-native",
+        ])
+        .output()
+        .unwrap();
+    assert!(!crashed.status.success(), "the update crashed");
+    // 2–3. After restart the active mapping is still the previous valid version.
+    assert_eq!(registered(&env, &p), v1, "previous version stays active");
+    assert_eq!(
+        env.ok(&["--project", &p, "extension", "health"])[0]["healthy"],
+        true
+    );
+    // 4. Temporary content is cleaned safely.
+    let plan = env.ok(&["--project", &p, "recover", "plan"]);
+    assert!(
+        plan["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["action"] == "reconcile_install_journals"),
+        "{plan}"
+    );
+    env.ok(&["--project", &p, "recover", "apply", "--yes"]);
+    assert_eq!(
+        env.ok(&["--project", &p, "recover", "plan"])["actions"],
+        json!([])
+    );
+    // 5. Catalog and package integrity stay valid: the retry installs the new version.
+    assert_eq!(
+        env.ok(&["extension", "catalog", "list"])[0]["state"],
+        "fresh"
+    );
+    assert_eq!(registered(&env, &p), v1);
+    let retried = env.ok(&[
+        "--project",
+        &p,
+        "extension",
+        "update",
+        "org.example.fixture",
+        "--acknowledge-native",
+    ]);
+    assert_eq!(retried["version"], "1.1.0", "{retried}");
+}
+
+/// §57 N: a conforming extension with no Calve metadata (openaevc-only) enables, its manifest is
+/// visible, its evidence is recorded and read through the generic paths, with no Calve code
+/// knowing it. DEVIATION: creating resource instances needs integration metadata (acceptance.md).
+#[test]
+fn scenario_n_third_party_extension() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut r = Repo::new();
+    // 1–2. Installed and enabled with no Calve metadata beyond the package.
+    let p = fixture_project(&env, &mut r);
+    let info = env.ok(&["--project", &p, "extension", "info", "org.example.fixture"]);
+    assert_eq!(info["manifest"]["id"], "org.example.fixture", "{info}");
+    assert_eq!(
+        env.ok(&["--project", &p, "extension", "health"])[0]["healthy"],
+        true
+    );
+    // 3. Its evidence is created and viewed by kind.
+    let pack = env.ok(&["--project", &p, "pack", "create", "third party"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&["--project", &p, "pack", "seal", &pack, "--generation", "1"]);
+    let file = env.path().join("report.json");
+    fs::write(&file, br#"{"score": 3}"#).unwrap();
+    let added = env.ok(&[
+        "--project",
+        &p,
+        "evidence",
+        "add",
+        &pack,
+        "--generation",
+        "1",
+        "--kind",
+        "org.example.fixture.report/v1",
+        "--file",
+        file.to_str().unwrap(),
+    ]);
+    let listed = env.ok(&["--project", &p, "evidence", "list", &pack]);
+    let digest = listed["items"][0]["digest"].as_str().unwrap().to_owned();
+    assert_eq!(
+        listed["items"][0]["evidence"]["kind"], "org.example.fixture.report/v1",
+        "{added}"
+    );
+    // 4. The generic renderer shows it without any Calve-specific code.
+    let human = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", env.path().join("d"))
+        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .args([
+            "--no-daemon-start",
+            "--project",
+            &p,
+            "evidence",
+            "show",
+            &digest,
+        ])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&human.stdout);
+    assert!(
+        human.status.success() && text.contains("org.example.fixture.report/v1"),
+        "{text}"
+    );
+    assert!(
+        !text.trim_start().starts_with('{'),
+        "structured text, not a raw dump:\n{text}"
+    );
 }

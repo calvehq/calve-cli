@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod acceptance;
 mod json_schemas;
 mod openaevc_rules;
 mod release;
@@ -21,7 +22,8 @@ const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
        cargo run --bin xtask -- sums --dist <dir>
        cargo run --bin xtask -- release-key --out <dir>
        cargo run --bin xtask -- attest --dist <dir> --key <release.key>
-       cargo run --bin xtask -- verify-release --dist <dir> --pubkey <hex> [--smoke]";
+       cargo run --bin xtask -- verify-release --dist <dir> --pubkey <hex> [--smoke]
+       cargo run --bin xtask -- acceptance --scenario <A..P|all> [--report <out.json>]";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -53,6 +55,14 @@ fn main() {
                 verify_release(Path::new(&d), &k, args.iter().any(|a| a == "--smoke"))
             }
             _ => Err(USAGE.into()),
+        },
+        Some("acceptance") => match flag(&args, "--scenario") {
+            Some(which) => acceptance::run(
+                &workspace_root(),
+                &which,
+                flag(&args, "--report").as_deref().map(Path::new),
+            ),
+            None => Err(USAGE.into()),
         },
         Some("json-schemas") if args.len() <= 4 => json_schemas::run(
             &workspace_root(),

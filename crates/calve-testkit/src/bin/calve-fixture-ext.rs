@@ -7,7 +7,7 @@
 use openaevc::crypto::sha256;
 use openaevc::extension::server::{Extension, HostContext, self_artifact_digest, serve};
 use openaevc::extension::wire::{
-    ApplyOutput, EvaluateOutput, Operation, ValidateOutput, VerifyOutput, WireError,
+    ApplyOutput, EvaluateOutput, HostCall, Operation, ValidateOutput, VerifyOutput, WireError,
 };
 use openaevc::protocol::*;
 use serde_json::{Value, json};
@@ -117,7 +117,8 @@ impl Extension for Toy {
             verifier_kinds: vec![VERIFIER.into(), CHECKS.into()],
             evaluator_kinds: vec![SIZE.into()],
             composition_validators: vec![],
-            host_capabilities: vec![],
+            // Scenario G's probe; nothing else calls the host.
+            host_capabilities: vec![HostCapability::ProcessExecute],
             schemas: [(
                 calve_integration_contract::refs::SCHEMA.to_owned(),
                 sha256(calve_testkit::TOY_REFS.as_bytes()),
@@ -134,7 +135,7 @@ impl Extension for Toy {
     fn handle(
         &mut self,
         operation: Operation,
-        _: &mut HostContext<'_>,
+        host: &mut HostContext<'_>,
     ) -> Result<Value, WireError> {
         let enc = |v: Result<Value, serde_json::Error>| {
             v.map_err(|e| WireError::new("encode", e.to_string()))
@@ -232,6 +233,18 @@ impl Extension for Toy {
                 config,
                 ..
             } if kind == VERIFIER => {
+                // §57 Scenario G: verifying `process-probe.toy` needs a `process.execute` host
+                // call; without the grant OpenAEVC denies it and fails the operation closed.
+                if effects
+                    .iter()
+                    .any(|e| e.target.locator == "process-probe.toy")
+                {
+                    host.call(HostCall::ProcessExecute {
+                        program: "true".into(),
+                        args: vec![],
+                        timeout_ms: 5000,
+                    })?;
+                }
                 // Every file effect valid; with `{path, digest}` config, the newest effect at that
                 // path must establish that digest.
                 let mut findings = vec![];

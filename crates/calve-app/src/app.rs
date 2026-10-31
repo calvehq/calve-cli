@@ -100,12 +100,45 @@ pub(crate) fn current_actor() -> Option<String> {
         .flatten()
 }
 
+/// `(extension, dotted capability)` of an OpenAEVC host-call denial: its extension error has code
+/// `denied` and ends with the capability's variant name (`ProcessExecute` → `process.execute`).
+fn denied_capability(error: &openaevc::protocol::ProtocolError) -> Option<(String, String)> {
+    let info = error
+        .extension_error
+        .as_ref()
+        .filter(|e| e.code == "denied")?;
+    let variant = info.message.rsplit(": ").next()?;
+    let mut dotted = String::new();
+    for c in variant.chars() {
+        if c.is_ascii_uppercase() && !dotted.is_empty() {
+            dotted.push('.');
+        }
+        dotted.push(c.to_ascii_lowercase());
+    }
+    Some((info.extension_id.clone(), dotted))
+}
+
 /// Maps product errors onto the stable codes of [`calve_api::errors`] (§41). OpenAEVC errors keep
 /// their structured form in `detail.openaevc`; every message and detail is redacted against the
 /// secrets registered in this process (§16.1).
 pub fn fault(error: Error) -> Fault {
     use calve_api::errors::{openaevc_code, split_code};
     let (code, message, retryable, detail): (&str, String, bool, Option<Value>) = match error {
+        // A host call the extension holds no grant for: not a transient failure, and the user
+        // can act on it (§57 G). OpenAEVC's own error stays in the detail.
+        Error::Protocol(protocol) if denied_capability(&protocol).is_some() => {
+            let (extension, capability) = denied_capability(&protocol).expect("checked");
+            (
+                "CAPABILITY_DENIED",
+                format!(
+                    "extension {extension} lacks the host capability {capability}, so OpenAEVC denied the operation; grant it with `calve extension grant {extension} {capability}`"
+                ),
+                false,
+                Some(
+                    json!({"openaevc": &*protocol, "extension": extension, "capability": capability}),
+                ),
+            )
+        }
         Error::Protocol(protocol) => (
             openaevc_code(protocol.code.as_str()),
             protocol.message.clone(),

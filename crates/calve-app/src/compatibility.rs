@@ -62,7 +62,19 @@ pub fn check_enabled_extensions(
 }
 
 pub fn check(info: &RuntimeInfo) -> Result<Compatibility> {
-    let protocol = check_range("protocol", &SUPPORTED_PROTOCOL, &info.protocol)?;
+    // Debug builds: `CALVE_TEST_RUNTIME_PROTOCOL=<major>` stands in for a runtime speaking another
+    // protocol (§57 P); only one OpenAEVC exists to link against.
+    let reported = match std::env::var("CALVE_TEST_RUNTIME_PROTOCOL") {
+        Ok(major) if cfg!(debug_assertions) => {
+            let major = major.parse().unwrap_or(99);
+            VersionRange::new(
+                openaevc::protocol::ProtocolVersion::new(major, 0, 0),
+                openaevc::protocol::ProtocolVersion::new(major, 0, 1),
+            )
+        }
+        _ => info.protocol,
+    };
+    let protocol = check_range("protocol", &SUPPORTED_PROTOCOL, &reported)?;
     let contract = check_range("extension contract", &SUPPORTED_CONTRACT, &info.contract)?;
     Ok(Compatibility {
         openaevc_tag: OPENAEVC_TAG,
