@@ -159,16 +159,21 @@
           "id",
           "kind"
         ]
+      },
+      "context": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "failure": {
+        "type": "string"
       }
     },
     "required": [
       "actor",
-      "allowed_effects",
-      "allowed_resources",
       "attempt",
       "created_at",
-      "effects",
-      "extensions",
       "finished_at",
       "generation",
       "harness",
@@ -177,7 +182,6 @@
       "lease",
       "max_attempts",
       "namespace",
-      "observations",
       "pack",
       "provider",
       "request_id",

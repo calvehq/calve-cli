@@ -61,17 +61,9 @@
       }
     },
     "required": [
-      "context",
-      "effects",
       "execution",
-      "exit_code",
-      "harness",
-      "log_lines",
-      "output_truncated",
-      "provider",
       "reason",
-      "state",
-      "work_unit"
+      "state"
     ]
   }
 }

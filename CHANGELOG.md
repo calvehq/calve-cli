@@ -16,6 +16,11 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
 ### Fixed
 
 - A pack refresh no longer holds a transaction across awaits, which made concurrent writes fail.
+- **`execution cancel` works on a running execution.** It needed the Project writer lock, which the
+  run holds until it ends, so it always failed with `PROJECT_LOCKED`.
+- The `execution start` and `execution wait` JSON schemas no longer require fields that a cancelled
+  execution does not have. `execution cancel`, `task link-execution`, `extension catalog reset` and
+  `extension switch-publisher` now support `--json`.
 - `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
   receipts.
 - `execution start` refuses any pack with effects. An execution would start a new generation and

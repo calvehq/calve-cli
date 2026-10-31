@@ -213,3 +213,85 @@ fn remaining_commands_succeed_with_json() {
     env.ok(&["daemon", "status"]);
     env.ok(&["extension", "catalog", "remove", "test", "--yes"]);
 }
+
+/// `execution cancel` stops a real worker under a real daemon, and `task link-execution` links
+/// the cancelled execution.
+#[cfg(unix)]
+#[test]
+fn a_running_execution_is_cancelled_and_linked_to_a_task() {
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&root);
+    let at = |args: &[&str]| -> Vec<String> {
+        ["--project", p.as_str()]
+            .iter()
+            .chain(args)
+            .map(|s| (*s).to_owned())
+            .collect()
+    };
+    let run = |env: &Env, args: &[&str]| {
+        let a = at(args);
+        env.ok(&a.iter().map(String::as_str).collect::<Vec<_>>())
+    };
+    env.ok(&[
+        "provider",
+        "add",
+        "shell",
+        "--kind",
+        "local-process",
+        "--executable",
+        "sh",
+    ]);
+    fs::write(
+        root.join(".calve/config.toml"),
+        "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"sleep 60\"]\n",
+    )
+    .unwrap();
+    let pack = id(&run(&env, &["pack", "create", "Slow"]));
+    env.ok(&["daemon", "start"]);
+    let mut client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", env.path().join("d"))
+        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .args(at(&[
+            "--json",
+            "--no-daemon-start",
+            "execution",
+            "start",
+            &pack,
+        ]))
+        .args(["--harness", "slow", "--generation", "1"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let execution = (0..300)
+        .find_map(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            run(&env, &["execution", "list", "--pack", &pack])
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|e| e["state"] == "RUNNING")
+                .map(id)
+        })
+        .expect("the execution starts");
+    run(
+        &env,
+        &["execution", "cancel", &execution, "--reason", "not needed"],
+    );
+    let done = run(
+        &env,
+        &["execution", "wait", &execution, "--timeout-ms", "30000"],
+    );
+    assert_eq!(done["state"], "CANCELLED", "{done}");
+    client.wait().unwrap();
+
+    let intent = id(&run(&env, &["intent", "create", "Why"]));
+    let task = id(&run(&env, &["task", "create", &intent, "Work"]));
+    run(&env, &["task", "link-execution", &task, &execution]);
+    let shown = run(&env, &["task", "show", &task]);
+    assert!(shown.to_string().contains(&execution), "{shown}");
+    env.ok(&["daemon", "stop"]);
+}

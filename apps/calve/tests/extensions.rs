@@ -488,6 +488,47 @@ fn fixture_project(env: &Env, r: &mut Repo) -> String {
     p
 }
 
+/// The two catalog commands that change trust: moving an id to another publisher, and the
+/// audited reset, which needs both confirmations.
+#[test]
+fn publisher_switch_and_catalog_reset() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut first = Repo::new();
+    let _project = fixture_project(&env, &mut first);
+    let mut second = Repo::new();
+    second.add_package("targets", openaevc_only("1.0.0", &["clock.read"]));
+    second.targets.insert(
+        "index.json".into(),
+        br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
+    );
+    second.publish();
+    trust(&env, "second", &second);
+    let id = "org.example.fixture";
+    let switch = ["extension", "switch-publisher", id, "--catalog", "second"];
+    assert!(env.fails(&switch).contains("yes"));
+    let moved = env.ok(&[&switch[..], &["--yes", "--acknowledge-native"]].concat());
+    assert_eq!(moved["catalog"], "second", "{moved}");
+
+    let root = env.path().join("example-root.json");
+    let root = root.to_str().unwrap();
+    let digest = sha(&first.root_bytes(1));
+    let reset = [
+        "extension",
+        "catalog",
+        "reset",
+        "example",
+        "--root",
+        root,
+        "--root-digest",
+        &digest,
+    ];
+    let refused = env.fails(&[&reset[..], &["--yes"]].concat());
+    assert!(refused.contains("rollback"), "{refused}");
+    env.ok(&[&reset[..], &["--yes", "--i-understand-rollback-risk"]].concat());
+    let catalogs = env.ok(&["extension", "catalog", "list"]);
+    assert!(catalogs.to_string().contains("example"), "{catalogs}");
+}
+
 fn registered(env: &Env, p: &str) -> Value {
     env.ok(&["--project", p, "extension", "list"])[0].clone()
 }

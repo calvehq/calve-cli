@@ -368,6 +368,18 @@ fn mutates_project(command: &Action) -> bool {
     command.kind() == OperationKind::Command
 }
 
+/// A run holds the writer lock until it ends, so cancelling it cannot wait for that lock. Cancel
+/// is a single OpenAEVC command, serialized by OpenAEVC, with no Calve state to protect.
+fn takes_writer_lock(command: &Action) -> bool {
+    mutates_project(command)
+        && !matches!(
+            command,
+            Action::Execution {
+                command: ExecutionCommand::Cancel { .. }
+            }
+        )
+}
+
 fn resolve_project_path(
     registry: &Registry,
     requested: Option<PathBuf>,
@@ -1025,7 +1037,7 @@ async fn dispatch(request: Request) -> Result<Value> {
         (Err(_), Action::Recover { .. }) if path.is_dir() => std::fs::canonicalize(&path)?,
         (Err(error), _) => return Err(error),
     };
-    let _writer = if mutates_project(&action) && root.join(".calve").is_dir() {
+    let _writer = if takes_writer_lock(&action) && root.join(".calve").is_dir() {
         Some(project_writer(&root)?)
     } else {
         None

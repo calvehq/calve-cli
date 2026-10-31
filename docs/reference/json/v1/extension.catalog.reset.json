@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "calve extension catalog reset --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "generation": {
+        "type": "integer"
+      },
+      "name": {
+        "type": "string"
+      },
+      "previous_root_digest": {
+        "type": "string"
+      },
+      "root_digest": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "generation",
+      "name",
+      "previous_root_digest",
+      "root_digest"
+    ]
+  }
+}
