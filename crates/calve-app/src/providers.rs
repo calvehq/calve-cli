@@ -756,9 +756,11 @@ impl Project {
         self.provider_allowed(&harness.provider, profile)?;
         let launch = launch_plan(&harness.provider, profile, harness)?;
         let pack = self.open_pack_at(pack_id, expected_generation).await?;
-        if harness.mode == HarnessMode::Change && !pack.candidate_effects.is_empty() {
+        // Any execution starts a new generation, and OpenAEVC only promotes effects from the
+        // current one: even a check run here would leave this pack's effects unpromotable.
+        if !pack.candidate_effects.is_empty() {
             return Err(invalid(
-                "pack already has effects from another execution; OpenAEVC only promotes effects from the current generation, so run change harnesses in a new pack",
+                "pack already has effects; an execution starts a new generation and OpenAEVC only promotes effects from the current one, so run harnesses in a new pack (or use `pack check` on the sealed candidate)",
             ));
         }
         if let Some(task) = task {

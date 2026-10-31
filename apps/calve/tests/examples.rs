@@ -92,3 +92,40 @@ fn scenario_e() {
 fn scenario_i() {
     run_example("scenario-i");
 }
+
+/// §57 Scenario B needs the first-party software and language extensions.
+#[test]
+#[ignore = "needs the first-party catalog in CALVE_CATALOG_ADD"]
+fn scenario_b() {
+    run_example("scenario-b");
+}
+
+#[test]
+fn scenario_c() {
+    run_example("scenario-c");
+}
+
+#[test]
+fn scenario_f() {
+    run_example("scenario-f");
+}
+
+#[test]
+fn scenario_j() {
+    run_example("scenario-j");
+}
+
+#[test]
+fn scenario_k() {
+    run_example("scenario-k");
+}
+
+#[test]
+fn scenario_m() {
+    run_example("scenario-m");
+}
+
+#[test]
+fn scenario_o() {
+    run_example("scenario-o");
+}

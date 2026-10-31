@@ -198,3 +198,67 @@ fn scenario_o_console_reconnect() {
     println!("scenario O: PASS (fallback {index} -> {after:?})");
     daemon("stop");
 }
+
+/// §57 Scenario F step 5–7: the console shows the dependency, and completing the blocker through
+/// the real backend clears it on refresh. CALVE_E2E_BLOCKED / _BLOCKER name the tasks.
+#[test]
+#[ignore = "end to end: run by examples/scenario-f against a real calved"]
+fn scenario_f_dependency_ui() {
+    let project = PathBuf::from(std::env::var("CALVE_E2E_PROJECT").unwrap());
+    let blocked = std::env::var("CALVE_E2E_BLOCKED").unwrap();
+    let blocker = std::env::var("CALVE_E2E_BLOCKER").unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let client = Client::new(Options {
+        direct: false,
+        endpoint: Some(calve_client::default_endpoint().unwrap()),
+        no_daemon_start: true,
+    });
+    let scope = RequestScope {
+        project: Some(project),
+        workspace: None,
+        config_file: None,
+        actor: None,
+    };
+    let mut app = App::new(
+        Theme::new(ThemeName::Mono),
+        Symbols { unicode: true },
+        Connection::Connecting,
+        0,
+    );
+    app.size = (160, 45);
+    pump(&rt, &client, &scope, &mut app);
+    // The graph relates the two tasks.
+    app.navigate(Route::ChangeGraph);
+    pump(&rt, &client, &scope, &mut app);
+    app.collection("graph").selected_id = Some(blocked.clone());
+    let screen = render(&app);
+    assert!(
+        screen.contains("Task E") && screen.contains("Relationships"),
+        "{screen}"
+    );
+    assert!(
+        screen.contains("Task B"),
+        "the dependency is named:\n{screen}"
+    );
+    // Work explains what the task waits on.
+    app.navigate(Route::Task(blocked.clone()));
+    pump(&rt, &client, &scope, &mut app);
+    key(&mut app, 'x');
+    let screen = render(&app);
+    assert!(screen.contains("Waiting on task"), "{screen}");
+    handle_key(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    // B completes through the backend; a refresh clears the wait.
+    rt.block_on(client.call(
+        scope.clone(),
+        calve_console::model::parse_action(&["task".into(), "complete".into(), blocker]).unwrap(),
+    ))
+    .unwrap();
+    key(&mut app, 'r');
+    pump(&rt, &client, &scope, &mut app);
+    key(&mut app, 'x');
+    let screen = render(&app);
+    assert!(screen.contains("No recorded blockers"), "{screen}");
+}
