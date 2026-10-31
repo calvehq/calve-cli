@@ -57,6 +57,7 @@ proptest = "1.11"
 sigstore-tuf = { version = "=0.15.0", default-features = false, features = ["aws-lc-rs"] }
 ureq = "3.4"
 futures-executor = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 jiff = "0.2"
 aws-lc-rs = "1.18"
 

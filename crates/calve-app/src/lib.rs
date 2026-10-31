@@ -50,6 +50,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use futures_util::{StreamExt as _, TryStreamExt as _};
 use openaevc::core::{IdGeneratorExt, SystemClock, UuidV7Ids};
 use openaevc::crypto::{Signer, SigningKey, sha256};
 use openaevc::protocol::{
@@ -2539,9 +2540,12 @@ impl Project {
                 .collect::<std::result::Result<Vec<_>, _>>()?,
         );
         drop(missing);
+        // Only the dirty ids: an unchanged Project does no full-table read here.
         let mut known: BTreeSet<String> = {
-            let mut stmt = self.db.prepare("SELECT id FROM pack_metadata")?;
-            stmt.query_map([], |r| r.get::<_, String>(0))?
+            let mut stmt = self.db.prepare(
+                "SELECT id FROM pack_metadata WHERE id IN (SELECT value FROM json_each(?1))",
+            )?;
+            stmt.query_map([json!(dirty).to_string()], |r| r.get::<_, String>(0))?
                 .collect::<std::result::Result<_, _>>()?
         };
         // Reconciliation (§10–§11): a Calve pack whose metadata row is missing (database lost
@@ -2578,12 +2582,14 @@ impl Project {
         // Every pack is read from OpenAEVC first; the rows are written afterwards in one short
         // transaction with no await inside, so requests sharing this connection meanwhile run
         // their own transactions (M7: a transaction held across awaits made them fail).
-        let mut packs = Vec::new();
-        for id in dirty.into_iter().filter(|id| known.contains(id)) {
-            packs.push((id.clone(), self.pack(&id).await?));
-        }
+        let wanted: Vec<String> = dirty.into_iter().filter(|id| known.contains(id)).collect();
+        let packs: Vec<ChangePack> = futures_util::stream::iter(wanted.iter())
+            .map(|id| self.pack(id))
+            .buffered(READ_BATCH)
+            .try_collect()
+            .await?;
         let tx = self.db.unchecked_transaction()?;
-        for (id, pack) in packs {
+        for (id, pack) in wanted.into_iter().zip(packs) {
             // The intent link is OpenAEVC's (`pack.intent`); a crash after the update but
             // before Calve recorded it is reconciled here.
             let intent = pack
@@ -4945,6 +4951,9 @@ impl Project {
         Ok(serde_json::to_value(typed)?)
     }
 }
+
+/// OpenAEVC reads in flight while a projection catches up; order and atomicity are unchanged.
+pub(crate) const READ_BATCH: usize = 16;
 
 /// Narrows [`Project::packs_page`]; every field is optional and they combine.
 #[derive(Default)]

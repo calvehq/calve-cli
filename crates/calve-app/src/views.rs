@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use futures_util::{StreamExt as _, TryStreamExt as _};
 use openaevc::protocol::{Digest, Event, ExecutionState, Query, b64};
 use openaevc_sdk::OpenAevcClient;
 use rusqlite::OptionalExtension;
@@ -237,6 +238,7 @@ impl Project {
                     limit: Some(100),
                 })
                 .await?;
+            let mut unseen = Vec::new();
             for entry in page["objects"].as_array().into_iter().flatten() {
                 let digest: Digest = serde_json::from_value(entry["digest"].clone())?;
                 let known: bool = self.db.query_row(
@@ -245,17 +247,24 @@ impl Project {
                     |r| r.get(0),
                 )?;
                 if !known {
-                    let object = self.receipt(digest).await?;
-                    let r = &object["envelope"]["body"];
-                    rows.push((
-                        r["request_id"].as_str().unwrap_or_default().to_owned(),
-                        digest.to_string(),
-                        r["command"].as_str().unwrap_or_default().to_owned(),
-                        r["caller"].as_str().unwrap_or_default().to_owned(),
-                        r["completed_at"].as_str().unwrap_or_default().to_owned(),
-                        r["result"].to_string(),
-                    ));
+                    unseen.push(digest);
                 }
+            }
+            let objects: Vec<Value> = futures_util::stream::iter(unseen.iter().copied())
+                .map(|digest| self.receipt(digest))
+                .buffered(crate::READ_BATCH)
+                .try_collect()
+                .await?;
+            for (digest, object) in unseen.iter().zip(objects) {
+                let r = &object["envelope"]["body"];
+                rows.push((
+                    r["request_id"].as_str().unwrap_or_default().to_owned(),
+                    digest.to_string(),
+                    r["command"].as_str().unwrap_or_default().to_owned(),
+                    r["caller"].as_str().unwrap_or_default().to_owned(),
+                    r["completed_at"].as_str().unwrap_or_default().to_owned(),
+                    r["result"].to_string(),
+                ));
             }
             match page["next"].as_str() {
                 Some(next) => {
@@ -282,7 +291,17 @@ impl Project {
 
     /// Receipts of these requests, oldest first.
     async fn receipts_for(&self, requests: &[String]) -> Result<Vec<Value>> {
-        self.refresh_receipt_index().await?;
+        // A top-up is only needed for a request the index cannot answer yet.
+        self.db.execute_batch(crate::RECEIPT_SCHEMA)?;
+        let known: usize = self.db.query_row(
+            "SELECT COUNT(*) FROM receipt_index
+             WHERE request_id IN (SELECT value FROM json_each(?1))",
+            [json!(requests).to_string()],
+            |r| r.get(0),
+        )?;
+        if known < requests.len() {
+            self.refresh_receipt_index().await?;
+        }
         let mut q = self.db.prepare(
             "SELECT digest, command, caller, completed_at, result FROM receipt_index
              WHERE request_id IN (SELECT value FROM json_each(?1)) ORDER BY completed_at, digest",
@@ -1007,17 +1026,27 @@ impl Project {
         // One more than the page tells whether another page exists.
         let events = self.candidate_events(&c, before, limit + 1).await?;
         let more = events.len() > limit as usize;
+        let events: Vec<Event> = events.into_iter().take(limit as usize).collect();
+        let mut digests = Vec::with_capacity(events.len());
+        for event in &events {
+            digests.push(serde_json::from_value::<Digest>(
+                event.body["evidence"].clone(),
+            )?);
+        }
+        let objects: Vec<Value> = futures_util::stream::iter(digests.iter().copied())
+            .map(|digest| self.evidence(digest))
+            .buffered(crate::READ_BATCH)
+            .try_collect()
+            .await?;
         let mut rows = Vec::new();
         let mut next = None;
-        for event in events.into_iter().take(limit as usize) {
+        for ((event, digest), object) in events.into_iter().zip(digests).zip(objects) {
             next = Some(format!(
                 "{}:{}",
                 i64::try_from(event.timestamp.unix_nanos()).unwrap_or(i64::MAX),
                 event.sequence
             ));
             let pack = event.body["pack"].as_str().unwrap_or_default().to_owned();
-            let digest: Digest = serde_json::from_value(event.body["evidence"].clone())?;
-            let object = self.evidence(digest).await?;
             let summary: Option<(String, u64, Option<String>)> = self
                 .db
                 .query_row(

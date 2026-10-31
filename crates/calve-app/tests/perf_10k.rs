@@ -213,16 +213,19 @@ async fn console_read_models_at_ten_thousand_packs() {
     let (_, d) = timed_async("inbox", p.inbox(false)).await;
     warm("inbox", d);
     println!("perf: worst warm read model: {worst:?}");
-    // Memory: 20 warm rounds of the console's reads must not keep growing.
+    // Memory: warm rounds of the console's reads must plateau, not keep growing.
     let before = rss_kib();
-    for _ in 0..20 {
+    for round in 0..120 {
+        if round == 20 || round == 70 {
+            println!("perf: RSS after {round} rounds: {:?} KiB", rss_kib());
+        }
         p.status(None).await.unwrap();
         p.view_overview().await.unwrap();
         p.view_packs(None, Some(200), None).await.unwrap();
         p.view_evidence(None, None).await.unwrap();
     }
     let after = rss_kib();
-    println!("perf: RSS before/after 20 warm rounds: {before:?} / {after:?} KiB");
+    println!("perf: RSS before/after 120 warm rounds: {before:?} / {after:?} KiB");
     if let (Some(b), Some(a)) = (before, after) {
         assert!(a.saturating_sub(b) < 64 * 1024, "RSS grew {} KiB", a - b);
     }

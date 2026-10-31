@@ -10,6 +10,7 @@
 //! its callers fall back to the full scan.
 use std::collections::BTreeSet;
 
+use futures_util::{StreamExt as _, TryStreamExt as _};
 use openaevc::protocol::{Event, Query};
 use openaevc_sdk::OpenAevcClient as _;
 use rusqlite::{OptionalExtension, params};
@@ -23,6 +24,7 @@ pub(crate) const SCHEMA: &str = "
       actor TEXT, severity TEXT
     );
     CREATE INDEX IF NOT EXISTS event_index_kind ON event_index(kind, seq);
+    CREATE INDEX IF NOT EXISTS event_index_kind_time ON event_index(kind, ts_ns, seq);
     CREATE INDEX IF NOT EXISTS event_index_time ON event_index(ts_ns);
     CREATE INDEX IF NOT EXISTS event_index_actor ON event_index(actor, seq);
     CREATE TABLE IF NOT EXISTS event_refs (
@@ -148,7 +150,8 @@ impl Project {
         seqs.sort_unstable();
         seqs.dedup();
         let wanted: BTreeSet<u64> = seqs.iter().copied().collect();
-        let mut out = Vec::with_capacity(seqs.len());
+        // Consecutive runs, one query each; runs read concurrently, results in sequence order.
+        let mut runs: Vec<(u64, u64)> = Vec::new();
         let mut i = 0;
         while i < seqs.len() {
             let start = seqs[i];
@@ -158,14 +161,21 @@ impl Project {
                 end += 1;
             }
             i += 1;
-            let page = self
-                .client
-                .query(Query::ListEvents {
+            runs.push((start, end));
+        }
+        let pages: Vec<Value> = futures_util::stream::iter(runs)
+            .map(|(start, end)| {
+                self.client.query(Query::ListEvents {
                     after: start - 1,
                     limit: Some(u32::try_from(end - start + 1).unwrap_or(1000)),
                     kinds: vec![],
                 })
-                .await?;
+            })
+            .buffered(crate::READ_BATCH)
+            .try_collect()
+            .await?;
+        let mut out = Vec::with_capacity(seqs.len());
+        for page in pages {
             let page: Vec<Event> = serde_json::from_value(page)?;
             out.extend(page.into_iter().filter(|e| wanted.contains(&e.sequence)));
         }
@@ -232,12 +242,26 @@ impl Project {
         before: Option<(i64, u64)>,
         page: u32,
     ) -> Result<Vec<Event>> {
-        let mut sql = String::from("SELECT e.seq FROM event_index e WHERE 1=1");
+        // A reference pins the candidates: start from its rows, not from every event in time
+        // order, so the cost follows that object's events and not the journal (M7).
         let mut args: Vec<rusqlite::types::Value> = Vec::new();
+        let mut sql = match c.refs.first() {
+            Some(first) => {
+                args.push((*first).to_owned().into());
+                String::from(
+                    "SELECT e.seq FROM event_refs r0 CROSS JOIN event_index e ON e.seq = r0.seq
+                     WHERE r0.ref = ?1",
+                )
+            }
+            None => String::from("SELECT e.seq FROM event_index e WHERE 1=1"),
+        };
         if let Some((ts, seq)) = before {
             args.push(ts.into());
             args.push((seq as i64).into());
-            sql.push_str(" AND (e.ts_ns < ?1 OR (e.ts_ns = ?1 AND e.seq < ?2))");
+            let (t, s) = (args.len() - 1, args.len());
+            sql.push_str(&format!(
+                " AND (e.ts_ns < ?{t} OR (e.ts_ns = ?{t} AND e.seq < ?{s}))"
+            ));
         }
         let mut push = |cond: &str, v: rusqlite::types::Value, sql: &mut String| {
             args.push(v);
@@ -277,7 +301,7 @@ impl Project {
                 &mut sql,
             );
         }
-        for r in &c.refs {
+        for r in c.refs.iter().skip(1) {
             push(
                 "EXISTS (SELECT 1 FROM event_refs x WHERE x.ref = ? AND x.seq = e.seq)",
                 (*r).to_owned().into(),

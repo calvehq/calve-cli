@@ -38,6 +38,7 @@ cap-fs-ext.workspace = true
 sigstore-tuf.workspace = true
 ureq.workspace = true
 futures-executor.workspace = true
+futures-util.workspace = true
 jiff.workspace = true
 
 [dev-dependencies]
