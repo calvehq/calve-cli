@@ -363,7 +363,7 @@ fn health_at_registered_path(
         "candidate_path":candidate.root,"name":candidate.display_name,"findings":findings})
 }
 
-/// Every project-scoped command takes the writer lock; queries never do.
+/// Every project-scoped command takes the writer lock, except cancel; queries never do.
 fn mutates_project(command: &Action) -> bool {
     command.kind() == OperationKind::Command
 }
@@ -679,6 +679,25 @@ fn open_project(root: &Path, writer: bool) -> Result<std::rc::Rc<Project>> {
 }
 
 /// Releases the cached runtime so an exclusive operation can open the data root.
+/// Closes the cached runtime unless a request still uses it; false if one does, because evicting
+/// it then would leave the store locked and every later request unable to open the Project.
+fn release_project(root: &Path) -> bool {
+    PROJECTS.with(|cell| {
+        let mut cache = cell.borrow_mut();
+        let Some(map) = cache.as_mut() else {
+            return true;
+        };
+        if map
+            .get(root)
+            .is_some_and(|p| std::rc::Rc::strong_count(p) > 1)
+        {
+            return false;
+        }
+        map.remove(root);
+        true
+    })
+}
+
 pub fn evict_project(root: &Path) {
     PROJECTS.with(|cell| {
         if let Some(map) = cell.borrow_mut().as_mut() {
@@ -1045,21 +1064,35 @@ async fn dispatch(request: Request) -> Result<Value> {
     if let Action::Recover { command } = &action {
         return recover(&root, command).await;
     }
-    // Store maintenance needs the runtime closed (one runtime per data root).
-    if matches!(
-        action,
+    // Store maintenance needs the runtime closed (one runtime per data root). The dry run reads
+    // without it, and must not close the runtime a running request depends on.
+    let store_free = match action {
         Action::Maintenance {
-            command: MaintenanceCommand::VerifyStore
+            command: MaintenanceCommand::Gc { dry_run: true, .. },
+        } => true,
+        Action::Maintenance {
+            command:
+                MaintenanceCommand::VerifyStore
                 | MaintenanceCommand::Gc { .. }
-                | MaintenanceCommand::Check
-        }
-    ) {
-        evict_project(&root);
-    }
+                | MaintenanceCommand::Check,
+        } => release_project(&root),
+        _ => true,
+    };
+    let busy = || {
+        crate::Error::Busy(format!(
+            "{} is in use by a running request, and this needs the OpenAEVC store alone; retry when it ends",
+            root.display()
+        ))
+    };
     let store_report = match &action {
         Action::Maintenance {
             command: MaintenanceCommand::VerifyStore,
-        } => return crate::ops::verify_store(&root),
+        } => {
+            if !store_free {
+                return Err(busy());
+            }
+            return crate::ops::verify_store(&root);
+        }
         Action::Maintenance {
             command:
                 MaintenanceCommand::Gc {
@@ -1077,16 +1110,26 @@ async fn dispatch(request: Request) -> Result<Value> {
             if *dry_run {
                 return crate::gc::dry_run(&root, &o);
             }
+            if !store_free {
+                return Err(busy());
+            }
             return crate::gc::collect(&root, &o, &|| {
                 crate::ops::collect_protocol_garbage(&root, o.grace)
             });
         }
         Action::Maintenance {
             command: MaintenanceCommand::Check,
-        } => Some(crate::ops::verify_store(&root)?),
+        } => Some(if store_free {
+            crate::ops::verify_store(&root)?
+        } else {
+            // The console's change feed holds the runtime almost constantly, so a check still
+            // reports the rest. `ok` is false because the store was not verified.
+            json!({"ok":false,"state":"in_use","problems":["the OpenAEVC store was not verified: a running request is using it"],
+                "namespaces":0,"events":0,"objects":0})
+        }),
         _ => None,
     };
-    let project_handle = open_project(&root, mutates_project(&action))?;
+    let project_handle = open_project(&root, takes_writer_lock(&action))?;
     // A request acting as a local identity gets its own session on the shared runtime.
     let acting = match scope.actor.as_deref() {
         Some(name) => Some(project_handle.acting_as(name)?),
@@ -1974,7 +2017,8 @@ fn init_report(project: &Project, registered: bool) -> Result<Value> {
 
 /// Recovery must work when the Project cannot open: inspect and plan open nothing writable.
 async fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
-    evict_project(root);
+    // Inspect reports a store in use, so a running request keeps its runtime.
+    release_project(root);
     match command {
         RecoverCommand::Inspect => crate::recovery::inspect(root),
         RecoverCommand::Plan => Ok(

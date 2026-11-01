@@ -8,6 +8,8 @@ Check a release before you run it. The first two checks are required. The third 
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
+On macOS use `shasum -a 256 -c`; on Windows, `Get-FileHash`.
+
 ## 2. Release-key attestations
 
 Every file is the subject of an in-toto statement signed by Calve's ed25519 release key. From a source checkout at the release's tag:
@@ -18,7 +20,9 @@ cargo run --locked -p xtask -- verify-release --dist <download-dir> --pubkey <he
 
 This checks every file against `SHA256SUMS`, every attestation against the key, and that no file is left unattested. `--smoke` then unpacks this host's archive into an empty directory and runs it with fresh data and config directories.
 
-The public key is published with the release notes. Any DSSE and in-toto verifier can do the same check.
+This needs a Rust toolchain and compiles the source, so run it on a machine where that is acceptable. Any DSSE and in-toto verifier can do the same check without building.
+
+The public key is published with the release notes, so compare it with a copy you got elsewhere, such as the repository at an earlier tag.
 
 ## 3. Keyless signature and provenance
 

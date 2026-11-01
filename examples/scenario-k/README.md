@@ -1,1 +1,1 @@
-§57 Scenario K: Daemon killed mid-execution: reported LOST, no fabricated success.
+Acceptance scenario K: Daemon killed mid-execution: reported LOST, no fabricated success.

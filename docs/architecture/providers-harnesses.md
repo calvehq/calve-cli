@@ -8,7 +8,7 @@ A run goes through these steps:
 2. It asks OpenAEVC to admit an execution, which yields an id and a lease.
 3. It spawns the worker through the OS supervisor: argument vector with no shell, cleared environment plus an allowlist, own process group or Job Object, resource limits, and Landlock on Linux.
 4. While the worker runs, the supervisor renews the lease, and redacted output becomes observations.
-5. In `change` mode, Calve compares the tree inside the harness scope and submits snapshot effects. Anything outside the scope fails the run with nothing recorded.
+5. In `change` mode, Calve compares the tree inside the harness scope and submits snapshot effects for a local process, and submits a stdio agent's proposals. Anything outside the scope fails the run with nothing recorded.
 6. Calve reports the final state to OpenAEVC.
 
 A limit the platform cannot enforce is refused (`CONTAINMENT_UNAVAILABLE`), never silently dropped.

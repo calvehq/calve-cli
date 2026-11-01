@@ -387,7 +387,14 @@ fn make_runtime(state: &Path, keys: &Keys, create: bool) -> Result<Arc<Runtime>>
         } else {
             SqliteOptions::default()
         },
-    )?;
+    )
+    .map_err(|e| match e.code {
+        openaevc::protocol::ErrorCode::Conflict => Error::Busy(format!(
+            "{}; start the daemon so commands can share it",
+            e.message
+        )),
+        _ => e.into(),
+    })?;
     let clock = Arc::new(SystemClock);
     let ids = Arc::new(UuidV7Ids::new(clock.clone()));
     let admin = signing_key(&keys.admin_seed)?;

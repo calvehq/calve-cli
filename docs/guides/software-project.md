@@ -3,12 +3,18 @@
 This guide captures source files, runs language checks and writes accepted files back. The [`software-project`](../../examples/software-project) example is the tested version.
 
 ```sh
-calve init hello && cd hello
+calve init hello && cd hello          # needs a catalog; see the install guide
 calve extension enable org.calve.software --acknowledge-native
 calve extension enable org.calve.rust --acknowledge-native
 ```
 
-Calve needs no Git. It captures exact snapshots of files, and the software extension decides what is ignored.
+Calve needs no Git. It captures exact snapshots of files, and the software extension decides what is ignored. Add something to capture:
+
+```sh
+mkdir src
+printf '[package]\nname = "hello"\nversion = "0.1.0"\n' > Cargo.toml
+echo 'pub fn greet() {}' > src/lib.rs
+```
 
 ```sh
 calve pack create "Greeting" --require-check rust
@@ -17,7 +23,7 @@ calve pack diff <pack>
 calve pack seal <pack> --generation <n>
 ```
 
-`capture-tree` accepts at most 64 files and 16 MiB of inline content; a larger file is refused with `FILE_TOO_LARGE`. A deletion needs `--accept-deletions`.
+A batch takes up to 10,000 files and 512 MiB, and a file up to 256 MiB; over that, it is refused with `FILE_TOO_LARGE`. A deletion needs `--accept-deletions`.
 
 ## Check
 
@@ -27,7 +33,7 @@ calve pack check <pack> --generation <n>
 
 The check runs on a copy of the working tree with the candidate overlaid. The first run stops with `CHECK_PLAN_UNAPPROVED` and prints the exact command, because a package chose it and it will run with your permissions. Read it, then approve its digest with `--approve-plan`.
 
-To change a command, configure it for the Project:
+Plans can have several checks: approve each digest with `--approve-plan`, which is repeatable. A `checks` table replaces the whole plan, so list every check you want:
 
 ```toml
 format_version = 1

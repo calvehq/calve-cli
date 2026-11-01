@@ -12,7 +12,7 @@ calve resource diff <pack-id> src/message.txt
 ```
 
 - A rename is captured as a delete plus an add. When the package declares relation kinds, it derives them (e.g. a rename) in a separate `relate` session; Calve records each verified relation verbatim as an observation linked to the effects and never interprets it. A required relation that fails stops the capture before anything is submitted.
-- Files are captured inline up to 1 MiB each (`FILE_TOO_LARGE` above); `capture-tree` accepts at most 64 files and 16 MiB. Paths are UTF-8, relative, outside `.calve`, without symlink components or Windows-reserved forms.
+- Files up to 1 MiB are stored inline, and larger ones as verified chunked blobs up to the limit in [error codes](error-codes.md) (`FILE_TOO_LARGE` above it). Paths are UTF-8, relative, outside `.calve`, without symlink components or Windows-reserved forms.
 - Each pack accepts one effect-bearing capture batch; repeating it with identical files returns unchanged results.
 - `resource diff` compares the captured content with the working copy; line hunks come from the package's `diff` operation.
 

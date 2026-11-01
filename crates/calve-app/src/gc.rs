@@ -132,7 +132,7 @@ fn protocol(root: &Path, grace: Duration) -> Result<Class> {
 
 /// Last `state` recorded in a journal, if it can be read.
 fn journal_state(path: &Path, kind: &str) -> Option<String> {
-    let opened = crate::journal::Journal::open(path).ok()?;
+    let opened = crate::journal::Journal::read(path).ok()?;
     opened
         .records
         .iter()

@@ -1,6 +1,6 @@
 # ADR 0022: GC dry run reads the runtime database
 
-Status: Accepted (M7).
+Status: Proposed (M7); needs the project owner's approval as an exception to the architecture rule.
 
 ## Context
 Plan §44.3 requires `maintenance gc --dry-run` to report a count and estimated bytes per class. Plan §49 rule 7 fails CI if Calve opens `.calve/openaevc/` directly. OpenAEVC v0.1.0's `collect_garbage` is the only way to learn the collectable set, and it deletes. The `Store` API cannot enumerate objects, and v0.1.0 is not modified from Calve.

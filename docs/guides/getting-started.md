@@ -32,7 +32,7 @@ calve pack approve <pack-id> --generation <n> --reason "Looks right"
 calve pack qualify <pack-id> --generation <n>
 calve pack promote <pack-id> --generation <n>        # prints the promoted digest
 calve baseline create v1 <promoted-digest>
-calve baseline activate v1
+calve baseline activate <baseline-id>   # printed by baseline create
 ```
 
 `calve status` summarizes the Project, and `calve console` shows the same Project interactively (`?` lists keys). The scripts in [`examples/`](../../examples) walk through non-software Projects, language checks, parallel Intents, multiple Baselines, revisions and a local agent end to end.

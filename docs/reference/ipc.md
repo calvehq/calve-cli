@@ -4,10 +4,10 @@ The CLI and console talk to `calved` over a local, private channel. Nothing list
 
 | Platform | Transport | Access control |
 |---|---|---|
-| Unix | Socket `daemon.sock` in the data directory | Directory `0700`, socket `0600`, peer UID checked |
+| Unix | Socket `daemon.sock` under `$XDG_RUNTIME_DIR/calve/<digest>/`, or in the data directory | Directory `0700`, socket `0600`, peer UID checked |
 | Windows | Named pipe `\\.\pipe\calve-<hash>` | Explicit user-only DACL, first-instance flag, remote clients rejected, impersonation SID check, client checks of the server's SID and image path |
 
-**Version.** The handshake carries `api_version`, currently **1**. A client and daemon that differ refuse each other (`UNSUPPORTED_API_VERSION`). The daemon also reports its product version and OpenAEVC revision.
+**Version.** The handshake carries `api_version`, currently **1**. A client refuses a daemon with a different API or product version (`DAEMON_INCOMPATIBLE`); `calve daemon restart` fixes it.
 
 **Frames.** Length-prefixed JSON, at most 8 MiB. Payloads are the `Request` and `Response` types in `calve-api`, with `payload_version` 1.
 

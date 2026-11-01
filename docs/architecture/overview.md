@@ -24,7 +24,7 @@ calve-extensions (separate repository) ──> calve-integration-contract, by pi
 | `calve-integration-contract` | The versioned contract shared with extensions |
 | `calve-win-sec` | Windows security FFI, the single crate allowed `unsafe` |
 | `calve-testkit` | Shared integration-test helpers |
-| `xtask` | Architecture enforcement, CLI reference generation, catalog signing |
+| `xtask` | Architecture enforcement, CLI reference and JSON schemas, release archives and attestations, acceptance runs |
 
 `cargo run -p xtask -- check-architecture` fails CI on a forbidden dependency edge (for example the console depending on `calve-app`), a terminal crate outside the console, SQL or runtime crates outside `calve-app`, OpenAEVC path dependencies, or direct access to OpenAEVC storage. calve-extensions enforces its own dependency allowlist, which excludes Calve's private crates.
 
@@ -41,11 +41,10 @@ Every request is a typed `Request` executed by `calve_app::app::execute`, either
   product.sqlite3     Calve product metadata (versioned migrations)
   openaevc/           OpenAEVC runtime state (never edited by Calve)
   extensions/         artifacts pinned by older Projects
-  cache/discarded/    content backed up by explicit materialization discards
 <data dir>/calve/
   workspace.sqlite3   Workspaces and Project registrations
-  extensions/         content-addressed package cache, usage index
-  catalogs.json       trusted catalogs, pinned keys, rollback floors
-  daemon.sock/.pid/.log
+  packages/           content-addressed package cache
+  catalogs/<name>/    trusted catalogs, pinned root, rollback floors
+  logs/daemon.log
 <config dir>/calve/config.toml, workspaces/<id>.toml
 ```

@@ -6,12 +6,12 @@ Calve ships two binaries, `calve` and `calved`, and no extensions. Extensions co
 
 ## From a release archive
 
-Each release has an archive per platform: `calve-<version>-<target>`, with its SBOM (`.cdx.json`), `SHA256SUMS`, attestations and a Sigstore bundle. Targets built by the release workflow are `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc`.
+Each release has an archive per platform: `calve-<version>-<target>`, with its SBOM (`.cdx.json`), `SHA256SUMS`, attestations and a Sigstore bundle. Targets built by the release workflow are `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` and `x86_64-pc-windows-msvc`. On macOS, materialization can create files but refuses to replace or delete them unless you pass `--allow-unsafe-fs`.
 
-1. Download the archive for your platform with `SHA256SUMS` and `SHA256SUMS.sigstore.json`.
+1. Download every file of the release into one directory. Verification checks them all, and needs the `.intoto.json` attestations.
 2. [Verify them](verify-a-release.md). Do this before you run anything.
 3. Unpack, and put `calve` and `calved` in the same directory on your `PATH`. On Windows the client checks that the daemon is the `calved.exe` beside it, so keep them together.
-4. Run `calve version` and `calve doctor`.
+4. Run `calve version`, then `calve doctor` inside a Project.
 
 ## From source
 

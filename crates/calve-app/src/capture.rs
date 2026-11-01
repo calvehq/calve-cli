@@ -219,7 +219,7 @@ fn sessions(root: &Path) -> Result<Vec<(String, Value, Log)>> {
         if path.extension().is_none_or(|x| x != "journal") {
             continue;
         }
-        let opened = Journal::open(&path).map_err(corrupt)?;
+        let opened = Journal::read(&path).map_err(corrupt)?;
         let id = opened.journal.header["journal_id"]
             .as_str()
             .unwrap_or_default()

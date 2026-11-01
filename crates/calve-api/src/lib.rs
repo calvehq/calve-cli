@@ -1463,7 +1463,14 @@ fn parse_until(text: &str) -> std::result::Result<u64, String> {
 impl LifecycleCommand {
     fn kind(&self) -> OperationKind {
         match self {
-            Self::Diff { .. } | Self::Review { .. } => OperationKind::Query,
+            Self::Diff { .. }
+            | Self::Review { .. }
+            | Self::Seal {
+                preflight: true, ..
+            }
+            | Self::Promote {
+                preflight: true, ..
+            } => OperationKind::Query,
             _ => OperationKind::Command,
         }
     }
@@ -1494,6 +1501,16 @@ impl Action {
             Self::Project { command: ProjectCommand::Unregister { project, yes } } => ask(
                 *yes,
                 format!("Forget the registration of Project {project} (its files stay)."),
+            ),
+            Self::Extension { command: ExtensionCommand::SwitchPublisher { id, catalog, yes, .. } } => ask(
+                *yes,
+                format!("Move {id} to the publisher of catalog {catalog}; its updates then come from there."),
+            ),
+            Self::Extension {
+                command: ExtensionCommand::Catalog { command: CatalogCommand::Reset { name, yes, .. } },
+            } => ask(
+                *yes,
+                format!("Reset catalog {name} to a new root; this lowers its rollback protection."),
             ),
             Self::Inbox { command: InboxCommand::ClearResolved { yes } } => {
                 ask(*yes, "Forget all resolved inbox items (audit history stays).".into())
@@ -1541,6 +1558,13 @@ impl Action {
         match self {
             Self::Provider {
                 command: ProviderCommand::Remove { yes, .. },
+            }
+            | Self::Extension {
+                command:
+                    ExtensionCommand::SwitchPublisher { yes, .. }
+                    | ExtensionCommand::Catalog {
+                        command: CatalogCommand::Reset { yes, .. },
+                    },
             }
             | Self::Maintenance {
                 command: MaintenanceCommand::Gc { yes, .. },
@@ -1612,7 +1636,8 @@ impl Action {
                 _ => OperationKind::Command,
             },
             Self::Inbox {
-                command: InboxCommand::Summary,
+                command:
+                    InboxCommand::Summary | InboxCommand::List { .. } | InboxCommand::Show { .. },
             } => OperationKind::Query,
             Self::Inbox { .. } => OperationKind::Command,
             Self::Authority { command } => match command {

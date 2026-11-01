@@ -386,6 +386,40 @@ fn a_supersession_without_crashes_completes() {
     assert_eq!(t.ok(&["pack", "show", &pack])["state"], "ABANDONED");
 }
 
+/// A replay attempt that dies after applying effects can never be promoted, so the saga must
+/// compensate and leave the original usable, not finish Done on a dead replacement.
+#[test]
+fn a_replay_attempt_that_dies_keeps_the_original_pack() {
+    let (mut t, pack, _) = supersede_setup();
+    let effects = t.effects(&pack).len();
+    t.env
+        .vars
+        .push(("CALVE_EXECUTION_LEASE_MS".into(), "5000".into()));
+    t.crash(
+        "supersede.replay.1.0.after_send",
+        false,
+        &["supersede", "start", &pack, "--keep", "1", "--yes"],
+    );
+    t.env.vars.retain(|(k, _)| k != "CALVE_EXECUTION_LEASE_MS");
+    std::thread::sleep(std::time::Duration::from_secs(7));
+    let saga = saga_of(&t, &pack);
+    let resumed = t.env.run(&[
+        "--project",
+        &t.p,
+        "supersede",
+        "resume",
+        saga["saga"].as_str().unwrap(),
+    ]);
+    let saga = saga_of(&t, &pack);
+    assert_ne!(saga["state"], "Done", "{}: {saga}", resumed.stderr);
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "OPEN", "{saga}");
+    assert_eq!(
+        t.effects(&pack).len(),
+        effects,
+        "the original keeps its work"
+    );
+}
+
 fn saga_of(t: &T, pack: &str) -> Value {
     t.ok(&["supersede", "list"])
         .as_array()

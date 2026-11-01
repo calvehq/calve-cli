@@ -2,10 +2,17 @@
 
 A worker is any program. Calve starts no model itself; you tell it how to launch yours and what a run may touch. The [`local-agent`](../../examples/local-agent) example is the tested version.
 
-Set up the [provider and harness](provider-configuration.md):
+A worker that changes files needs a Project with a file domain:
 
 ```sh
-calve provider add agent --kind stdio-agent --executable ./my-agent \
+calve init agents && cd agents
+calve extension enable org.calve.software --acknowledge-native
+```
+
+Then set up the [provider and harness](provider-configuration.md). Use an absolute path for the executable, because `calved` has its own working directory:
+
+```sh
+calve provider add agent --kind stdio-agent --executable /opt/my-agent \
   --secret API_TOKEN=env:MY_AGENT_TOKEN --timeout-ms 600000
 calve provider test agent
 ```
@@ -29,7 +36,7 @@ calve execution logs <execution>
 calve execution wait <execution> --timeout-ms 600000
 ```
 
-The worker's output is recorded, with secrets redacted. Files changed inside `paths` become effects with provenance. A change outside `paths` fails the run and records nothing.
+The worker's output is recorded when the run ends, with secrets redacted, so `execution logs` shows nothing during the run. A stdio agent's effects come only from its `propose` frames; files it writes itself are not recorded. For a `local-process` worker, files changed inside `paths` become effects. A change outside `paths` fails the run and records nothing.
 
 Review what it did as you would any other change: `calve pack diff <pack>`, then seal and promote. Nothing an agent produces is accepted until it passes the same gates as a human's change.
 

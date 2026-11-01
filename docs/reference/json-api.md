@@ -1,6 +1,6 @@
 # JSON API v1
 
-`--json` is accepted only by commands that declare it, i.e. the commands with a schema in [`json/v1/`](json/v1/) (`calve_api::json::COMMANDS`); any other command refuses it with exit 2. Human output is the default (§17.1).
+`--json` is accepted only by commands that declare it, i.e. the commands with a schema in [`json/v1/`](json/v1/) (`calve_api::json::COMMANDS`); any other command refuses it with exit 2. Human output is the default.
 
 - Success, on stdout: `{"api_version":"1","command":"<command>","data":<value>}`. `data` validates against `json/v1/<command with dots>.json`.
 - Error, on stderr: `{"api_version":"1","command":"<command>","error":{"code","message","retryable","detail","exit_code"}}`; the exit status is `exit_code` ([exit codes](exit-codes.md)).

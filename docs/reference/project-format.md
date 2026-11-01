@@ -8,9 +8,9 @@
   product.sqlite3     Calve product database
   openaevc/           OpenAEVC runtime state; only OpenAEVC writes here
   backups/            product database backups, owner-only, with SHA-256 sidecars
-  cache/              rebuildable; discarded/ holds content from explicit discards
+  cache/              rebuildable
   run/                operation journals and staging (capture, materialize)
-  logs/               local logs
+  logs/               local logs, and the output of cancelled executions
   tmp/                temporary files
   conflicts/<op>/     materialization conflicts, never removed automatically
 ```
@@ -22,7 +22,7 @@
 | `openaevc/` | OpenAEVC's own | Versioned and verified by OpenAEVC. |
 | `config.toml` | TOML | Starts with `format_version = 1`; see [configuration](config.md). |
 
-`calve init` adds `.calve/` to `.gitignore` when the Project root is a Git checkout. Everything under `.calve/` is private state: do not commit it, and do not edit it by hand.
+When the Project root is a Git checkout, Calve adds `/.calve/` to `.git/info/exclude`, which is local to that clone. Add it to your own `.gitignore` too if others share the repository. Everything under `.calve/` is private state: do not commit it, and do not edit it by hand.
 
 Moving the directory is safe when followed by `project relocate`. Copying it requires `project adopt-copy`. See [relocation and copies](../guides/relocation-and-copies.md).
 

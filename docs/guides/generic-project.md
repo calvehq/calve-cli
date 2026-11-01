@@ -3,7 +3,7 @@
 Calve works on anything, not only source code. This guide runs a launch checklist through the whole workflow. The [`general-project`](../../examples/general-project) example is this guide as a tested script.
 
 ```sh
-calve init launch && cd launch
+calve init launch && cd launch        # needs a catalog; see the install guide
 calve extension enable org.calve.general --acknowledge-native
 ```
 

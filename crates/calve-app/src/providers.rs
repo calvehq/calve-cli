@@ -952,6 +952,20 @@ impl Project {
             })
             .await
             .map_err(|error| invalid(format!("worker supervisor failed: {error}")))??;
+            // A cancelled execution is terminal, so OpenAEVC refuses its observations. Its output
+            // (already redacted) stays in the Project's logs, removed by `maintenance gc`.
+            if outcome.status == "cancelled" {
+                let lines: Vec<&str> = outcome.logs.iter().map(|(_, l)| l.as_str()).collect();
+                let log = self.root.join(".calve/logs").join(format!("{execution}.log"));
+                let log = std::fs::write(&log, lines.join("\n")).is_ok().then_some(log);
+                event(
+                    &self.db,
+                    "execution.cancelled",
+                    &execution.to_string(),
+                    harness_id,
+                )?;
+                return Ok(json!({"execution":execution,"state":"CANCELLED","reason":outcome.reason,"log":log}));
+            }
             for chunk in outcome.logs.chunks(64) {
                 let text: Vec<Value> = chunk
                     .iter()
@@ -969,15 +983,6 @@ impl Project {
                         related_effects: vec![],
                     })
                     .await?;
-            }
-            if outcome.status == "cancelled" {
-                event(
-                    &self.db,
-                    "execution.cancelled",
-                    &execution.to_string(),
-                    harness_id,
-                )?;
-                return Ok(json!({"execution":execution,"state":"CANCELLED","reason":outcome.reason}));
             }
             let mut proposals = outcome.proposals;
             crate::journal::pause("execution.after_worker");

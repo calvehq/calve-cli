@@ -35,6 +35,8 @@ use crate::journal::{Journal, Record};
 use crate::{Error, Project, Result};
 
 pub const DONE: &str = "Done";
+/// Replay attempts before the saga gives up, the same budget as a capture.
+const MAX_ATTEMPTS: u64 = 8;
 const TERMINAL: &[&str] = &[DONE, "Conflicted", "RecoveryRequired"];
 
 pub fn dir(root: &Path) -> PathBuf {
@@ -104,7 +106,7 @@ pub fn pending(root: &Path) -> Result<BTreeMap<String, (String, String)>> {
         if path.extension().is_none_or(|x| x != "journal") {
             continue;
         }
-        let opened = Journal::open(&path).map_err(corrupt)?;
+        let opened = Journal::read(&path).map_err(corrupt)?;
         let saga = read_saga(&opened.records);
         if !TERMINAL.contains(&saga.state.as_str()) {
             let id = opened.journal.header["journal_id"]
@@ -124,7 +126,7 @@ pub fn pending(root: &Path) -> Result<BTreeMap<String, (String, String)>> {
 /// Every saga with its state (`supersede list`).
 /// Whether the saga journal at `path` reached `Done`.
 pub(crate) fn finished(path: &Path) -> bool {
-    Journal::open(path).is_ok_and(|o| read_saga(&o.records).state == DONE)
+    Journal::read(path).is_ok_and(|o| read_saga(&o.records).state == DONE)
 }
 
 /// `calve supersede list`, through its contract type (an unknown state is a corrupt journal).
@@ -138,7 +140,7 @@ pub fn list(root: &Path) -> Result<Vec<calve_api::responses::SupersedeSaga>> {
         if path.extension().is_none_or(|x| x != "journal") {
             continue;
         }
-        let opened = Journal::open(&path).map_err(corrupt)?;
+        let opened = Journal::read(&path).map_err(corrupt)?;
         let s = read_saga(&opened.records);
         out.push(json!({"saga": opened.journal.header["journal_id"], "pack": opened.journal.header["binding"]["pack"],
             "state": s.state, "replacement": s.data.get("replacement"), "outcome": s.data.get("outcome")}));
@@ -637,6 +639,22 @@ impl Project {
                                 || saga.data.get("lost") == Some(&json!(true)),
                         );
                     let n = n.max(1);
+                    // Effects of an attempt that did not succeed can never be promoted, and a
+                    // new attempt would only add to an unpromotable candidate. P is still intact.
+                    let lost_attempt = saga.data.get("lost") == Some(&json!(true));
+                    if lost_attempt
+                        && (n > MAX_ATTEMPTS
+                            || !self.pack(&replacement).await?.candidate_effects.is_empty())
+                    {
+                        return self
+                            .compensate(
+                                &mut j,
+                                id,
+                                "SUPERSEDE_DIVERGED",
+                                json!({"lost_attempt": n - 1}),
+                            )
+                            .await;
+                    }
                     let (exe, lease): (ExecutionId, Lease) = match (
                         saga.data
                             .get(&format!("execution.{n}"))

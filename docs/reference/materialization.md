@@ -1,6 +1,6 @@
 # Materialization
 
-Materialization writes accepted file content into the working tree without destroying work that was never captured (§14, ADR 0013).
+Materialization writes accepted file content into the working tree without destroying work that was never captured.
 
 ```sh
 calve baseline materialize <baseline-or-alias>                   # plan only

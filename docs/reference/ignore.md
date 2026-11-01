@@ -1,6 +1,6 @@
 # Ignore rules
 
-Which paths a scan skips is decided by the enabled file package (its `classify` operation), so the rule language and built-in defaults are the package's (the software extension documents its `.calveignore` grammar). Calve itself always excludes `.calve/` and never follows symlinks.
+Which paths a scan skips is decided by the enabled file package (its `classify` operation), so the rule language and built-in defaults are the package's (the software extension's `.calveignore` grammar is in the [calve-extensions docs](https://github.com/calvehq/calve-extensions/blob/main/docs/ignore.md)). Calve itself always excludes `.calve/` and never follows symlinks.
 
 The package declares its ignore-file names; Calve reads those files (at the root and in ancestor directories of each scanned entry) and passes their text to `classify`, one directory batch at a time, so ignored directories are never traversed or hashed.
 

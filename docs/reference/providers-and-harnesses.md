@@ -6,7 +6,7 @@ A **provider profile** says how to launch a worker. A **harness** says what one 
 
 ```sh
 calve provider add shell --kind local-process --executable sh
-calve provider add agent --kind stdio-agent --executable ./my-agent \
+calve provider add agent --kind stdio-agent --executable /opt/my-agent \
   --secret API_TOKEN=env:MY_AGENT_TOKEN --env LANG --timeout-ms 600000
 calve provider edit agent --allow-project <project-id>
 calve provider test agent          # executable, secrets and references, without running
@@ -35,6 +35,7 @@ Two adapters ship:
 Harnesses are declared in configuration and validated on load:
 
 ```toml
+format_version = 1
 [harnesses.fmt]
 provider = "shell"
 mode = "change"          # or "check": observations only, no effects
@@ -52,5 +53,5 @@ timeout_ms = 600000
 - Output is captured up to `max_output_bytes` and recorded as `org.calve.harness.log` observations.
 - The worker runs in its own process group; timeout and cancellation kill the whole group.
 - The lease is renewed while the worker runs.
-- In `change` mode, files changed inside `paths` become snapshot effects. Any change outside the scope, or any change in `check` mode, fails the execution and nothing is recorded.
+- In `change` mode, a `local-process` worker's files changed inside `paths` become snapshot effects. A stdio agent's effects come only from its `propose` frames. Any change outside the scope, or any change in `check` mode, fails the execution and nothing is recorded.
 - A pack takes one effect-producing execution, because OpenAEVC promotes only effects whose provenance matches the current generation.

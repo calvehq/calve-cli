@@ -288,3 +288,31 @@ impl WriteAllExt for fs::File {
         self.write_all(b).unwrap();
     }
 }
+
+/// A lock-free reader never touches a record being appended; only `open` repairs.
+#[test]
+fn read_leaves_a_torn_tail_in_place() {
+    let d = tempfile::tempdir().unwrap();
+    let path = d.path().join("j");
+    let mut j = Journal::create(&path, "test", "test", json!({})).unwrap();
+    j.append("a", json!({})).unwrap();
+    drop(j);
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap();
+    std::io::Write::write_all(&mut f, b"{\"partial").unwrap();
+    drop(f);
+    let before = fs::read(&path).unwrap();
+    assert_eq!(Journal::read(&path).unwrap().records.len(), 1);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    assert!(
+        Journal::read(&path)
+            .unwrap()
+            .journal
+            .append("b", json!({}))
+            .is_err()
+    );
+    assert_eq!(Journal::open(&path).unwrap().records.len(), 1);
+    assert!(fs::read(&path).unwrap().len() < before.len());
+}

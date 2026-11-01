@@ -39,11 +39,12 @@ calve pack seal <pack> --generation <n>
 calve pack approve <pack> --generation <n> --reason "Looks right"
 calve pack qualify <pack> --generation <n>
 calve pack promote <pack> --generation <n>
-calve baseline create v1 <promoted-digest> && calve baseline activate v1
+calve baseline create v1 <promoted-digest>
+calve baseline activate <baseline-id>
 calve console
 ```
 
-The [getting-started guide](docs/guides/getting-started.md) explains each step, and [`examples/`](examples) holds six CI-validated end-to-end scripts: general (non-software) Projects, software with language checks and materialization, parallel Intents, multiple Baselines, revisions, and a local agent.
+The [getting-started guide](docs/guides/getting-started.md) explains each step, and [`examples/`](examples) holds six tested end-to-end scripts: general (non-software) Projects, software with language checks and materialization, parallel Intents, multiple Baselines, revisions, and a local agent.
 
 ## What is in the box
 

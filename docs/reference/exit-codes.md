@@ -1,6 +1,6 @@
 # Exit codes
 
-Status: **implemented (M3, ADR 0020).** The table is `calve_api::errors::CODES`; a test keeps this page in sync. Unknown codes exit 1.
+The table is `calve_api::errors::CODES`; a test keeps this page in sync. Unknown codes exit 1.
 
 | Exit | Meaning | Error codes |
 |---|---|---|

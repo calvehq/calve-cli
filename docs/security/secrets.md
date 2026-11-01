@@ -1,6 +1,6 @@
 # Secrets
 
-Status: M3 (2026-10-15); M4 sinks added 2026-10-17. Decision record: ADR 0015. Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
+Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
 
 ## Prevention
 
@@ -39,7 +39,7 @@ While a launch lives, its secrets are also registered process-wide (`redact::reg
 | 16 | product DB backups (`.calve/backups/`) | the same product data as the database (which never stores secret values); owner-only, SHA-256 sidecar | `secrets` store scan; `continuity` |
 | 17 | operational journals: capture, supersede, materialization, install | records ids, digests, paths, codes and exact signed envelopes; error text passes through `fault` | `secrets::captured_content_stays_in_content_sinks_only` |
 | 18 | new diagnostic surfaces: `materialize list`, `inbox summary`, `status` blockers and recovery, `recover inspect`/`plan`, `maintenance gc --dry-run` (paths and counts), typed error details | ids, paths, digests, counts | same |
-| 19 | diagnostics bundle (M4 parts: status, recovery) | redacted; never journals, spools, backups or conflict artifacts | same (bundle scan) |
+| 19 | diagnostics bundle (status, recovery) | redacted; never journals, spools, backups or conflict artifacts | same (bundle scan) |
 
 ### Captured content is not a diagnostic sink
 

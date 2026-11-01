@@ -439,23 +439,22 @@ fn verify_release(dist: &Path, pubkey: &str, smoke: bool) -> DynResult {
         sums.len()
     );
     if smoke {
-        smoke_test(dist)?;
+        smoke_test(dist, &sums)?;
     }
     Ok(())
 }
 
 /// Clean install of this host's archive: nothing but the archive, fresh XDG directories, no
 /// cargo or source tree on the paths it uses.
-fn smoke_test(dist: &Path) -> DynResult {
+fn smoke_test(dist: &Path, sums: &BTreeMap<String, String>) -> DynResult {
     let triple = host_triple();
-    let archive = fs::read_dir(dist)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .find(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with(&format!("-{triple}.tar.gz")))
-        })
-        .ok_or_else(|| format!("no archive for {triple}"))?;
+    // Only an archive the sums and attestations covered is ever run.
+    let suffix = format!("-{triple}.tar.gz");
+    let archive = sums
+        .keys()
+        .find(|f| f.ends_with(&suffix))
+        .map(|f| dist.join(f))
+        .ok_or_else(|| format!("SHA256SUMS lists no archive for {triple}"))?;
     let work = tempfile_dir()?;
     release::unpack(&archive, &work)?;
     let dir = fs::read_dir(&work)?.next().ok_or("empty archive")??.path();
@@ -467,6 +466,12 @@ fn smoke_test(dist: &Path) -> DynResult {
             .env("HOME", work.join("home"))
             .env("XDG_DATA_HOME", work.join("data"))
             .env("XDG_CONFIG_HOME", work.join("config"))
+            .env("APPDATA", work.join("config"))
+            .env("LOCALAPPDATA", work.join("data"))
+            .env(
+                "SystemRoot",
+                std::env::var_os("SystemRoot").unwrap_or_default(),
+            )
             .env("PATH", "/usr/bin:/bin")
             .args(["--json", "--no-daemon-start"])
             .args(args)
@@ -482,6 +487,7 @@ fn smoke_test(dist: &Path) -> DynResult {
     run(&["init", p])?;
     run(&["--project", p, "intent", "create", "smoke"])?;
     run(&["--project", p, "pack", "create", "smoke"])?;
+    run(&["--project", p, "doctor"])?;
     let status = run(&["--project", p, "status"])?;
     for f in [
         "LICENSE",

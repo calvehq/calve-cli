@@ -41,31 +41,52 @@ jobs:
           name: dist-${{ matrix.target }}
           path: target/dist/*
 
-  sign:
-    # The only job with the release key: first-party actions and shell only.
-    needs: build
+  signer:
+    # A separate machine: compiling runs every dependency's build script, and none of them may
+    # share a job with the release key. The tag must also name the version being built.
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Tag matches the workspace version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - name: Build xtask
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          cargo build --locked -q -p xtask
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signer
+          path: target/debug/xtask
+
+  sign:
+    # The only job with the release key. It compiles nothing, and the `release` environment
+    # holds the key behind a required reviewer, so a pushed tag alone cannot sign.
+    needs: [build, signer]
+    runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          pattern: dist-*
           path: target/dist
           merge-multiple: true
-      # Build first, without the secret: compiling runs every dependency's build script, and
-      # none of them may see the release key.
-      - name: Build xtask (no secrets)
-        run: |
-          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
-          cargo build --locked -q -p xtask
-          ./target/debug/xtask sums --dist target/dist
-      - name: Release-key attestations (compiled binary only)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signer
+          path: signer
+      - run: chmod +x signer/xtask && signer/xtask sums --dist target/dist
+      - name: Release-key attestations
         env:
           CALVE_RELEASE_KEY: ${{ secrets.CALVE_RELEASE_KEY }}
         run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           key="$RUNNER_TEMP/release.key"
           trap 'rm -f "$key"' EXIT
           umask 077; printf '%s' "$CALVE_RELEASE_KEY" > "$key"
-          ./target/debug/xtask attest --dist target/dist --key "$key"
+          signer/xtask attest --dist target/dist --key "$key"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: signed

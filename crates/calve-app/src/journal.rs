@@ -261,6 +261,17 @@ impl Journal {
     /// Opens and fully verifies a journal. A torn tail is truncated (bytes preserved beside the
     /// journal); any other inconsistency is `Error::Corrupt`.
     pub fn open(path: &Path) -> Result<Opened> {
+        Self::load(path, true)
+    }
+
+    /// Verifies a journal without writing to it, for paths that hold no lock: a torn tail may be
+    /// a record being appended right now, so it is ignored and left in place. The returned
+    /// journal cannot append.
+    pub fn read(path: &Path) -> Result<Opened> {
+        Self::load(path, false)
+    }
+
+    fn load(path: &Path, repair: bool) -> Result<Opened> {
         let mut bytes = Vec::new();
         File::open(path)?.read_to_end(&mut bytes)?;
         let mut records = Vec::new();
@@ -279,6 +290,9 @@ impl Journal {
             let parsed: Option<Map<String, Value>> = serde_json::from_slice(line).ok();
             let is_last = offset + line.len() + usize::from(complete) >= bytes.len();
             let Some(rec) = parsed.filter(|_| complete) else {
+                if is_last && line_no > 1 && !repair {
+                    break;
+                }
                 if is_last && line_no > 1 {
                     // Torn tail: preserve and truncate to the last valid boundary.
                     let aside = path.with_extension(format!("torn-{}", now_ns()));
@@ -338,7 +352,11 @@ impl Journal {
             line: 1,
             reason: "missing header".into(),
         })?;
-        let file = OpenOptions::new().append(true).open(path)?;
+        let file = if repair {
+            OpenOptions::new().append(true).open(path)?
+        } else {
+            File::open(path)?
+        };
         let next_seq = records.len() as u64 + 1;
         Ok(Opened {
             journal: Journal {

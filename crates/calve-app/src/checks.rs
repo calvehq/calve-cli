@@ -163,7 +163,8 @@ impl Project {
     ) -> Result<(Scratch, Vec<String>, Vec<String>)> {
         let scratch =
             Scratch(std::env::temp_dir().join(format!("calve-check-{}", uuid::Uuid::now_v7())));
-        fs::create_dir(&scratch.0)?;
+        // The copy can hold files the user keeps private; other local users must not read it.
+        crate::journal::private_dir(&scratch.0)?;
         let ws = self.workspace()?;
         let mut files = Vec::new();
         for item in self

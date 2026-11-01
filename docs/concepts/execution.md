@@ -8,7 +8,7 @@ RUNNING ──> SUCCEEDED | FAILED | CANCELLED | LOST
 
 A **provider** says how to launch a worker. A **harness** says what one run does: its command, whether it may change files (`change`) or only observe (`check`), and which paths it may touch.
 
-The worker's output becomes observations. In `change` mode, files it changes inside the harness scope become effects with provenance. A change outside the scope fails the execution and nothing is recorded.
+The worker's output becomes observations. In `change` mode, a local process's changed files inside the harness scope become effects with provenance, and a stdio agent proposes its effects explicitly. A change outside the scope fails the execution and nothing is recorded.
 
 Workers renew a lease while they run. If `calved` dies, the lease expires and OpenAEVC reports the execution as `LOST`. A retry creates a successor attempt; the failed record is never rewritten.
 

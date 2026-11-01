@@ -246,12 +246,12 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
     ]);
     fs::write(
         root.join(".calve/config.toml"),
-        "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"sleep 60\"]\n",
+        "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"echo working; sleep 60\"]\n",
     )
     .unwrap();
     let pack = id(&run(&env, &["pack", "create", "Slow"]));
     env.ok(&["daemon", "start"]);
-    let mut client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+    let client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
         .env("XDG_DATA_HOME", env.path().join("d"))
         .env("XDG_CONFIG_HOME", env.path().join("c"))
         .args(at(&[
@@ -262,8 +262,8 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
             &pack,
         ]))
         .args(["--harness", "slow", "--generation", "1"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     let execution = (0..300)
@@ -277,6 +277,19 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
                 .map(id)
         })
         .expect("the execution starts");
+    // Reads work during the run, and none of them disturbs the runtime it depends on.
+    run(&env, &["inbox", "list"]);
+    run(
+        &env,
+        &["pack", "seal", &pack, "--generation", "2", "--preflight"],
+    );
+    run(&env, &["maintenance", "gc", "--dry-run"]);
+    assert!(run(&env, &["status"])["project"].is_object());
+    let check = run(&env, &["maintenance", "check"]);
+    assert_eq!(check["store"]["state"], "in_use", "{check}");
+    let refused = at(&["maintenance", "verify-store"]);
+    let refused = env.fails(&refused.iter().map(String::as_str).collect::<Vec<_>>());
+    assert!(refused.contains("PROJECT_LOCKED"), "{refused}");
     run(
         &env,
         &["execution", "cancel", &execution, "--reason", "not needed"],
@@ -286,7 +299,38 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
         &["execution", "wait", &execution, "--timeout-ms", "30000"],
     );
     assert_eq!(done["state"], "CANCELLED", "{done}");
-    client.wait().unwrap();
+    // The client that started it gets a clean result, and a cancelled worker's output survives.
+    let started = client.wait_with_output().unwrap();
+    assert!(
+        started.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started.stderr)
+    );
+    let started = calve_testkit::json_data(&started.stdout);
+    assert_eq!(started["state"], "CANCELLED", "{started}");
+    let log = fs::read_to_string(started["log"].as_str().unwrap()).unwrap();
+    assert!(log.contains("working"), "{log}");
+
+    // A relative path means the caller's directory, not the daemon's.
+    let bundle = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        .env("XDG_DATA_HOME", env.path().join("d"))
+        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .current_dir(env.path())
+        .args(at(&[
+            "--json",
+            "--no-daemon-start",
+            "doctor",
+            "--bundle",
+            "bundle.out",
+            "--yes",
+        ]))
+        .output()
+        .unwrap();
+    assert!(
+        env.path().join("bundle.out").exists(),
+        "{}",
+        String::from_utf8_lossy(&bundle.stderr)
+    );
 
     let intent = id(&run(&env, &["intent", "create", "Why"]));
     let task = id(&run(&env, &["task", "create", &intent, "Work"]));

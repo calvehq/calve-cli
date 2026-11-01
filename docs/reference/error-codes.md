@@ -1,14 +1,14 @@
 # Error codes
 
-Status: **implemented (M3, ADR 0020; M4 outcomes 2026-10-17).** Every error is a `Fault{code, message, retryable, detail?}`; the code fixes the exit status ([exit codes](exit-codes.md)). Product messages carry their code as a `CODE: message` prefix inside Calve, split into `code` and `message` at the API.
+Every error is a `Fault{code, message, retryable, detail?}`; the code fixes the exit status ([exit codes](exit-codes.md)). Product messages carry their code as a `CODE: message` prefix inside Calve, split into `code` and `message` at the API.
 
-## §41 taxonomy
+## Codes
 `PROJECT_NOT_FOUND`, `PROJECT_IDENTITY_CONFLICT`, `PROJECT_LOCKED`, `WORKSPACE_NOT_FOUND`, `INVALID_CONFIGURATION`, `OPENAEVC_INCOMPATIBLE`, `OPENAEVC_OPERATION_REJECTED`, `CAPABILITY_DENIED`, `STALE_VIEW`, `REVIEW_STALE`, `EXTENSION_NOT_INSTALLED`, `EXTENSION_INCOMPATIBLE`, `EXTENSION_PERMISSION_REQUIRED`, `PROVIDER_UNAVAILABLE`, `HARNESS_UNAVAILABLE`, `SECRET_UNAVAILABLE`, `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION`, `DAEMON_UNAVAILABLE`, `DAEMON_INCOMPATIBLE`, `MIGRATION_REQUIRED`, `RECOVERY_REQUIRED`, `CORRUPT_PRODUCT_STATE`, `UNSUPPORTED_PLATFORM_FEATURE`, `USER_CANCELLED`.
 
 ## Further codes
 `PRODUCT_ERROR`, `IO_ERROR`, `INTERNAL`, `INVALID_ARGUMENT`, `NOT_FOUND`, `ALREADY_EXISTS`, `CONFIRMATION_REQUIRED`, `UNSUPPORTED_API_VERSION`, `UNSUPPORTED_PAYLOAD_VERSION`, `INVALID_OPERATION_KIND`, `CATALOG_STALE`, `CATALOG_UNTRUSTED`, `CATALOG_POLICY`, `EXTENSION_REVOKED`, `EXTENSION_IN_USE`, `EXTENSION_IDENTITY_MISMATCH`, `PUBLISHER_NOT_AUTHORIZED`, `PACKAGE_INVALID`, `PACKAGE_TAMPERED`, `T2_ACKNOWLEDGMENT_REQUIRED`, `CHECK_PLAN_UNAPPROVED`, `CHECK_PLAN_CHANGED`, `INCOMPATIBLE_CIC`, `ABI_VIOLATION`, `TRAPPED`, `OUT_OF_FUEL`, `DEADLINE_EXCEEDED`, `OUT_OF_MEMORY`, `RELATION_FAILED`, `RELATION_REFUSED`, `RELATION_SCHEMA_INVALID`, `CAPTURE_DIVERGED`, `CAPTURE_REFUSED`, `CAPTURE_INCOMPLETE`, `UNSTABLE_FILE`, `FILE_TOO_LARGE`, `LIMIT_EXCEEDED`, `SUPERSEDE_CONFLICT`, `SUPERSEDE_DIVERGED`, `MATERIALIZE_CONFLICT`, `CONTENT_CORRUPT`, `CONTENT_NOT_PORTABLE`, `CLOSURE_UNCLASSIFIED`, `CONTAINMENT_UNAVAILABLE`.
 
-## M4 outcomes
+## Operation outcomes
 
 | Code | Exit | When | `detail` |
 |---|---|---|---|
@@ -45,4 +45,4 @@ OpenAEVC's structured error stays in `detail.openaevc` (code, message, retryable
 
 Messages and details are redacted against the secrets in use ([secrets](../security/secrets.md)). `PRODUCT_ERROR` remains for messages not yet classified (exit 1).
 
-Not yet emitted (reserved for later milestones): `REVIEW_STALE`, `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION` (materialization reports `blocked` paths instead), `UNSUPPORTED_PLATFORM_FEATURE`, `EXTENSION_PERMISSION_REQUIRED`, `CAPABILITY_DENIED` from Calve itself (OpenAEVC's denials map to it), `CONTAINMENT_UNAVAILABLE`, `CATALOG_STALE`.
+Reserved, not emitted yet: `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION` (materialization reports `blocked` paths instead), `UNSUPPORTED_PLATFORM_FEATURE`, `EXTENSION_PERMISSION_REQUIRED`, `CATALOG_STALE`.

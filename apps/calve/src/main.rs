@@ -6,7 +6,9 @@ use std::io::IsTerminal as _;
 use std::path::PathBuf;
 
 use calve_api::errors::{exit, exit_code};
-use calve_api::{Action, Fault, Outcome, Request, RequestScope};
+use calve_api::{
+    Action, CatalogCommand, ExtensionCommand, Fault, Outcome, ProjectCommand, Request, RequestScope,
+};
 use calve_client::{Backend, Client, Options};
 use clap::{CommandFactory as _, FromArgMatches as _, Parser};
 use serde_json::{Value, json};
@@ -171,7 +173,34 @@ async fn run(cli: Cli, out: &Run) -> i32 {
         Action::Init { path, .. } => {
             *path = Some(absolute(path.take().unwrap_or_else(|| cwd.clone())));
         }
+        Action::Doctor {
+            bundle: Some(path), ..
+        }
+        | Action::Project {
+            command:
+                ProjectCommand::Register { path }
+                | ProjectCommand::Relocate { path, .. }
+                | ProjectCommand::AdoptCopy { path, .. },
+        }
+        | Action::Extension {
+            command:
+                ExtensionCommand::Catalog {
+                    command:
+                        CatalogCommand::Add { root: path, .. }
+                        | CatalogCommand::Reset { root: path, .. },
+                },
+        } => *path = absolute(std::mem::take(path)),
         _ => {}
+    }
+    if let Action::Extension {
+        command:
+            ExtensionCommand::Catalog {
+                command: CatalogCommand::Add { url, .. },
+            },
+    } = &mut command
+        && !url.contains("://")
+    {
+        *url = absolute(PathBuf::from(url.as_str())).display().to_string();
     }
     let mut request = Request::local(scope, command);
     // Callers correlate several requests (scripts, retries) with CALVE_CORRELATION_ID.

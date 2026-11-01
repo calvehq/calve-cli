@@ -1,7 +1,6 @@
 # Changelog
 
-All notable changes to Calve are documented here. Observable behaviour changes are limited to the
-approved contract corrections (rev 10 §1); each is listed with its reason.
+All notable changes to Calve are documented here.
 
 ## Unreleased
 
@@ -21,12 +20,25 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
 - The `execution start` and `execution wait` JSON schemas no longer require fields that a cancelled
   execution does not have. `execution cancel`, `task link-execution`, `extension catalog reset` and
   `extension switch-publisher` now support `--json`.
+- A running execution is no longer disturbed by reads: `maintenance gc --dry-run` leaves its runtime
+  open, `maintenance check` reports the store as `in_use`, and `inbox list`, `inbox show` and
+  `--preflight` no longer need the writer lock.
+- Listing captures and sagas no longer truncates a journal record being written.
+- A supersede whose replay attempt dies after applying effects now compensates and keeps the
+  original pack. It could finish Done on a replacement that could never be promoted.
+- A cancelled worker's output is kept in `.calve/logs/`, and `execution start` reports the
+  cancellation instead of failing.
+- Relative paths reach a daemon as absolute paths: `doctor --bundle`, `project register`,
+  `project relocate`, `project adopt-copy` and catalog `--root`.
+- `pack check` scratch copies are private to the user.
+- A daemon of another Calve version is refused with `DAEMON_INCOMPATIBLE`.
+- A store held by another process reports the retryable `PROJECT_LOCKED`, not `STALE_VIEW`.
 - `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
   receipts.
 - `execution start` refuses any pack with effects. An execution would start a new generation and
   make those effects unpromotable.
 
-### Changed (approved contract corrections)
+### Changed
 
 - **Bundled extensions removed.** Calve ships only `calve` and `calved`. Extensions come from signed
   catalogs (`calve extension catalog add …`, `calve extension install …`); the first-party ones live
@@ -53,7 +65,7 @@ approved contract corrections (rev 10 §1); each is listed with its reason.
   `<id>/<version>/<triple>/<file>`; Calve installs only its own triple and requires the catalog,
   index and handshake digests to agree. After registration, the manifest OpenAEVC recorded must
   equal the installed one (`EXTENSION_IDENTITY_MISMATCH` otherwise).
-- **Stable error codes and exit statuses** (§41, ADR 0020): every error has a code from a fixed
+- **Stable error codes and exit statuses** (ADR 0020): every error has a code from a fixed
   table that sets the exit status (2 usage, 3 conflict, 4 not found, 5 permission or confirmation,
   6 incompatible, 7 recovery, 8 unavailable, 9 rejected, 130 cancelled); OpenAEVC errors map onto
   Calve codes and stay available in `detail.openaevc`. `PROJECT_BUSY` is now `PROJECT_LOCKED`.
