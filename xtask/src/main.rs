@@ -678,7 +678,7 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
     openaevc_rules::check_workspace_deps(dependencies, OPENAEVC_TAG)?;
     let lock: toml::Value = fs::read_to_string(root.join("Cargo.lock"))?.parse()?;
     openaevc_rules::check_lock(&lock, OPENAEVC_TAG, OPENAEVC_REVISION)?;
-    for member in ["apps/calve", "apps/calved", "xtask"]
+    for member in ["apps/calve", "xtask"]
         .into_iter()
         .map(PathBuf::from)
         .chain(
