@@ -103,7 +103,7 @@ fn cell(v: &Value) -> String {
 }
 
 fn label(key: &str) -> String {
-    let mut s = key.replace('_', " ");
+    let mut s = sanitize(key, false).replace('_', " ");
     if let Some(first) = s.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
@@ -135,7 +135,7 @@ fn table(out: &mut String, rows: &[Value], preferred: &[&str], indent: usize) {
         .collect();
     let header: Vec<String> = cols
         .iter()
-        .map(|c| c.to_uppercase().replace('_', " "))
+        .map(|c| sanitize(c, false).to_uppercase().replace('_', " "))
         .collect();
     let widths: Vec<usize> = (0..cols.len())
         .map(|i| {

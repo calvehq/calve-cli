@@ -399,6 +399,13 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
                         ),
                     ],
                 });
+            } else if error.starts_with("PROJECT_LOCKED") {
+                app.notify(
+                    Tone::Warning,
+                    format!(
+                        "{label}: a running execution holds this Project. Retry when it ends, or cancel it."
+                    ),
+                );
             } else {
                 app.notify(
                     Tone::Danger,
@@ -464,6 +471,9 @@ fn run_target(app: &mut App, target: Target) {
             }
         }
         Target::Select { key, id } => {
+            if key == "events" {
+                app.navigate(Route::Events);
+            }
             app.collection(&key).selected_id = Some(id);
             app.graph_edge = None;
         }
@@ -1930,7 +1940,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.refresh();
             app.notify(Tone::Neutral, "Refreshing");
         }
-        KeyCode::Char('v') if matches!(screen.body, Body::Graph(_)) || app.graph_list => {
+        KeyCode::Char('v')
+            if matches!(screen.body, Body::Graph(_))
+                || (app.graph_list
+                    && matches!(app.route, Route::ChangeGraph | Route::Baseline(_))) =>
+        {
             app.graph_list = !app.graph_list;
             sync(app);
         }

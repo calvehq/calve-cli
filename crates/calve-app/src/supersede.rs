@@ -323,12 +323,23 @@ impl Project {
         crate::journal::sync_file(&tmp)?;
         fs::rename(&tmp, &sp)?;
         let (_, version) = self.commitment(pack)?;
+        // Everything fallible comes first: a journal without Planned would block the pack.
+        let executions_s0: Vec<Value> = self
+            .list_executions(Some(pack), None)
+            .await?
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|e| e["id"].clone())
+            .collect();
+        let head = self.journal_head()?;
+        let genesis = crate::continuity::binding(&self.db)?.map(|b| b.genesis_hash);
         let mut j = Journal::create(
             &jp,
             "supersede",
             &id,
             json!({"project_id": self.identity.project_id, "namespace_id": self.identity.namespace_id,
-                "genesis_hash": crate::continuity::binding(&self.db)?.map(|b| b.genesis_hash), "pack": pack}),
+                "genesis_hash": genesis, "pack": pack}),
         )
         .map_err(corrupt)?;
         j.append(
@@ -336,9 +347,8 @@ impl Project {
             json!({"state": "Planned", "pack": pack, "m": keep, "total": p.candidate_effects.len(),
                 "generation_s0": p.generation, "reference_cce": cce(reference),
                 "reference_rse": resource_state(Some(&d), reference), "commitment_version": version,
-                "executions_s0": self.list_executions(Some(pack), None).await?.as_array().into_iter().flatten()
-                    .map(|e| e["id"].clone()).collect::<Vec<_>>(),
-                "head": self.journal_head()?, "spool_sha256": crate::journal::sha256_hex(&bytes),
+                "executions_s0": executions_s0,
+                "head": head, "spool_sha256": crate::journal::sha256_hex(&bytes),
                 "capture_session": capture}),
         )
         .map_err(corrupt)?;

@@ -233,7 +233,7 @@ async fn run(cli: Cli, out: &Run) -> i32 {
                     && std::io::stdin().is_terminal()
                     && std::io::stderr().is_terminal() =>
             {
-                eprintln!("{}", error.message);
+                eprintln!("{}", render::sanitize(&error.message, false));
                 eprint!("Proceed? [y/N] ");
                 let mut answer = String::new();
                 let _ = std::io::stdin().read_line(&mut answer);

@@ -385,6 +385,14 @@ impl Project {
                     .iter()
                     .map(|s| s.to_string())
                     .chain(plan.env.iter().cloned())
+                    // A variable a provider uses as a secret stays out, whatever its name.
+                    .filter(|n| {
+                        let secret = format!("env:{n}");
+                        !config
+                            .providers
+                            .values()
+                            .any(|p| p.secrets.values().any(|s| *s == secret))
+                    })
                     .filter_map(|n| std::env::var(&n).ok().map(|v| (n, v)))
                     .collect();
                 if configured.is_none() && plan.takes_files {

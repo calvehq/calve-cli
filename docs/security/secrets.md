@@ -6,7 +6,7 @@ Code: `calve-app::redact`, `providers` (launch and streams), `app::fault`.
 
 - Secrets are references in provider profiles (`env:NAME`, `keyring:NAME`), resolved at launch and passed to the worker **only in its environment**; never in argv, config files, the `WorkerContext` record (names only), errors or metric labels.
 - Resolved values live in `Zeroizing` buffers, dropped when the launch ends.
-- Secrets are never given to CIC modules, checks or extensions. T2 extensions read secrets only through OpenAEVC grants (`SecretRead`).
+- Secrets are never given to CIC modules, checks or extensions. A check also never inherits a variable that a provider uses as an `env:` secret. T2 extensions read secrets only through OpenAEVC grants (`SecretRead`).
 - A secret under 4 bytes over-matches: `provider test` warns; redaction still applies.
 
 ## Redactor
@@ -46,6 +46,8 @@ While a launch lives, its secrets are also registered process-wide (`redact::reg
 File content the user captures or materializes is the product's data and is kept **verbatim**, never redacted (redaction would corrupt it): capture spools and chunk staging (`.calve/run/capture/`), the exact signed envelopes in capture journals, OpenAEVC effects and blobs, materialization backups (`.calve/run/materialize/<op>/*.backup`) and conflict artifacts (`.calve/conflicts/<op>/<step>/{displaced,ours,current}`). These are owner-only (`.calve` is 0700; backups and artifacts 0600 in 0700 directories) and are never copied into logs, the request log, errors, listings, the GC plan, recovery output or diagnostic bundles. A secret a user puts in a captured file is therefore in the content sinks by the user's choice, and in no diagnostic one (asserted by the test of row 17).
 
 The end-to-end test scans every file under the data, config and Project directories and the bundle, plus every CLI output and error, for every encoded form of the secret.
+
+Two more sinks hold a stdio agent's decoded text: the `text` of log frames and the `reason` of a failed run, which reaches OpenAEVC's failure record and the request log. Both are redacted after JSON decoding.
 
 ## Residual exposure (user-approved; tests assert it)
 

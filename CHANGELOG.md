@@ -33,6 +33,12 @@ All notable changes to Calve are documented here.
 - `pack check` scratch copies are private to the user.
 - A daemon of another Calve version is refused with `DAEMON_INCOMPATIBLE`.
 - A store held by another process reports the retryable `PROJECT_LOCKED`, not `STALE_VIEW`.
+- Damaged catalog floors can no longer lower rollback protection silently.
+- A secret escaped inside a stdio agent's JSON frame is redacted after decoding, and a check never
+  inherits a variable a provider uses as a secret.
+- Resource limits that cannot be applied refuse the worker instead of being dropped.
+- The console and CLI neutralize more invisible and control characters in untrusted text, and the
+  console explains a `PROJECT_LOCKED` refusal.
 - `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
   receipts.
 - `execution start` refuses any pack with effects. An execution would start a new generation and

@@ -538,7 +538,11 @@ mod unix {
                 .arg("--")
                 .args(argv)
                 .status(),
-            _ => Command::new(&argv[0]).args(&argv[1..]).status(),
+            // Limits are refused rather than dropped when they cannot be applied.
+            (None, true) => Err(std::io::Error::other(
+                "cannot find calve to apply the resource limits",
+            )),
+            (_, false) => Command::new(&argv[0]).args(&argv[1..]).status(),
         };
         let result = match status {
             Ok(s) => {

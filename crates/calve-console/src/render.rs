@@ -128,8 +128,10 @@ fn asciify(frame: &mut Frame<'_>) {
     }
 }
 
+/// Every styled span is sanitized here: pack titles, worker output and extension text all pass
+/// through, and a screen cannot forget to.
 fn span(text: impl Into<String>, style: Style) -> Span<'static> {
-    Span::styled(text.into(), style)
+    Span::styled(crate::text::sanitize(&text.into()), style)
 }
 
 fn top_bar(frame: &mut Frame<'_>, app: &App, area: Rect) {

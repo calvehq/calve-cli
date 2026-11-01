@@ -44,7 +44,10 @@ pub fn sanitize(input: &str) -> String {
                 || ('\u{202a}'..='\u{202e}').contains(&c)
                 || ('\u{2066}'..='\u{2069}').contains(&c)
                 || ('\u{200b}'..='\u{200f}').contains(&c)
-                || c == '\u{2060}'
+                || ('\u{2060}'..='\u{2064}').contains(&c)
+                || ('\u{fff9}'..='\u{fffb}').contains(&c)
+                || ('\u{e0000}'..='\u{e007f}').contains(&c)
+                || c == '\u{061c}'
                 || c == '\u{feff}' =>
             {
                 out.push('\u{fffd}');

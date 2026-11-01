@@ -324,6 +324,9 @@ const PUMP_DEPTH: usize = 64;
 
 /// The longest line a pump holds: the output budget, within 64 KiB..16 MiB. A longer line is
 /// passed on in pieces of this size (output is kept, memory stays bounded).
+/// A capture batch's size limit; proposals are held in memory until the agent finishes.
+const MAX_PROPOSED_BYTES: u64 = 512 * 1024 * 1024;
+
 fn max_line(max_output: u64) -> usize {
     max_output.clamp(64 * 1024, 16 * 1024 * 1024) as usize
 }
@@ -445,6 +448,7 @@ fn run_worker(
     };
     let mut used = 0u64;
     let mut agent_done: Option<(&'static str, Option<String>)> = None;
+    let mut proposed = 0u64;
     let mut record = |stream: &str, text: String, outcome: &mut Outcome| {
         used += text.len() as u64 + 1;
         if used > launch.max_output {
@@ -459,50 +463,67 @@ fn run_worker(
             Ok(Line::Err(text)) => record("stderr", text, &mut outcome),
             Ok(Line::Out(text)) if kind == ProviderKind::StdioAgent => {
                 match serde_json::from_str::<Value>(&text) {
-                    Ok(frame) => match frame["type"].as_str() {
-                        Some("log") => record(
-                            "agent",
-                            frame["text"].as_str().unwrap_or_default().to_owned(),
-                            &mut outcome,
-                        ),
-                        Some("propose") => {
-                            let path = frame["path"].as_str().unwrap_or_default().to_owned();
-                            let content = frame["content_base64"].as_str().and_then(decode_base64);
-                            match content {
-                                Some(content) => outcome.proposals.push((path, content)),
-                                None => {
-                                    agent_done = Some((
+                    Ok(frame) => {
+                        match frame["type"].as_str() {
+                            // The frame was redacted as bytes, so a JSON-escaped secret decodes here.
+                            Some("log") => record(
+                                "agent",
+                                crate::redact::active()
+                                    .text(frame["text"].as_str().unwrap_or_default()),
+                                &mut outcome,
+                            ),
+                            Some("propose") => {
+                                let path = frame["path"].as_str().unwrap_or_default().to_owned();
+                                let content =
+                                    frame["content_base64"].as_str().and_then(decode_base64);
+                                match content {
+                                    Some(content)
+                                        if proposed + content.len() as u64 > MAX_PROPOSED_BYTES =>
+                                    {
+                                        agent_done = Some((
                                         "failed",
-                                        Some("agent sent an invalid proposal".into()),
+                                        Some("agent proposed more than the 512 MiB a batch takes".into()),
                                     ));
+                                    }
+                                    Some(content) => {
+                                        proposed += content.len() as u64;
+                                        outcome.proposals.push((path, content));
+                                    }
+                                    None => {
+                                        agent_done = Some((
+                                            "failed",
+                                            Some("agent sent an invalid proposal".into()),
+                                        ));
+                                    }
                                 }
                             }
-                        }
-                        Some("done") => {
-                            agent_done = Some(match frame["status"].as_str() {
-                                Some("succeeded") => ("succeeded", None),
-                                _ => (
-                                    "failed",
-                                    Some(
-                                        frame["reason"]
-                                            .as_str()
-                                            .unwrap_or("agent reported failure")
-                                            .to_owned(),
+                            Some("done") => {
+                                agent_done = Some(match frame["status"].as_str() {
+                                    Some("succeeded") => ("succeeded", None),
+                                    _ => (
+                                        "failed",
+                                        Some(
+                                            crate::redact::active().text(
+                                                frame["reason"]
+                                                    .as_str()
+                                                    .unwrap_or("agent reported failure"),
+                                            ),
+                                        ),
                                     ),
-                                ),
-                            });
-                            drop(stdin.take());
+                                });
+                                drop(stdin.take());
+                            }
+                            _ => {
+                                agent_done = Some((
+                                    "failed",
+                                    Some(format!(
+                                        "unknown agent frame: {}",
+                                        crate::truncate(&text, 200)
+                                    )),
+                                ));
+                            }
                         }
-                        _ => {
-                            agent_done = Some((
-                                "failed",
-                                Some(format!(
-                                    "unknown agent frame: {}",
-                                    crate::truncate(&text, 200)
-                                )),
-                            ));
-                        }
-                    },
+                    }
                     Err(_) => {
                         agent_done = Some(("failed", Some("agent wrote a non-JSON line".into())));
                     }

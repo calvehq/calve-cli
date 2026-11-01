@@ -668,10 +668,17 @@ impl Catalog {
             bootstrap,
             max_target_bytes: MAX_TARGET_BYTES,
         };
-        let floors = fs::read(dir.join("floors.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-            .filter(|f| f["repo_id"] == json!(repo_id));
+        // A damaged file must not lower the floors, so the previous ones stand in for it.
+        let read_floors = |name: &str| {
+            fs::read(dir.join(name))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+                .filter(|f| f["repo_id"] == json!(repo_id))
+        };
+        let current_floors = read_floors("floors.json");
+        let floors = current_floors
+            .clone()
+            .or_else(|| read_floors("floors.prev.json"));
         let floor_versions = match &floors {
             Some(f) => {
                 Some(Versions::from_json(&f["versions"]).ok_or_else(|| rr("floors unreadable"))?)
@@ -724,8 +731,8 @@ impl Catalog {
                     "trust_state: floors exceed the activated state (lost newer state)",
                 ));
             }
-            Some(_) => {}
-            None => {
+            _ if current_floors.is_some() => {}
+            _ => {
                 let av = c.versions.clone();
                 let at = c.accepted_at.unwrap().to_string();
                 write_atomic(&dir.join("floors.json"), &serde_json::to_vec(&json!({"repo_id": repo_id, "gen": c.active, "versions": Versions { delegations: BTreeMap::new(), ..av }.to_json(), "delegation_history": c.history, "accepted_at": at})).unwrap())?;

@@ -162,6 +162,19 @@ fn fg15_floors_artifacts_lost_or_ahead() {
         Catalog::open(d.path()),
         Err(GenError::RecoveryRequired(_))
     ));
+    // Damaged floors never lower the floors: the previous record still counts.
+    fs::rename(
+        d.path().join("floors.json"),
+        d.path().join("floors.prev.json"),
+    )
+    .unwrap();
+    fs::write(d.path().join("floors.json"), b"not json").unwrap();
+    assert!(matches!(
+        Catalog::open(d.path()),
+        Err(GenError::RecoveryRequired(_))
+    ));
+    fs::remove_file(d.path().join("floors.prev.json")).unwrap();
+    fs::remove_file(d.path().join("floors.json")).unwrap();
     // Bootstrap root or REPO_ID damaged → RecoveryRequired.
     f["versions"]["timestamp"] = serde_json::json!(v.timestamp);
     fs::write(
