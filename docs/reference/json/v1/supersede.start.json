@@ -23,6 +23,18 @@
       },
       "state": {
         "type": "string"
+      },
+      "cce_holds": {
+        "type": "boolean"
+      },
+      "reference_cce": {
+        "type": "string"
+      },
+      "reference_rse": {
+        "type": "string"
+      },
+      "rse_holds": {
+        "type": "boolean"
       }
     },
     "required": [

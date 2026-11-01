@@ -35,6 +35,9 @@
           "id",
           "state"
         ]
+      },
+      "warning": {
+        "type": "string"
       }
     },
     "required": [

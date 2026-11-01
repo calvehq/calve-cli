@@ -157,6 +157,12 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "host_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

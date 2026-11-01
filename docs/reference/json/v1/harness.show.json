@@ -19,14 +19,33 @@
       },
       "provider": {
         "type": "string"
+      },
+      "definition": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mode": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "mode",
+          "provider"
+        ]
       }
     },
     "required": [
       "builtin",
-      "description",
-      "id",
-      "mode",
-      "provider"
+      "id"
     ]
   }
 }

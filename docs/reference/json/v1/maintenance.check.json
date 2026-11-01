@@ -48,7 +48,12 @@
           },
           "problems": {
             "type": "array",
-            "items": {}
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "type": "string"
           }
         },
         "required": [

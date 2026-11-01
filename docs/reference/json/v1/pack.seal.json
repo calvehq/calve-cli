@@ -7,11 +7,39 @@
     "properties": {
       "active_executions": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "state"
+          ]
+        }
       },
       "blockers": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ]
+        }
       },
       "can_seal": {
         "type": "boolean"

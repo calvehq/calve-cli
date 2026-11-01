@@ -422,6 +422,18 @@
             "text"
           ]
         }
+      },
+      "events_total": {
+        "type": "integer"
+      },
+      "observations_total": {
+        "type": "integer"
+      },
+      "output_truncated": {
+        "type": "boolean"
+      },
+      "task": {
+        "type": "null"
       }
     },
     "required": [

@@ -147,6 +147,30 @@
       },
       "state": {
         "type": "string"
+      },
+      "next": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "stream": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "stream",
+            "text"
+          ]
+        }
       }
     },
     "required": [

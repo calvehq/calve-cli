@@ -37,11 +37,12 @@
         "properties": {
           "text": {
             "type": "string"
+          },
+          "score": {
+            "type": "integer"
           }
         },
-        "required": [
-          "text"
-        ]
+        "required": []
       }
     },
     "required": [

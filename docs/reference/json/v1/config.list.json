@@ -28,12 +28,43 @@
       },
       "provider_sources": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "shell": {
+            "type": "string"
+          }
+        },
         "required": []
       },
       "providers": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "shell": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "env": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "executable": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "enabled",
+              "env",
+              "executable",
+              "kind"
+            ]
+          }
+        },
         "required": []
       },
       "secrets": {
@@ -43,11 +74,18 @@
       },
       "sources": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "string"
+        }
       },
       "warnings": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "string"
+        }
+      },
+      "unapproved": {
+        "type": "string"
       }
     },
     "required": [

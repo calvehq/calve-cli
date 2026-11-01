@@ -37,7 +37,10 @@
           "type": "object",
           "properties": {
             "at": {
-              "type": "string"
+              "type": [
+                "integer",
+                "string"
+              ]
             },
             "kind": {
               "type": "string"
@@ -49,6 +52,9 @@
               "type": "string"
             },
             "subject_kind": {
+              "type": "string"
+            },
+            "source_key": {
               "type": "string"
             }
           },

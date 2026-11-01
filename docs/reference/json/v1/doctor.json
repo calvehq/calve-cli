@@ -156,6 +156,21 @@
       },
       "written": {
         "type": "string"
+      },
+      "containment": {
+        "type": "object",
+        "properties": {
+          "landlock": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "landlock",
+          "namespace"
+        ]
       }
     },
     "required": []

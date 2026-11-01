@@ -12,7 +12,9 @@
         },
         "granted_host_capabilities": {
           "type": "array",
-          "items": {}
+          "items": {
+            "type": "string"
+          }
         },
         "id": {
           "type": "string"

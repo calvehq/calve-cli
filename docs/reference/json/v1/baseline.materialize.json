@@ -75,6 +75,9 @@
       },
       "warning": {
         "type": "string"
+      },
+      "code": {
+        "type": "string"
       }
     },
     "required": [

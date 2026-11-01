@@ -58,6 +58,27 @@
       },
       "work_unit": {
         "type": "string"
+      },
+      "containment": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "landlock": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "landlock",
+          "namespace"
+        ]
+      },
+      "log": {
+        "type": "string"
       }
     },
     "required": [

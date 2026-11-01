@@ -147,6 +147,21 @@
                 },
                 "work_unit": {
                   "type": "string"
+                },
+                "evidence": {
+                  "type": "string"
+                },
+                "invalidated_candidate": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "verification": {
+                  "type": "string"
+                },
+                "verifier": {
+                  "type": "string"
                 }
               },
               "required": []
@@ -172,7 +187,65 @@
         "properties": {
           "items": {
             "type": "array",
-            "items": {}
+            "items": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "evidence": {
+                  "type": "object",
+                  "properties": {
+                    "candidate": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "generation": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "media_type": {
+                      "type": "string"
+                    },
+                    "pack": {
+                      "type": "string"
+                    },
+                    "payload": {
+                      "type": "string"
+                    },
+                    "producer": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "candidate",
+                    "created_at",
+                    "generation",
+                    "id",
+                    "kind",
+                    "media_type",
+                    "pack",
+                    "payload",
+                    "producer"
+                  ]
+                },
+                "stale": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "digest",
+                "evidence",
+                "stale"
+              ]
+            }
           },
           "next": {
             "type": "null"
@@ -704,7 +777,53 @@
       },
       "reviews": {
         "type": "array",
-        "items": {}
+        "items": {
+          "type": "object",
+          "properties": {
+            "candidate_digest": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "integer"
+            },
+            "decision": {
+              "type": "string"
+            },
+            "evidence_digest": {
+              "type": "string"
+            },
+            "generation": {
+              "type": "integer"
+            },
+            "id": {
+              "type": "string"
+            },
+            "pack_id": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "reviewer": {
+              "type": "string"
+            },
+            "stale": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "candidate_digest",
+            "created_at",
+            "decision",
+            "evidence_digest",
+            "generation",
+            "id",
+            "pack_id",
+            "reason",
+            "reviewer",
+            "stale"
+          ]
+        }
       },
       "revision": {
         "type": "null"
@@ -760,6 +879,48 @@
         "type": "string"
       },
       "verifications": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "null"
+            },
+            "findings": {
+              "type": "null"
+            },
+            "generation": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            },
+            "verifier": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "at",
+            "current",
+            "digest",
+            "evidence",
+            "findings",
+            "generation",
+            "status",
+            "verifier"
+          ]
+        }
+      },
+      "running": {
         "type": "array",
         "items": {}
       }

@@ -47,6 +47,13 @@
             },
             "title": {
               "type": "string"
+            },
+            "intent": {
+              "type": "null"
+            },
+            "used_by": {
+              "type": "array",
+              "items": {}
             }
           },
           "required": [

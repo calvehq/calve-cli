@@ -41,6 +41,12 @@
       },
       "state": {
         "type": "string"
+      },
+      "reference_cce": {
+        "type": "string"
+      },
+      "reference_rse": {
+        "type": "string"
       }
     },
     "required": []
