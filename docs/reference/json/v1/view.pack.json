@@ -39,7 +39,10 @@
         }
       },
       "candidate": {
-        "type": "string"
+        "type": [
+          "null",
+          "string"
+        ]
       },
       "created_at": {
         "type": "string"
@@ -225,7 +228,10 @@
             }
           },
           "next": {
-            "type": "null"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "satisfied": {
             "type": "array",
@@ -236,7 +242,10 @@
                   "type": "string"
                 },
                 "detail": {
-                  "type": "string"
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
@@ -603,7 +612,6 @@
           "generation",
           "id",
           "namespace",
-          "sealed",
           "state",
           "updated_at",
           "work_units"

@@ -38,7 +38,10 @@
         "type": "string"
       },
       "requested_host_capabilities": {
-        "type": "null"
+        "type": [
+          "array",
+          "null"
+        ]
       },
       "resource_kinds": {
         "type": "array",

@@ -162,14 +162,10 @@
         "required": [
           "artifact_digest",
           "contract",
-          "effect_kinds",
           "entrypoint",
-          "evaluator_kinds",
           "execution_modes",
           "id",
           "protocol",
-          "resource_kinds",
-          "verifier_kinds",
           "version"
         ]
       }

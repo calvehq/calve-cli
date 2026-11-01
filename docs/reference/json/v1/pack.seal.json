@@ -26,9 +26,7 @@
                 "type": "integer"
               }
             },
-            "required": [
-              "snapshot"
-            ]
+            "required": []
           },
           "effects": {
             "type": "integer"
