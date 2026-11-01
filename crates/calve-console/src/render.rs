@@ -17,6 +17,21 @@ use crate::text::{self, fit, line, truncate};
 use crate::theme::{Tone, state_tone};
 
 pub fn draw(frame: &mut Frame<'_>, app: &App) {
+    draw_screen(frame, app);
+    scrub(frame.buffer_mut());
+}
+
+/// The last line of defence against disguised text: whatever a screen built, no control, bidi
+/// or invisible character reaches the terminal.
+pub fn scrub(buffer: &mut ratatui::buffer::Buffer) {
+    for cell in &mut buffer.content {
+        if cell.symbol().chars().any(text::disguises) {
+            cell.set_symbol("\u{fffd}");
+        }
+    }
+}
+
+fn draw_screen(frame: &mut Frame<'_>, app: &App) {
     let area = frame.area();
     let screen = screens::build(app);
     let [top, body, footer] = Layout::vertical([
@@ -214,8 +229,13 @@ fn footer_bar(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect) {
         // §6.2: cached content stays readable and says how old it is.
         spans.push(span(
             format!(
-                " STALE · last update {} ago · actions disabled  ",
-                text::relative(at, app.now)
+                " STALE · last update {} ago{}  ",
+                text::relative(at, app.now),
+                if app.can_act() {
+                    ""
+                } else {
+                    " · actions disabled"
+                }
             ),
             theme.tone(Tone::Warning),
         ));
@@ -1149,9 +1169,11 @@ fn inspector_pane(frame: &mut Frame<'_>, app: &App, screen: &Screen, area: Rect)
         lines.push(Line::from(""));
         lines.push(Line::from(span("Actions", app.theme.heading())));
         for (i, action) in available.iter().take(6).enumerate() {
-            // Clickable when the line is not wrapped away (§53).
+            // Clickable only when no line above wraps: wrapping shifts the rows actions land on,
+            // and a click must never reach the wrong one (§53).
             let row = (lines.len() as u16).checked_sub(scroll);
-            if let Some(row) = row.filter(|r| *r < inner.height) {
+            let wrapped = lines.iter().any(|l| l.width() > inner.width as usize);
+            if let Some(row) = row.filter(|r| *r < inner.height && !wrapped) {
                 app.hits.borrow_mut().push((
                     Rect {
                         x: inner.x,

@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Doctor ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Check                Status     Detail                                                     ││Project                                    │
 │  Overview        5 ││Product database     ✓ PASS     ok                                                         ││prj_01a18514-fa0c-7738-8217-144cfdf6d9b6   │
-│  Work              ││OpenAEVC runtime     ✓ PASS     answered · openaevc-runtime 0.1.0 · protocol 0.1.0         ││Overall     ✓ HEALTHY                      │
-│  Change Graph      ││Extension contract   ○ INFO     version 0.1.0 (reported)                                   ││                                           │
-│  ChangePacks       ││Extension            ✓ PASS     org.calve.rust                                             ││Actions                                    │
-│  Baselines         ││Extension            ✓ PASS     org.calve.software                                         ││  Maintenance check                        │
-│  Evidence          ││                                                                                           ││  Recovery plan                            │
-│  Events            ││                                                                                           ││  a all actions                            │
+│  Intents           ││OpenAEVC runtime     ✓ PASS     answered · openaevc-runtime 0.1.0 · protocol 0.1.0         ││Overall     ✓ HEALTHY                      │
+│  Work              ││Extension contract   ○ INFO     version 0.1.0 (reported)                                   ││                                           │
+│  Change Graph      ││Extension            ✓ PASS     org.calve.rust                                             ││Actions                                    │
+│  ChangePacks       ││Extension            ✓ PASS     org.calve.software                                         ││  Maintenance check                        │
+│  Baselines         ││                                                                                           ││  Recovery plan                            │
+│  Resources         ││                                                                                           ││  a all actions                            │
+│  Evidence          ││                                                                                           ││                                           │
+│  Events            ││                                                                                           ││                                           │
+│  Authority         ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │ SYSTEM             ││                                                                                           ││                                           │
 │  Projects          ││                                                                                           ││                                           │
 │  Inbox           2 ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││                                           │
 │› Doctor            ││                                                                                           ││                                           │
 │  Extensions        ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

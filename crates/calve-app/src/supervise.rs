@@ -701,7 +701,7 @@ mod unix {
         use landlock::{
             ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
         };
-        let abi = ABI::V2;
+        let abi = ABI::V3;
         let read = AccessFs::from_read(abi);
         let all = AccessFs::from_all(abi);
         let cwd = std::env::current_dir().ok();
@@ -791,6 +791,22 @@ thread_local! {
     static CONTAINMENT: std::cell::RefCell<Value> = const { std::cell::RefCell::new(Value::Null) };
 }
 
+/// How far this host confines a worker, measured by running one.
+pub fn probe_containment() -> Value {
+    let limits = crate::config::ResourceLimits {
+        confinement: Some(crate::config::Confinement::BestEffort),
+        ..Default::default()
+    };
+    let dir = std::env::temp_dir();
+    let probe = Supervised::spawn_limited(&["/bin/true".to_owned()], &[], &dir, &limits)
+        .and_then(|mut s| s.wait());
+    if probe.is_ok() {
+        last_containment()
+    } else {
+        Value::Null
+    }
+}
+
 /// How far the worker this thread last waited for was confined; null where nothing confines it.
 pub fn last_containment() -> Value {
     CONTAINMENT.with(|c| c.borrow().clone())
@@ -853,6 +869,12 @@ mod windows {
         cwd: &Path,
         limits: &crate::config::ResourceLimits,
     ) -> Result<Supervised> {
+        if limits.confinement == Some(crate::config::Confinement::Required) {
+            return Err(coded(
+                "UNSUPPORTED_PLATFORM_FEATURE",
+                "workers cannot be confined on this platform; set `confinement = \"best-effort\"`",
+            ));
+        }
         if limits.cpu_seconds.is_some() {
             return Err(coded(
                 "CONTAINMENT_UNAVAILABLE",

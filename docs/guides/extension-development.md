@@ -9,9 +9,9 @@ Extensions live outside this repository. Calve has no built-in domain, so a thir
 | The contract itself | [Calve Integration Contract](../reference/integration-contract.md) |
 | Run a local catalog | [catalog operations](catalog-operations.md) |
 
-Start with the smallest thing that works. An **openaevc-only** package is a native OpenAEVC extension and nothing else. It can define verifiers and evidence, and its evidence reads generically in Calve with no Calve code (Scenario N). It cannot add resource kinds to `calve resource set`, because those are declared in integration metadata.
+Start with the smallest thing that works. An **openaevc-only** package is a native OpenAEVC extension and nothing else. Its signed manifest is enough: each effect kind it declares works with `calve resource set <effect-kind>:<name>=JSON`, and its evidence reads generically, with no Calve code.
 
-Add `calve-integration.json` and a CIC module when you want files, resources, checks or diffs to work through Calve's commands.
+Add [`calve-integration.json`](../reference/metadata-schema.md) and a CIC module when you want short names, files, checks or diffs.
 
 Before you publish, know what you are asking users for:
 

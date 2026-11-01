@@ -399,7 +399,7 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
                         ),
                     ],
                 });
-            } else if error.starts_with("PROJECT_LOCKED") {
+            } else if error.contains("PROJECT_LOCKED") {
                 app.notify(
                     Tone::Warning,
                     format!(
@@ -589,7 +589,7 @@ fn palette_objects(app: &App) -> Vec<(Vec<String>, PaletteItem)> {
             str_of(&i, "id"),
             str_of(&i, "title"),
             "Intent",
-            Target::Open(Route::Work),
+            Target::Open(Route::Intent(str_of(&i, "id"))),
         ));
     }
     for t in list("tasks") {
@@ -1332,6 +1332,7 @@ fn move_selection(app: &mut App, delta: isize) {
     if app.route == Route::Events {
         app.events_live = false;
     }
+    let following = app.log_follow;
     if matches!(app.route, Route::Execution(_)) && delta < 0 {
         app.log_follow = false;
     }
@@ -1376,7 +1377,12 @@ fn move_selection(app: &mut App, delta: isize) {
                 app.log_follow = false;
             }
             let last = lines.len().saturating_sub(1) as isize;
+            let viewport = app.size.1 as usize;
             let state = app.collection(key);
+            // Leaving follow starts from what was on screen, not from the top.
+            if following && delta < 0 {
+                state.scroll = lines.len().saturating_sub(viewport);
+            }
             state.scroll = (state.scroll as isize + delta).clamp(0, last.max(0)) as usize;
         }
         Body::Text(_) | Body::Status { .. } => {

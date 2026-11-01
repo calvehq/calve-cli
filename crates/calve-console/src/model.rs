@@ -25,6 +25,12 @@ pub enum Route {
     Inbox,
     Doctor,
     Extensions,
+    Intents,
+    Intent(String),
+    Resources,
+    Authority,
+    Providers,
+    Settings,
 }
 
 /// Permanent navigation (console-ux §8).
@@ -33,12 +39,15 @@ pub const NAV: &[(&str, &[Route])] = &[
         "PROJECT",
         &[
             Route::Overview,
+            Route::Intents,
             Route::Work,
             Route::ChangeGraph,
             Route::ChangePacks,
             Route::Baselines,
+            Route::Resources,
             Route::Evidence,
             Route::Events,
+            Route::Authority,
         ],
     ),
     (
@@ -46,8 +55,10 @@ pub const NAV: &[(&str, &[Route])] = &[
         &[
             Route::Projects,
             Route::Inbox,
+            Route::Providers,
             Route::Doctor,
             Route::Extensions,
+            Route::Settings,
         ],
     ),
 ];
@@ -70,6 +81,12 @@ impl Route {
             Self::Inbox => "Inbox".into(),
             Self::Doctor => "Doctor".into(),
             Self::Extensions => "Extensions".into(),
+            Self::Intents => "Intents".into(),
+            Self::Intent(id) => format!("Intent {id}"),
+            Self::Resources => "Resources".into(),
+            Self::Authority => "Authority".into(),
+            Self::Providers => "Providers".into(),
+            Self::Settings => "Settings".into(),
         }
     }
 
@@ -79,6 +96,7 @@ impl Route {
             Self::Task(_) | Self::Execution(_) => Self::Work,
             Self::ChangePack(_) => Self::ChangePacks,
             Self::Baseline(_) => Self::Baselines,
+            Self::Intent(_) => Self::Intents,
             other => other.clone(),
         }
     }
@@ -895,6 +913,15 @@ pub fn route_requests(route: &Route) -> Vec<(String, Action)> {
         Route::Projects => vec![("projects".into(), action(&["project", "list"]))],
         Route::Inbox => vec![("inbox".into(), action(&["inbox", "list"]))],
         Route::Doctor => vec![("doctor".into(), action(&["doctor"]))],
+        Route::Intents => vec![("intents".into(), action(&["intent", "list"]))],
+        Route::Intent(id) => vec![(format!("intent:{id}"), action(&["intent", "show", id]))],
+        Route::Resources => vec![("resources".into(), action(&["resource", "list"]))],
+        Route::Authority => vec![
+            ("principals".into(), action(&["authority", "principals"])),
+            ("grants".into(), action(&["authority", "grants"])),
+        ],
+        Route::Providers => vec![("providers".into(), action(&["provider", "list"]))],
+        Route::Settings => vec![("settings".into(), action(&["config", "list"]))],
         Route::Extensions => vec![
             ("extensions".into(), action(&["extension", "list"])),
             ("extension-health".into(), action(&["extension", "health"])),

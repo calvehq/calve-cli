@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    # Weekly, so advisories, link rot and toolchain drift surface without a commit.
+    # Weekly, so advisories and link rot surface without a commit.
     - cron: "17 4 * * 1"
 
 # Actions are pinned to commits (tag in the comment).
@@ -38,9 +38,13 @@ jobs:
         if: runner.os == 'Windows'
       - run: cargo test --locked --workspace
         if: runner.os != 'Windows'
+        env:
+          # Hosted runners restrict unprivileged user namespaces; confinement has its own tests.
+          CALVE_WORKER_CONFINEMENT: best-effort
 
   surface:
-    # The JSON schemas and first-party-free examples, on the toolchain's reference platform.
+    # The JSON schemas and acceptance scenarios that need no first-party catalog, on the
+    # toolchain's reference platform. Workers need user namespaces; hosted runners restrict them.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,6 +53,32 @@ jobs:
           toolchain: 1.95.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo run --locked -p xtask -- json-schemas
+        env:
+          CALVE_WORKER_CONFINEMENT: best-effort
+      - run: cargo run --locked -p xtask -- acceptance --scenario all --report acceptance.json
+        env:
+          CALVE_WORKER_CONFINEMENT: best-effort
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acceptance
+          path: acceptance.json
+
+  reproducible:
+    # Two builds at different paths must give identical archives.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: a
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: b-longer-path
+      - run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          for side in a b-longer-path; do
+            (cd "$side" && SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" cargo run --locked -q -p xtask -- dist)
+          done
+          diff <(cd a/target/dist && sha256sum * | sort) <(cd b-longer-path/target/dist && sha256sum * | sort)
 
   deny:
     runs-on: ubuntu-latest

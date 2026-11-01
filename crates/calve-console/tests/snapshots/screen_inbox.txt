@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Inbox ────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Severity    Type               Message                                              Age    ││Execution                                  │
 │  Overview        5 ││× danger    Execution          Execution FAILED                                     1m     ││execution:exe_agqykfiyxv5qrdbj22sfes5ou4:FA│
-│  Work              ││! warning   Quarantined pack   Pack is quarantined                                  1m     ││ILED                                       │
-│  Change Graph      ││                                                                                           ││                                           │
-│  ChangePacks       ││                                                                                           ││Execution FAILED                           │
-│  Baselines         ││                                                                                           ││                                           │
-│  Evidence          ││                                                                                           ││Severity    danger                         │
-│  Events            ││                                                                                           ││First seen  1m ago · 2026-10-29 00:35:21   │
-│                    ││                                                                                           ││UTC                                        │
-│ SYSTEM             ││                                                                                           ││                                           │
-│  Projects          ││                                                                                           ││Actions                                    │
-│› Inbox           2 ││                                                                                           ││  Acknowledge                              │
-│  Doctor            ││                                                                                           ││  Unacknowledge                            │
-│  Extensions        ││                                                                                           ││  Snooze                                   │
-│                    ││                                                                                           ││  Clear resolved                           │
-│                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Intents           ││! warning   Quarantined pack   Pack is quarantined                                  1m     ││ILED                                       │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││                                                                                           ││Execution FAILED                           │
+│  ChangePacks       ││                                                                                           ││                                           │
+│  Baselines         ││                                                                                           ││Severity    danger                         │
+│  Resources         ││                                                                                           ││First seen  1m ago · 2026-10-29 00:35:21   │
+│  Evidence          ││                                                                                           ││UTC                                        │
+│  Events            ││                                                                                           ││                                           │
+│  Authority         ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Acknowledge                              │
+│ SYSTEM             ││                                                                                           ││  Unacknowledge                            │
+│  Projects          ││                                                                                           ││  Snooze                                   │
+│› Inbox           2 ││                                                                                           ││  Clear resolved                           │
+│  Providers         ││                                                                                           ││  a all actions                            │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

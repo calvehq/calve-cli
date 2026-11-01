@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Overview ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Needs attention ───────────────────────────────────────────────────────────────────────────││openaevc                                   │
 │› Overview        5 ││    Subject                                                                                ││prj_01a18514-fa0c-7738-8217-144cfdf6d9b6   │
-│  Work              ││×   exe_…2sfes5ou4   Execution FAILED                                               1m     ││                                           │
-│  Change Graph      ││!   tsk_…43ccc188f   Daemon hardening is blocked                                    1m     ││ChangePacks 6                              │
-│  ChangePacks       ││◆   cpk_…k4tzmcxqu   Fix daemon race condition awaits verification and review       1m     ││Intents     2                              │
-│  Baselines         ││◆   cpk_…bvmvpg3ea   Add remote conformance runner awaits verification and review   1m     ││Baselines   1                              │
-│  Evidence          ││!   cpk_…wnokrbreu   Pack is quarantined                                            1m     ││Attention   5                              │
-│  Events            ││                                                                                           ││                                           │
-│                    ││Active work ───────────────────────────────────────────────────────────────────────────────││                                           │
-│ SYSTEM             ││Intent                                                        Tasks   Packs  State         ││                                           │
-│  Projects          ││SDK compatibility                                             0/1     1      ● RUNNING     ││                                           │
-│  Inbox           2 ││HTTP conformance                                              1/4     2      ! BLOCKED     ││                                           │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││Recent activity ───────────────────────────────────────────────────────────────────────────││                                           │
-│                    ││Time      Actor          Event                                            Object           ││                                           │
-│                    ││00:35:20Z pri_…lnzq6eeeu execution.finished                               exe_…2sfes5ou4   ││                                           │
-│                    ││00:35:20Z pri_…lnzq6eeeu execution.failed                                 exe_…2sfes5ou4   ││                                           │
-│                    ││00:35:14Z pri_…lnzq6eeeu object.imported                                  sha256:…4b9ec4   ││                                           │
-│                    ││00:35:14Z pri_…lnzq6eeeu pack.created                                     cpk_…bo4xbjbpu   ││                                           │
+│  Intents           ││×   exe_…2sfes5ou4   Execution FAILED                                               1m     ││                                           │
+│  Work              ││!   tsk_…43ccc188f   Daemon hardening is blocked                                    1m     ││ChangePacks 6                              │
+│  Change Graph      ││◆   cpk_…k4tzmcxqu   Fix daemon race condition awaits verification and review       1m     ││Intents     2                              │
+│  ChangePacks       ││◆   cpk_…bvmvpg3ea   Add remote conformance runner awaits verification and review   1m     ││Baselines   1                              │
+│  Baselines         ││!   cpk_…wnokrbreu   Pack is quarantined                                            1m     ││Attention   5                              │
+│  Resources         ││                                                                                           ││                                           │
+│  Evidence          ││Active work ───────────────────────────────────────────────────────────────────────────────││                                           │
+│  Events            ││Intent                                                        Tasks   Packs  State         ││                                           │
+│  Authority         ││SDK compatibility                                             0/1     1      ● RUNNING     ││                                           │
+│                    ││HTTP conformance                                              1/4     2      ! BLOCKED     ││                                           │
+│ SYSTEM             ││                                                                                           ││                                           │
+│  Projects          ││Recent activity ───────────────────────────────────────────────────────────────────────────││                                           │
+│  Inbox           2 ││Time      Actor          Event                                            Object           ││                                           │
+│  Providers         ││00:35:20Z pri_…lnzq6eeeu execution.finished                               exe_…2sfes5ou4   ││                                           │
+│  Doctor            ││00:35:20Z pri_…lnzq6eeeu execution.failed                                 exe_…2sfes5ou4   ││                                           │
+│  Extensions        ││00:35:14Z pri_…lnzq6eeeu object.imported                                  sha256:…4b9ec4   ││                                           │
+│  Settings          ││00:35:14Z pri_…lnzq6eeeu pack.created                                     cpk_…bo4xbjbpu   ││                                           │
 │                    ││00:35:14Z pri_…lnzq6eeeu changepack.created                               cpk_…bo4xbjbpu   ││                                           │
 │                    ││00:35:14Z pri_…lnzq6eeeu changepack.quarantined                           cpk_…wnokrbreu   ││                                           │
 │                    ││00:35:14Z pri_…lnzq6eeeu pack.created                                     cpk_…wnokrbreu   ││                                           │

@@ -499,3 +499,71 @@ fn a_crash_during_migration_or_restore_converges() {
         assert_eq!(t.ok(&["maintenance", "check"])["ok"], true, "{point}");
     }
 }
+
+/// A crash around a projection's write: the next read rebuilds the same answer.
+#[test]
+fn a_crash_around_a_projection_write_leaves_it_rebuildable() {
+    for point in ["projection.after_fetch", "projection.after_commit"] {
+        let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let root = env.path().join("project");
+        let p = root.to_str().unwrap();
+        env.ok(&["init", p]);
+        env.ok(&["--project", p, "pack", "create", "one"]);
+        let died = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+            .env("XDG_DATA_HOME", env.path().join("d"))
+            .env("XDG_CONFIG_HOME", env.path().join("c"))
+            .env("CALVE_FAULT", point)
+            .args([
+                "--json",
+                "--no-daemon-start",
+                "--project",
+                p,
+                "pack",
+                "list",
+            ])
+            .output()
+            .unwrap();
+        assert!(!died.status.success(), "{point}");
+        let listed = env.ok(&["--project", p, "pack", "list"]);
+        assert_eq!(
+            listed["items"]
+                .as_array()
+                .or(listed.as_array())
+                .unwrap()
+                .len(),
+            1,
+            "{point}: {listed}"
+        );
+    }
+}
+
+/// A daemon dying while it opens a Project: nothing is left half open.
+#[test]
+fn a_crash_while_a_daemon_opens_a_project_recovers() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let run = |fault: Option<&str>, args: &[&str]| {
+        let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_calve"));
+        c.env("XDG_DATA_HOME", env.path().join("d"))
+            .env("XDG_CONFIG_HOME", env.path().join("c"));
+        if let Some(f) = fault {
+            c.env("CALVE_FAULT", f);
+        }
+        c.args(["--json", "--no-daemon-start"])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert!(
+        run(Some("daemon.open_project"), &["daemon", "start"])
+            .status
+            .success()
+    );
+    let _ = run(None, &["--project", p, "status"]);
+    let _ = run(None, &["daemon", "stop"]);
+    env.ok(&["daemon", "start"]);
+    env.ok(&["--project", p, "intent", "create", "after the crash"]);
+    env.ok(&["daemon", "stop"]);
+}

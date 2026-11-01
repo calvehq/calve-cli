@@ -714,6 +714,7 @@ pub fn enable_project_cache() {
 /// Project was opened by whichever came first; a reader-opened one is current (it refused to
 /// open otherwise), so commands may share it.
 fn open_project(root: &Path, writer: bool) -> Result<std::rc::Rc<Project>> {
+    crate::journal::fault("daemon.open_project");
     let open = |root: &Path| {
         if writer {
             Project::open(root)
@@ -1877,7 +1878,12 @@ async fn dispatch(request: Request) -> Result<Value> {
             let extensions = project.extension_health().await?;
             let recovery = crate::ops::recovery_plan(&project.root)?;
             let registration = registry.ensure_project_path(&project.identity, &project.root);
+            let containment = crate::supervise::probe_containment();
             let mut findings = Vec::new();
+            if containment["landlock"] == "none" || containment["namespace"] == false {
+                findings.push(json!({"code":"WORKER_CONTAINMENT","message":format!(
+                    "workers cannot be fully confined here: {containment}")}));
+            }
             if product_db["ok"] != true {
                 findings.push(json!({"code":"PRODUCT_DB","message":"product database integrity check failed",
                     "remedy":"calve maintenance check; restore .calve/product.sqlite3 from backup"}));
@@ -1906,7 +1912,7 @@ async fn dispatch(request: Request) -> Result<Value> {
             }
             let metrics = crate::observe::metrics(project.root.to_str());
             let report = json!({"healthy":findings.is_empty(),"project_id":project.identity.project_id,
-                "root":project.root,"namespace":namespace,"product_db":product_db,
+                "root":project.root,"namespace":namespace,"product_db":product_db,"containment":containment,
                 "compatibility":compatibility,"extensions":extensions,"findings":findings,
                 "metrics":metrics});
             match bundle {

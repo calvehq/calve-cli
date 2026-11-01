@@ -243,7 +243,14 @@ impl Project {
                     .promote_preflight(id, generation)
                     .await
                     .unwrap_or(Value::Null);
-                let code = calve_api::errors::openaevc_code(e.code.as_str());
+                let stale_review = preflight["blockers"]
+                    .as_array()
+                    .is_some_and(|b| b.iter().any(|b| b["code"] == "REVIEW_STALE"));
+                let code = if stale_review {
+                    "REVIEW_STALE"
+                } else {
+                    calve_api::errors::openaevc_code(e.code.as_str())
+                };
                 return Err(Error::Detailed {
                     code,
                     message: format!("promotion refused by OpenAEVC: {}", e.message),

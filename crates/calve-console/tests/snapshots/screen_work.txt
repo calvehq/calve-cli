@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Work ─────────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││HTTP conformance  1/4 · ! BLOCKED ─────────────────────────────────────────────────────────││Write transport spec                       │
 │  Overview        5 ││Task                                        Actor        Priority  State          Updated  ││tsk_01a18514-fea6-721f-b733-ea21d52bdd7c   │
-│› Work              ││Write transport spec                        shiv         normal    ✓ COMPLETE     1m       ││                                           │
-│  Change Graph      ││Runtime HTTP support                        codex        high      ● IN_PROGRESS  1m       ││State       ✓ COMPLETE                     │
-│  ChangePacks       ││Daemon hardening                            codex        normal    ! BLOCKED      1m       ││Intent                                     │
-│  Baselines         ││Remote conformance runner                   —            normal    ○ OPEN         1m       ││int_01a18514-fe64-72a2-ae08-654d46c2566f   │
-│  Evidence          ││                                                                                           ││Actor       shiv                           │
-│  Events            ││SDK compatibility  0/1 · ● RUNNING ────────────────────────────────────────────────────────││Priority    normal                         │
-│                    ││Task                                        Actor        Priority  State          Updated  ││Updated     1m                             │
-│ SYSTEM             ││Update SDK bindings                         reviewer     normal    ● IN_PROGRESS  1m       ││                                           │
-│  Projects          ││                                                                                           ││Actions                                    │
-│  Inbox           2 ││                                                                                           ││  Reopen                                   │
-│  Doctor            ││                                                                                           ││  Assign                                   │
-│  Extensions        ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Intents           ││Write transport spec                        shiv         normal    ✓ COMPLETE     1m       ││                                           │
+│› Work              ││Runtime HTTP support                        codex        high      ● IN_PROGRESS  1m       ││State       ✓ COMPLETE                     │
+│  Change Graph      ││Daemon hardening                            codex        normal    ! BLOCKED      1m       ││Intent                                     │
+│  ChangePacks       ││Remote conformance runner                   —            normal    ○ OPEN         1m       ││int_01a18514-fe64-72a2-ae08-654d46c2566f   │
+│  Baselines         ││                                                                                           ││Actor       shiv                           │
+│  Resources         ││SDK compatibility  0/1 · ● RUNNING ────────────────────────────────────────────────────────││Priority    normal                         │
+│  Evidence          ││Task                                        Actor        Priority  State          Updated  ││Updated     1m                             │
+│  Events            ││Update SDK bindings                         reviewer     normal    ● IN_PROGRESS  1m       ││                                           │
+│  Authority         ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Reopen                                   │
+│ SYSTEM             ││                                                                                           ││  Assign                                   │
+│  Projects          ││                                                                                           ││  a all actions                            │
+│  Inbox           2 ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

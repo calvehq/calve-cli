@@ -420,6 +420,51 @@ fn a_replay_attempt_that_dies_keeps_the_original_pack() {
     );
 }
 
+/// A crash at each compensation step converges on the same end: P usable, links restored.
+#[test]
+fn a_crash_during_compensation_converges() {
+    for point in ["supersede.C1", "supersede.C2"] {
+        let (mut t, pack, _) = supersede_setup();
+        t.crash(
+            "supersede.Revalidated",
+            false,
+            &["supersede", "start", &pack, "--keep", "1", "--yes"],
+        );
+        let intent = t.ok(&["intent", "create", "J"])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let other = t.ok(&["task", "create", &intent, "U"])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        t.ok(&["task", "link-pack", &other, &pack]);
+        let saga = saga_of(&t, &pack)["saga"].as_str().unwrap().to_owned();
+        t.crash(point, false, &["supersede", "resume", &saga]);
+        let again = t.fails(&["supersede", "resume", &saga]);
+        assert!(again.contains("SUPERSEDE_CONFLICT"), "{point}: {again}");
+        assert_eq!(saga_of(&t, &pack)["state"], "Conflicted", "{point}");
+        assert_eq!(t.ok(&["pack", "show", &pack])["state"], "OPEN", "{point}");
+    }
+}
+
+/// A crash between the relink's commit and its journal record: resume sees the commit.
+#[test]
+fn a_crash_between_relink_commit_and_ack_converges() {
+    let (mut t, pack, _) = supersede_setup();
+    t.crash(
+        "supersede.S7.before_ack",
+        false,
+        &["supersede", "start", &pack, "--keep", "1", "--yes"],
+    );
+    let saga = saga_of(&t, &pack)["saga"].as_str().unwrap().to_owned();
+    let done = t.ok(&["supersede", "resume", &saga]);
+    assert_eq!(done["state"], "Done", "{done}");
+    assert_eq!(done["rse_holds"], true, "{done}");
+    assert_eq!(done["cce_holds"], true, "{done}");
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "ABANDONED");
+}
+
 fn saga_of(t: &T, pack: &str) -> Value {
     t.ok(&["supersede", "list"])
         .as_array()

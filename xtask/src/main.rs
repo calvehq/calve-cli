@@ -217,6 +217,19 @@ fn dist(args: &[String]) -> DynResult {
     };
     // Under target/ (ignored): release files are never committed by accident.
     let dist = root.join("target/dist");
+    // A previous build's files must not be released with this one's.
+    let name_prefix = format!("calve-{version}-{triple}");
+    if dist.is_dir() {
+        for e in fs::read_dir(&dist)? {
+            let p = e?.path();
+            let stale = p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                n.starts_with(&name_prefix) || n == format!("SHA256SUMS-{triple}")
+            });
+            if stale {
+                fs::remove_file(p)?;
+            }
+        }
+    }
     fs::create_dir_all(&dist)?;
     let epoch: u64 = std::env::var("SOURCE_DATE_EPOCH")
         .ok()
@@ -230,7 +243,7 @@ fn dist(args: &[String]) -> DynResult {
                 .map(|s| s.trim().to_owned())
         })
         .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+        .ok_or("no source date: set SOURCE_DATE_EPOCH or build from a git checkout")?;
     let name = format!("calve-{version}-{triple}");
     let inventory = dist.join(format!("{name}.THIRD-PARTY-LICENSES.txt"));
     fs::write(&inventory, release::license_inventory(&packages))?;
@@ -488,6 +501,9 @@ fn smoke_test(dist: &Path, sums: &BTreeMap<String, String>) -> DynResult {
     run(&["--project", p, "intent", "create", "smoke"])?;
     run(&["--project", p, "pack", "create", "smoke"])?;
     run(&["--project", p, "doctor"])?;
+    run(&["daemon", "start"])?;
+    run(&["--project", p, "status"])?;
+    run(&["daemon", "stop"])?;
     let status = run(&["--project", p, "status"])?;
     for f in [
         "LICENSE",
@@ -662,7 +678,7 @@ fn check() -> Result<(), Box<dyn std::error::Error>> {
     openaevc_rules::check_workspace_deps(dependencies, OPENAEVC_TAG)?;
     let lock: toml::Value = fs::read_to_string(root.join("Cargo.lock"))?.parse()?;
     openaevc_rules::check_lock(&lock, OPENAEVC_TAG, OPENAEVC_REVISION)?;
-    for member in ["apps/calve", "xtask"]
+    for member in ["apps/calve", "apps/calved", "xtask"]
         .into_iter()
         .map(PathBuf::from)
         .chain(

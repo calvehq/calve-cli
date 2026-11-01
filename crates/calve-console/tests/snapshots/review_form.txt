@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
 │  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
-│  Work              ││Review      ◆ WAITING                                             ││cpk_…hmr5jvoqyrbvmvpg3ea    │
-│  Change Graph      ││Required    yes, by pack policy                                   ││Add remote conformance      │
-│› ChangePacks       ││ ┌ Review ──────────────────────────────────────────────────────────────┐r                      │
-│  Baselines         ││D│Decision                                                              │                       │
-│  Evidence          ││N│  (•) Approve                                                         │       ◆ SEALED        │
-│  Events            ││ │  ( ) Reject                                                          │       ✓ ALLOW         │
-│                    ││E│  ( ) Comment                                                         │ation  2               │
-│ SYSTEM             ││✓│                                                                      │ed     1m ago ·        │
-│  Projects          ││✓│Comment                                                               │10-29 00:35:10 UTC by  │
-│  Inbox           2 ││×│>                                                                     │d7lklnzq6eeeu          │
-│  Doctor            ││ │                                                                      │ed     2 files  +7 -2  │
-│  Extensions        ││r│Evidence on this candidate                                            │s      1/1             │
-│                    ││ │  none                                                                │nce    0               │
-│                    ││ │Required reviewers: one approval by a principal with review authority │w      ◆ WAITING       │
-│                    ││ │(pack policy)                                                         │                       │
-│                    ││ │                                                                      │t                      │
-│                    ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │conformance            │
+│  Intents           ││Review      ◆ WAITING                                             ││cpk_…hmr5jvoqyrbvmvpg3ea    │
+│  Work              ││Required    yes, by pack policy                                   ││Add remote conformance      │
+│  Change Graph      ││ ┌ Review ──────────────────────────────────────────────────────────────┐r                      │
+│› ChangePacks       ││D│Decision                                                              │                       │
+│  Baselines         ││N│  (•) Approve                                                         │       ◆ SEALED        │
+│  Resources         ││ │  ( ) Reject                                                          │       ✓ ALLOW         │
+│  Evidence          ││E│  ( ) Comment                                                         │ation  2               │
+│  Events            ││✓│                                                                      │ed     1m ago ·        │
+│  Authority         ││✓│Comment                                                               │10-29 00:35:10 UTC by  │
+│                    ││×│>                                                                     │d7lklnzq6eeeu          │
+│ SYSTEM             ││ │                                                                      │ed     2 files  +7 -2  │
+│  Projects          ││r│Evidence on this candidate                                            │s      1/1             │
+│  Inbox           2 ││ │  none                                                                │nce    0               │
+│  Providers         ││ │Required reviewers: one approval by a principal with review authority │w      ◆ WAITING       │
+│  Doctor            ││ │(pack policy)                                                         │                       │
+│  Extensions        ││ │                                                                      │t                      │
+│  Settings          ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │conformance            │
 │                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
 │                    ││                                                                  ││! Promote: missing: approved│
 │                    ││                                                                  ││review                      │

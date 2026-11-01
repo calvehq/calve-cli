@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Execution exe_agqykfiyxv5qrdbj22sfes5ou4 ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqykfiyxv5qrdbj22sfes5ou4   │
 │  Overview        5 ││                                                                                           ││                                           │
-│› Work              ││checking                                                                                   ││State       × FAILED                       │
-│  Change Graph      ││lint: 2 problems                                                                           ││Pack        cpk_agqykfiyqzy2zlzm3bo4xbjbpu │
-│  ChangePacks       ││                                                                                           ││Harness     org.calve.harness.lint         │
-│  Baselines         ││                                                                                           ││Provider    org.calve.provider.shell       │
-│  Evidence          ││                                                                                           ││Actor       pri_agqykfh2bj3htd7lklnzq6eeeu │
-│  Events            ││                                                                                           ││Attempt     1 of 3                         │
-│                    ││                                                                                           ││Generation  2                              │
-│ SYSTEM             ││                                                                                           ││Task        —                              │
-│  Projects          ││                                                                                           ││Started     1m ago · 2026-10-29 00:35:14   │
-│  Inbox           2 ││                                                                                           ││UTC                                        │
-│  Doctor            ││                                                                                           ││Finished    1m ago · 2026-10-29 00:35:20   │
-│  Extensions        ││                                                                                           ││UTC                                        │
-│                    ││                                                                                           ││Duration    6.0s                           │
-│                    ││                                                                                           ││Result      worker exited with status 2    │
-│                    ││                                                                                           ││Retry of    —                              │
-│                    ││                                                                                           ││Output      2 lines                        │
-│                    ││                                                                                           ││Effects     0                              │
+│  Intents           ││checking                                                                                   ││State       × FAILED                       │
+│› Work              ││lint: 2 problems                                                                           ││Pack        cpk_agqykfiyqzy2zlzm3bo4xbjbpu │
+│  Change Graph      ││                                                                                           ││Harness     org.calve.harness.lint         │
+│  ChangePacks       ││                                                                                           ││Provider    org.calve.provider.shell       │
+│  Baselines         ││                                                                                           ││Actor       pri_agqykfh2bj3htd7lklnzq6eeeu │
+│  Resources         ││                                                                                           ││Attempt     1 of 3                         │
+│  Evidence          ││                                                                                           ││Generation  2                              │
+│  Events            ││                                                                                           ││Task        —                              │
+│  Authority         ││                                                                                           ││Started     1m ago · 2026-10-29 00:35:14   │
+│                    ││                                                                                           ││UTC                                        │
+│ SYSTEM             ││                                                                                           ││Finished    1m ago · 2026-10-29 00:35:20   │
+│  Projects          ││                                                                                           ││UTC                                        │
+│  Inbox           2 ││                                                                                           ││Duration    6.0s                           │
+│  Providers         ││                                                                                           ││Result      worker exited with status 2    │
+│  Doctor            ││                                                                                           ││Retry of    —                              │
+│  Extensions        ││                                                                                           ││Output      2 lines                        │
+│  Settings          ││                                                                                           ││Effects     0                              │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││Actions                                    │
 │                    ││                                                                                           ││  Retry                                    │

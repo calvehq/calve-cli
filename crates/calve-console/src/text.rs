@@ -4,6 +4,19 @@ use serde_json::Value;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// Removes terminal control sequences and control characters; tabs become spaces.
+/// Controls, bidi overrides, and invisible characters that can disguise text.
+pub fn disguises(c: char) -> bool {
+    c.is_control()
+        || ('\u{202a}'..='\u{202e}').contains(&c)
+        || ('\u{2066}'..='\u{2069}').contains(&c)
+        || ('\u{200b}'..='\u{200f}').contains(&c)
+        || ('\u{2060}'..='\u{2064}').contains(&c)
+        || ('\u{fff9}'..='\u{fffb}').contains(&c)
+        || ('\u{e0000}'..='\u{e007f}').contains(&c)
+        || c == '\u{061c}'
+        || c == '\u{feff}'
+}
+
 pub fn sanitize(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
@@ -39,17 +52,7 @@ pub fn sanitize(input: &str) -> String {
                 }
             }
             '\t' => out.push_str("  "),
-            // C1 controls, bidi overrides and zero-width characters that can disguise text.
-            c if c.is_control()
-                || ('\u{202a}'..='\u{202e}').contains(&c)
-                || ('\u{2066}'..='\u{2069}').contains(&c)
-                || ('\u{200b}'..='\u{200f}').contains(&c)
-                || ('\u{2060}'..='\u{2064}').contains(&c)
-                || ('\u{fff9}'..='\u{fffb}').contains(&c)
-                || ('\u{e0000}'..='\u{e007f}').contains(&c)
-                || c == '\u{061c}'
-                || c == '\u{feff}' =>
-            {
+            c if disguises(c) => {
                 out.push('\u{fffd}');
             }
             c => out.push(c),

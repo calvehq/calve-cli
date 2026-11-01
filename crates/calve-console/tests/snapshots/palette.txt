@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Overview ────────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││Needs attention ──────────────────────────────────────────────────││openaevc                    │
 │› Overview        5 ││    Subject                                                       ││prj_01a18514-fa0c-7738-8217-│
-│  Work              ││×   exe_…2sfes5ou4   Execution FAILED                      1m     ││144cfdf6d9b6                │
-│  Change Graph      ││!┌ Command Palette ─────────────────────────────────────────────────────┐                       │
-│  ChangePacks     6 ││◆│ All  Objects  Actions  Commands                                      │ePacks 6               │
-│  Baselines       1 ││◆│> cpk_agqykfiufbyifoybnnpkrzexje▏                                     │ts     2               │
-│  Evidence          ││!│                                                                      │ines   1               │
-│  Events            ││ │Objects                                                               │tion   5               │
-│                    ││A│  cpk_…bnnpkrzexje · ChangePack   Refactor verification rules         │                       │
-│ SYSTEM             ││I│  openaevc:evt_…5u · Event        workunit.added cpk_agqykfiufbyif…   │                       │
-│  Projects          ││S│  calve:34 · Event                pack.created cpk_agqykfiufbyifoy…   │                       │
-│  Inbox           2 ││H│  openaevc:evt_…ay · Event        changepack.created cpk_agqykfiuf…   │                       │
-│  Doctor            ││ │Actions                                                               │                       │
-│  Extensions        ││R│  Open cpk_…bnnpkrzexje           Refactor verification rules         │                       │
-│                    ││T│  Review cpk_…bnnpkrzexje         Refactor verification rules         │                       │
-│                    ││0│  Verify cpk_…bnnpkrzexje         Refactor verification rules         │                       │
-│                    ││0│  Show evidence for cpk_…bnnpkrze…Refactor verification rules         │                       │
-│                    ││0│  Diff cpk_…bnnpkrzexje           Refactor verification rules         │                       │
-│                    ││0│                                                                      │                       │
+│  Intents           ││×   exe_…2sfes5ou4   Execution FAILED                      1m     ││144cfdf6d9b6                │
+│  Work              ││!┌ Command Palette ─────────────────────────────────────────────────────┐                       │
+│  Change Graph      ││◆│ All  Objects  Actions  Commands                                      │ePacks 6               │
+│  ChangePacks     6 ││◆│> cpk_agqykfiufbyifoybnnpkrzexje▏                                     │ts     2               │
+│  Baselines       1 ││!│                                                                      │ines   1               │
+│  Resources         ││ │Objects                                                               │tion   5               │
+│  Evidence          ││A│  cpk_…bnnpkrzexje · ChangePack   Refactor verification rules         │                       │
+│  Events            ││I│  openaevc:evt_…5u · Event        workunit.added cpk_agqykfiufbyif…   │                       │
+│  Authority         ││S│  calve:34 · Event                pack.created cpk_agqykfiufbyifoy…   │                       │
+│                    ││H│  openaevc:evt_…ay · Event        changepack.created cpk_agqykfiuf…   │                       │
+│ SYSTEM             ││ │Actions                                                               │                       │
+│  Projects          ││R│  Open cpk_…bnnpkrzexje           Refactor verification rules         │                       │
+│  Inbox           2 ││T│  Review cpk_…bnnpkrzexje         Refactor verification rules         │                       │
+│  Providers         ││0│  Verify cpk_…bnnpkrzexje         Refactor verification rules         │                       │
+│  Doctor            ││0│  Show evidence for cpk_…bnnpkrze…Refactor verification rules         │                       │
+│  Extensions        ││0│  Diff cpk_…bnnpkrzexje           Refactor verification rules         │                       │
+│  Settings          ││0│                                                                      │                       │
 │                    ││0│↑↓ select  enter run  tab group  esc close                            │                       │
 │                    ││0└──────────────────────────────────────────────────────────────────────┘                       │
 │                    ││00:35:14Z pri_…lnzq6eeeu pack.created            cpk_…wnokrbreu   ││                            │

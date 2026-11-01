@@ -258,7 +258,11 @@ pub fn add_catalog(
         url: url.into(),
         root_digest: root_digest.into(),
     };
-    let c = Catalog::bootstrap(&dir, root, root_digest, &src.mirror()).map_err(gen_err)?;
+    let c = Catalog::bootstrap(&dir, root, root_digest, &src.mirror()).map_err(|e| {
+        // Nothing was trusted, so nothing may stand in the way of trying again.
+        let _ = fs::remove_dir_all(&dir);
+        gen_err(e)
+    })?;
     write_json(&dir.join("source.json"), &src)?;
     Ok(
         json!({"name": name, "url": url, "root_digest": root_digest, "generation": c.active, "root_version": c.versions.root}),
@@ -595,8 +599,11 @@ impl Installer {
                 format!("invalid extension id {:?}", req.id),
             ));
         }
-        let catalog = self.choose_catalog(req)?;
         fs::create_dir_all(self.paths.journals()).map_err(io)?;
+        // Pins and package directories are shared by every process of this user.
+        let lock = fs::File::create(self.paths.journals().join("install.lock")).map_err(io)?;
+        lock.lock().map_err(io)?;
+        let catalog = self.choose_catalog(req)?;
         let jid = uuid::Uuid::now_v7().simple().to_string();
         let jpath = self.paths.journals().join(format!("{jid}.journal"));
         let mut j = Journal::create(
@@ -992,8 +999,12 @@ impl Installer {
             installed_at: jiff::Timestamp::now().to_string(),
         };
         write_json(&staging.join("package.json"), &record)?;
-        j.append("I2.validated", json!({"entrypoint": record.entrypoint}))
-            .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
+        j.append(
+            "I2.validated",
+            json!({"entrypoint": record.entrypoint, "switch": req.switch_publisher,
+                "dir": format!("{}/{}", record.id, record.native_digest())}),
+        )
+        .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
         self.crash(InstallStep::Validated)?;
         Ok(Staged { staging, record })
     }
@@ -1154,24 +1165,36 @@ impl Installer {
                 .unwrap_or_default();
             let staging = self.paths.extension_dir.join(format!(".staging-{jid}"));
             let outcome = match last.as_str() {
-                "I3.installed" | "I4.recorded" => {
+                // After I2 the rename may have happened: the package is whole or not there.
+                "I2.validated" | "I3.installed" | "I4.recorded" => {
                     let rel = opened
                         .records
                         .iter()
-                        .find(|r| r.kind == "I3.installed")
+                        .rev()
+                        .find(|r| r.kind == "I3.installed" || r.kind == "I2.validated")
                         .and_then(|r| r.body["dir"].as_str().map(str::to_owned))
                         .unwrap_or_default();
+                    let switched = opened
+                        .records
+                        .iter()
+                        .any(|r| r.kind == "I2.validated" && r.body["switch"] == true);
                     let rec: Option<PackageRecord> =
                         fs::read(self.paths.extension_dir.join(&rel).join("package.json"))
                             .ok()
                             .and_then(|b| serde_json::from_slice(&b).ok());
                     match rec {
                         Some(r) if verify_installed(&self.paths, &r).is_ok() => {
+                            set_read_only(&self.paths.extension_dir.join(&rel), true)?;
                             let mut pins = self.pins()?;
-                            pins.entry(r.id.clone()).or_insert(Pin {
+                            let pin = Pin {
                                 catalog: r.catalog.clone(),
                                 role: r.role.clone(),
-                            });
+                            };
+                            if switched {
+                                pins.insert(r.id.clone(), pin);
+                            } else {
+                                pins.entry(r.id.clone()).or_insert(pin);
+                            }
                             write_json(&self.paths.pins(), &pins)?;
                             "installed"
                         }

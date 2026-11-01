@@ -154,6 +154,23 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::overlaps;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Whether two scopes touch cannot depend on which run asks, and a path always touches
+        /// anything below it.
+        #[test]
+        fn overlap_is_symmetric(
+            a in proptest::collection::vec("[ab]{1,2}(/[ab]{1,2}){0,2}", 0..3),
+            b in proptest::collection::vec("[ab]{1,2}(/[ab]{1,2}){0,2}", 0..3),
+        ) {
+            prop_assert_eq!(overlaps(&a, &b), overlaps(&b, &a));
+            for p in &a {
+                let below = vec![format!("{}/x", p)];
+                prop_assert!(overlaps(std::slice::from_ref(p), &below));
+            }
+        }
+    }
 
     fn v(p: &[&str]) -> Vec<String> {
         p.iter().map(|s| (*s).to_owned()).collect()

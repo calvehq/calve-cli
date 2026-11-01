@@ -179,8 +179,9 @@ fn keyring_lookup(name: &str) -> Result<String> {
         .stdin(Stdio::null())
         .output()
         .map_err(|error| invalid(format!("credential store unavailable: {error}")))?;
-    let value = String::from_utf8(output.stdout).unwrap_or_default();
-    let value = value.trim_end_matches(['\n', '\r']).to_owned();
+    let stdout = zeroize::Zeroizing::new(output.stdout);
+    let raw = zeroize::Zeroizing::new(String::from_utf8(stdout.to_vec()).unwrap_or_default());
+    let value = raw.trim_end_matches(['\n', '\r']).to_owned();
     if !output.status.success() || value.is_empty() {
         return Err(crate::coded(
             "SECRET_UNAVAILABLE",

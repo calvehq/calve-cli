@@ -2628,6 +2628,7 @@ impl Project {
             .buffered(READ_BATCH)
             .try_collect()
             .await?;
+        crate::journal::fault("projection.after_fetch");
         let tx = self.db.unchecked_transaction()?;
         for (id, pack) in wanted.into_iter().zip(packs) {
             // The intent link is OpenAEVC's (`pack.intent`); a crash after the update but
@@ -2698,6 +2699,7 @@ impl Project {
             [head],
         )?;
         tx.commit()?;
+        crate::journal::fault("projection.after_commit");
         Ok(())
     }
 
@@ -3646,7 +3648,14 @@ impl Project {
                 expected_generation: generation,
             })
             .await?;
-        Ok(serde_json::to_value(receipt)?)
+        let mut result = serde_json::to_value(receipt)?;
+        // OpenAEVC keeps a pack's effects on reopen and promotes only the current generation's.
+        if !pack.candidate_effects.is_empty() {
+            result["warning"] = json!(
+                "this pack has effects, so OpenAEVC v0.1.0 cannot promote it after a reopen; continue with `calve supersede start`"
+            );
+        }
+        Ok(result)
     }
 
     pub async fn quarantine_pack(&self, id: &str, reason: &str) -> Result<Value> {
@@ -4608,6 +4617,17 @@ impl Project {
                         format!("Execution {state}"),
                         "danger".into(),
                     ));
+                    if state == "FAILED"
+                        && let Some(provider) = execution["provider"].as_str()
+                    {
+                        sources.push((
+                            format!("provider:{provider}:failed"),
+                            "provider_failure".into(),
+                            provider.into(),
+                            format!("Provider {provider} has failed runs"),
+                            "warning".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -4694,6 +4714,37 @@ impl Project {
                         x["problem"].as_str().unwrap_or("unavailable")
                     ),
                     "danger".into(),
+                ));
+            }
+        }
+        // A package waiting for a capability it asks for and does not hold.
+        for e in self
+            .list_extensions()
+            .await?
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let Some(id) = e["id"].as_str() else { continue };
+            let held = self.extension_permissions(id).await.unwrap_or(Value::Null);
+            let granted = held["granted_host_capabilities"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let missing: Vec<String> = held["requested_host_capabilities"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|c| !granted.contains(c))
+                .filter_map(|c| c.as_str().map(str::to_owned))
+                .collect();
+            if !missing.is_empty() {
+                sources.push((
+                    format!("extension:{id}:permission"),
+                    "extension_permission".into(),
+                    id.into(),
+                    format!("Extension {id} asks for {}", missing.join(", ")),
+                    "warning".into(),
                 ));
             }
         }

@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfiufbyifoybnnpkrzexje ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
 │  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
-│  Work              ││cpk_…byifoybnnpkrzexje · Refactor verification rules   ○ OPEN     ││cpk_…ufbyifoybnnpkrzexje    │
-│  Change Graph      ││                                                                  ││Refactor verification rules │
-│› ChangePacks       ││Changes                                                           ││                            │
-│  Baselines         ││  1 files   +1 -0                                                 ││State       ○ OPEN          │
-│  Evidence          ││ ┌ Run command? ────────────────────────────────────────────────────────┐       not evaluated   │
-│  Events            ││ │Closes the pack without promoting it; its history is kept.            │ation  2               │
-│                    ││ │                                                                      │ed     1m ago ·        │
-│ SYSTEM             ││ │Target      cpk_agqykfiufbyifoybnnpkrzexje                            │10-29 00:35:13 UTC by  │
-│  Projects          ││ │× sealed candidate                                                    │d7lklnzq6eeeu          │
-│  Inbox           2 ││ │                                                                      │ed     1 files  +1 -0  │
-│  Doctor            ││ │calve pack abandon cpk_agqykfiufbyifoybnnpkrzexje --generation 2      │nce    0               │
-│  Extensions        ││ │                                                                      │                       │
-│                    ││ │Enter confirm     Esc cancel                                          │mote: pack is OPEN;    │
-│                    ││ └──────────────────────────────────────────────────────────────────────┘and qualify it first   │
-│                    ││                                                                  ││x explain                   │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││Actions                     │
+│  Intents           ││cpk_…byifoybnnpkrzexje · Refactor verification rules   ○ OPEN     ││cpk_…ufbyifoybnnpkrzexje    │
+│  Work              ││                                                                  ││Refactor verification rules │
+│  Change Graph      ││Changes                                                           ││                            │
+│› ChangePacks       ││  1 files   +1 -0                                                 ││State       ○ OPEN          │
+│  Baselines         ││ ┌ Run command? ────────────────────────────────────────────────────────┐       not evaluated   │
+│  Resources         ││ │Closes the pack without promoting it; its history is kept.            │ation  2               │
+│  Evidence          ││ │                                                                      │ed     1m ago ·        │
+│  Events            ││ │Target      cpk_agqykfiufbyifoybnnpkrzexje                            │10-29 00:35:13 UTC by  │
+│  Authority         ││ │× sealed candidate                                                    │d7lklnzq6eeeu          │
+│                    ││ │                                                                      │ed     1 files  +1 -0  │
+│ SYSTEM             ││ │calve pack abandon cpk_agqykfiufbyifoybnnpkrzexje --generation 2      │nce    0               │
+│  Projects          ││ │                                                                      │                       │
+│  Inbox           2 ││ │Enter confirm     Esc cancel                                          │mote: pack is OPEN;    │
+│  Providers         ││ └──────────────────────────────────────────────────────────────────────┘and qualify it first   │
+│  Doctor            ││                                                                  ││x explain                   │
+│  Extensions        ││                                                                  ││                            │
+│  Settings          ││                                                                  ││Actions                     │
 │                    ││                                                                  ││  Seal candidate            │
 │                    ││                                                                  ││  Abandon                   │
 │                    ││                                                                  ││  Quarantine                │

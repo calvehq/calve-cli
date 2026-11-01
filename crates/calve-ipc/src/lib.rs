@@ -481,3 +481,29 @@ where
         })
         .await
 }
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    /// A frame survives the wire, and an oversized length is refused before anything is read.
+    #[tokio::test]
+    async fn frame_round_trip_and_size_limit() {
+        for text in ["", "a", "é\u{10ffff}", &"x".repeat(70_000)] {
+            let (mut a, mut b) = tokio::io::duplex(1 << 20);
+            let hello = Frame::ShutdownAck {
+                pid: text.len() as u32,
+            };
+            write_frame(&mut a, &hello).await.unwrap();
+            assert!(matches!(
+                read_frame(&mut b).await.unwrap(),
+                Frame::ShutdownAck { pid } if pid == text.len() as u32
+            ));
+        }
+        let (mut a, mut b) = tokio::io::duplex(64);
+        a.write_all(&((MAX_FRAME as u32) + 1).to_be_bytes())
+            .await
+            .unwrap();
+        assert!(read_frame(&mut b).await.is_err());
+    }
+}

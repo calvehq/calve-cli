@@ -6,6 +6,22 @@ All notable changes to Calve are documented here.
 
 ### Added
 
+- **Runs overlap in a Project.** A run holds the writer lock only to admit itself and record its
+  result; a durable claim keeps colliding work apart, and real collisions get `PROJECT_LOCKED`.
+- **Live worker output.** `execution logs` returns output as it arrives, with `--after` to continue,
+  and the output survives a dead daemon.
+- **Worker confinement on Linux.** User and mount namespaces hide `.calve/`, Calve's private
+  directories and the daemon socket. A worker that cannot be confined is refused unless its provider
+  sets `confinement = "best-effort"`. Each run reports `containment`, and `doctor` measures it.
+- **Project authority.** Keys and identities live in the machine data directory, bound to one root.
+  A copy is read-only until `project adopt-copy`, and `project authority-export|authority-import`
+  carry an identity to another machine. Existing Projects move their keys on first open.
+- **`config approve`.** Providers, harnesses and check commands in a Project file count only once
+  the host has approved those bytes.
+- **Generic resources.** An extension with no integration metadata gets `resource set` from its
+  signed manifest.
+- Console routes for Intents, Resources, Authority, Providers and Settings.
+- `calve.integration/1` reference.
 - **Acceptance scenarios** A–P run as tests, and `xtask acceptance` reports them with an environment
   fingerprint, keeping deviations apart from passes.
 - **`CAPABILITY_DENIED`**: a host call OpenAEVC denies now reports the extension, the capability and

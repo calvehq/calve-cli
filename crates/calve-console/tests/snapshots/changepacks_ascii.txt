@@ -2,23 +2,23 @@
 + Navigation --------++ ChangePacks -----------------------------------------------------++ Inspector -----------------+
 | PROJECT            || All 6  Open 2  Sealed 2  Qualified 0  Promoted 1  Quarantined 1  || Summary  Relations         |
 |  Overview        5 ||                                                                  ||Eligibility  Raw  [ ]       |
-|  Work              ||ID               State           Title                   Updated  ||cpk_...zy2zlzm3bo4xbjbpu    |
-|  Change Graph      ||cpk_...4xbjbpu   [ ] OPEN        Lint sweep              1m       ||Lint sweep                  |
-|> ChangePacks     6 ||cpk_...okrbreu   [!] QUARANTINED Experimental transport  1m       ||                            |
-|  Baselines         ||cpk_...krzexje   [ ] OPEN        Refactor verificatio... 1m       ||State       [ ] OPEN        |
-|  Evidence          ||cpk_...tzmcxqu   [?] SEALED      Fix daemon race cond... 1m       ||Risk        not evaluated   |
-|  Events            ||cpk_...mvpg3ea   [?] SEALED      Add remote conforman... 1m       ||Generation  2               |
-|                    ||cpk_...2gzmn7e   [ok] PROMOTED   Update protocol schemas 1m       ||Created     1m ago -        |
-| SYSTEM             ||                                                                  ||2026-10-29 00:35:14 UTC by  |
-|  Projects          ||                                                                  ||pri_...lklnzq6eeeu          |
-|  Inbox           2 ||                                                                  ||Changed     0 files  +0 -0  |
-|  Doctor            ||                                                                  ||Evidence    0               |
+|  Intents           ||ID               State           Title                   Updated  ||cpk_...zy2zlzm3bo4xbjbpu    |
+|  Work              ||cpk_...4xbjbpu   [ ] OPEN        Lint sweep              1m       ||Lint sweep                  |
+|  Change Graph      ||cpk_...okrbreu   [!] QUARANTINED Experimental transport  1m       ||                            |
+|> ChangePacks     6 ||cpk_...krzexje   [ ] OPEN        Refactor verificatio... 1m       ||State       [ ] OPEN        |
+|  Baselines         ||cpk_...tzmcxqu   [?] SEALED      Fix daemon race cond... 1m       ||Risk        not evaluated   |
+|  Resources         ||cpk_...mvpg3ea   [?] SEALED      Add remote conforman... 1m       ||Generation  2               |
+|  Evidence          ||cpk_...2gzmn7e   [ok] PROMOTED   Update protocol schemas 1m       ||Created     1m ago -        |
+|  Events            ||                                                                  ||2026-10-29 00:35:14 UTC by  |
+|  Authority         ||                                                                  ||pri_...lklnzq6eeeu          |
+|                    ||                                                                  ||Changed     0 files  +0 -0  |
+| SYSTEM             ||                                                                  ||Evidence    0               |
+|  Projects          ||                                                                  ||                            |
+|  Inbox           2 ||                                                                  ||[!] Promote: pack is OPEN;  |
+|  Providers         ||                                                                  ||seal and qualify it first   |
+|  Doctor            ||                                                                  ||x explain                   |
 |  Extensions        ||                                                                  ||                            |
-|                    ||                                                                  ||[!] Promote: pack is OPEN;  |
-|                    ||                                                                  ||seal and qualify it first   |
-|                    ||                                                                  ||x explain                   |
-|                    ||                                                                  ||                            |
-|                    ||                                                                  ||Actions                     |
+|  Settings          ||                                                                  ||Actions                     |
 |                    ||                                                                  ||  Seal candidate            |
 |                    ||                                                                  ||  Abandon                   |
 |                    ||                                                                  ||  Quarantine                |

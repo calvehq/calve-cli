@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
 │  Overview        5 ││                                                                                           ││cpk_…hmr5jvoqyrbvmvpg3ea                   │
-│  Work              ││cpk_…r5jvoqyrbvmvpg3ea · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
-│  Change Graph      ││                                                                                           ││                                           │
-│› ChangePacks       ││Intent                                                                                     ││State       ◆ SEALED                       │
-│  Baselines         ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
-│  Evidence          ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
-│  Events            ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:10   │
-│                    ││Changes                                                                                    ││UTC by pri_…d7lklnzq6eeeu                  │
-│ SYSTEM             ││  2 files   +7 -2    ┌ Why is cpk_…oqyrbvmvpg3ea SEALED? ───────────────────────────────────┐Changed     2 files  +7 -2                 │
-│  Projects          ││                     │State: SEALED                                                         │Checks      1/1                            │
-│  Inbox           2 ││Verification         │                                                                      │Evidence    0                              │
-│  Doctor            ││  ✓ Verify           │Satisfied                                                             │Review      ◆ WAITING                      │
-│  Extensions        ││                     │  ✓ sealed candidate                                                  │                                           │
-│                    ││Risk                 │  ✓ org.calve.software.snapshot.verify is PASS                        │Intent                                     │
-│                    ││✓ Change size  ALLOW │(org.calve.software.snapshot-required)                                │HTTP conformance                           │
-│                    ││                     │                                                                      │                                           │
-│                    ││                     │Missing                                                               │! Promote: missing: approved review        │
-│                    ││                     │  × approved review — no approval for the current candidate           │x explain                                  │
+│  Intents           ││cpk_…r5jvoqyrbvmvpg3ea · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││Intent                                                                                     ││State       ◆ SEALED                       │
+│› ChangePacks       ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
+│  Baselines         ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
+│  Resources         ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:10   │
+│  Evidence          ││Changes                                                                                    ││UTC by pri_…d7lklnzq6eeeu                  │
+│  Events            ││  2 files   +7 -2    ┌ Why is cpk_…oqyrbvmvpg3ea SEALED? ───────────────────────────────────┐Changed     2 files  +7 -2                 │
+│  Authority         ││                     │State: SEALED                                                         │Checks      1/1                            │
+│                    ││Verification         │                                                                      │Evidence    0                              │
+│ SYSTEM             ││  ✓ Verify           │Satisfied                                                             │Review      ◆ WAITING                      │
+│  Projects          ││                     │  ✓ sealed candidate                                                  │                                           │
+│  Inbox           2 ││Risk                 │  ✓ org.calve.software.snapshot.verify is PASS                        │Intent                                     │
+│  Providers         ││✓ Change size  ALLOW │(org.calve.software.snapshot-required)                                │HTTP conformance                           │
+│  Doctor            ││                     │                                                                      │                                           │
+│  Extensions        ││                     │Missing                                                               │! Promote: missing: approved review        │
+│  Settings          ││                     │  × approved review — no approval for the current candidate           │x explain                                  │
 │                    ││                     │                                                                      │                                           │
 │                    ││                     └──────────────────────────────────────────────────────────────────────┘Actions                                    │
 │                    ││                                                                                           ││  Run snapshot verification                │

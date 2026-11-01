@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePacks ──────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ All 0  Open 0  Sealed 0  Qualified 0  Promoted 0  Quarantined 0                           ││Select an item to inspect it.              │
 │  Overview        5 ││                                                                                           ││                                           │
-│  Work              ││                                                                                           ││                                           │
-│  Change Graph      ││No ChangePacks yet.                                                                        ││                                           │
-│› ChangePacks     0 ││                                                                                           ││                                           │
-│  Baselines         ││Create one with :pack create "title", capture files, then seal it to start review.         ││                                           │
+│  Intents           ││                                                                                           ││                                           │
+│  Work              ││No ChangePacks yet.                                                                        ││                                           │
+│  Change Graph      ││                                                                                           ││                                           │
+│› ChangePacks     0 ││Create one with :pack create "title", capture files, then seal it to start review.         ││                                           │
+│  Baselines         ││                                                                                           ││                                           │
+│  Resources         ││                                                                                           ││                                           │
 │  Evidence          ││                                                                                           ││                                           │
 │  Events            ││                                                                                           ││                                           │
+│  Authority         ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │ SYSTEM             ││                                                                                           ││                                           │
 │  Projects          ││                                                                                           ││                                           │
 │  Inbox           2 ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││                                           │
 │  Doctor            ││                                                                                           ││                                           │
 │  Extensions        ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

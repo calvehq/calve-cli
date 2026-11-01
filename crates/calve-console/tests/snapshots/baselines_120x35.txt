@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Baselines ───────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ID               Label                 Packs  State               ││Baseline                    │
 │  Overview        5 ││bsl_…xbszifs2i   staging               1      ✓ VALID     active  ││bsl_…rnhbjixbszifs2i        │
-│  Work              ││                                                                  ││staging                     │
-│  Change Graph      ││                                                                  ││                            │
-│  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
-│› Baselines       1 ││                                                                  ││Members     1               │
-│  Evidence          ││                                                                  ││Heads       1               │
-│  Events            ││                                                                  ││Active      yes             │
-│                    ││                                                                  ││                            │
-│ SYSTEM             ││                                                                  ││Actions                     │
-│  Projects          ││                                                                  ││  Activate                  │
-│  Inbox           2 ││                                                                  ││  Validate                  │
-│  Doctor            ││                                                                  ││  Plan materialization      │
-│  Extensions        ││                                                                  ││  Set alias                 │
-│                    ││                                                                  ││  Graph                     │
-│                    ││                                                                  ││  Compare with…             │
-│                    ││                                                                  ││  a all actions             │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││                            │
+│  Intents           ││                                                                  ││staging                     │
+│  Work              ││                                                                  ││                            │
+│  Change Graph      ││                                                                  ││Validation  ✓ VALID         │
+│  ChangePacks       ││                                                                  ││Members     1               │
+│› Baselines       1 ││                                                                  ││Heads       1               │
+│  Resources         ││                                                                  ││Active      yes             │
+│  Evidence          ││                                                                  ││                            │
+│  Events            ││                                                                  ││Actions                     │
+│  Authority         ││                                                                  ││  Activate                  │
+│                    ││                                                                  ││  Validate                  │
+│ SYSTEM             ││                                                                  ││  Plan materialization      │
+│  Projects          ││                                                                  ││  Set alias                 │
+│  Inbox           2 ││                                                                  ││  Graph                     │
+│  Providers         ││                                                                  ││  Compare with…             │
+│  Doctor            ││                                                                  ││  a all actions             │
+│  Extensions        ││                                                                  ││                            │
+│  Settings          ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

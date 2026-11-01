@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ───────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││Verification summary        │
 │  Overview        5 ││                                                                  ││                            │
-│  Work              ││Check                   Status           Output         Duration  ││✓ All checks passed         │
-│  Change Graph      ││Verify                  ✓ PASS           no findings    —         ││1 / 1 checks                │
-│› ChangePacks       ││                                                                  ││Last run    1m ago ·        │
-│  Baselines         ││                                                                  ││2026-10-29 00:35:12 UTC     │
-│  Evidence          ││                                                                  ││                            │
-│  Events            ││                                                                  ││Verify                      │
-│                    ││                                                                  ││Status      ✓ PASS          │
-│ SYSTEM             ││                                                                  ││enter details               │
-│  Projects          ││                                                                  ││                            │
-│  Inbox           2 ││                                                                  ││Actions                     │
-│  Doctor            ││                                                                  ││  Run snapshot verification │
-│  Extensions        ││                                                                  ││  Run language checks       │
-│                    ││                                                                  ││  Evaluate change size      │
-│                    ││                                                                  ││  Approve                   │
-│                    ││                                                                  ││  Reject                    │
-│                    ││                                                                  ││  Refresh qualification     │
-│                    ││                                                                  ││  a all actions             │
+│  Intents           ││Check                   Status           Output         Duration  ││✓ All checks passed         │
+│  Work              ││Verify                  ✓ PASS           no findings    —         ││1 / 1 checks                │
+│  Change Graph      ││                                                                  ││Last run    1m ago ·        │
+│› ChangePacks       ││                                                                  ││2026-10-29 00:35:12 UTC     │
+│  Baselines         ││                                                                  ││                            │
+│  Resources         ││                                                                  ││Verify                      │
+│  Evidence          ││                                                                  ││Status      ✓ PASS          │
+│  Events            ││                                                                  ││enter details               │
+│  Authority         ││                                                                  ││                            │
+│                    ││                                                                  ││Actions                     │
+│ SYSTEM             ││                                                                  ││  Run snapshot verification │
+│  Projects          ││                                                                  ││  Run language checks       │
+│  Inbox           2 ││                                                                  ││  Evaluate change size      │
+│  Providers         ││                                                                  ││  Approve                   │
+│  Doctor            ││                                                                  ││  Reject                    │
+│  Extensions        ││                                                                  ││  Refresh qualification     │
+│  Settings          ││                                                                  ││  a all actions             │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │
 │                    ││                                                                  ││                            │

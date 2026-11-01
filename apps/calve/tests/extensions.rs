@@ -559,6 +559,39 @@ fn publisher_switch_and_catalog_reset() {
     let switch = ["extension", "switch-publisher", id, "--catalog", "second"];
     assert!(env.fails(&switch).contains("yes"));
     let moved = env.ok(&[&switch[..], &["--yes", "--acknowledge-native"]].concat());
+    // A refused reset leaves the catalog as it was.
+    let bad_root = env.path().join("bad-root.json");
+    fs::write(&bad_root, b"{}").unwrap();
+    env.fails(&[
+        "extension",
+        "catalog",
+        "reset",
+        "second",
+        "--root",
+        bad_root.to_str().unwrap(),
+        "--root-digest",
+        &sha(b"{}"),
+        "--yes",
+        "--i-understand-rollback-risk",
+    ]);
+    assert!(
+        env.ok(&["extension", "catalog", "list"])
+            .to_string()
+            .contains("second")
+    );
+    // A refused add can be tried again.
+    env.fails(&[
+        "extension",
+        "catalog",
+        "add",
+        "third",
+        second.path().to_str().unwrap(),
+        "--root",
+        bad_root.to_str().unwrap(),
+        "--root-digest",
+        &sha(b"{}"),
+    ]);
+    trust(&env, "third", &second);
     assert_eq!(moved["catalog"], "second", "{moved}");
 
     let root = env.path().join("example-root.json");

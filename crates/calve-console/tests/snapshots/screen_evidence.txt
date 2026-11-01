@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Evidence ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ID               Type             Producer       Attached to          Status      Created  ││Evidence evd_agqykfit4b7ohcwcdd3j4phcju    │
 │  Overview        5 ││evd_…d3j4phcju   Rejection/v1     pri_…lnzq6eeeu Fix daemon race con… ✓ VALID     1m       ││                                           │
-│  Work              ││                                                                                           ││Type        Rejection/v1                   │
-│  Change Graph      ││                                                                                           ││Digest      sha256:b11d06b0…fb8ec2ee7bdda3 │
-│  ChangePacks       ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:13   │
-│  Baselines         ││                                                                                           ││UTC                                        │
-│› Evidence          ││                                                                                           ││Producer    pri_agqykfh2bj3htd7lklnzq6eeeu │
-│  Events            ││                                                                                           ││Media                                      │
-│                    ││                                                                                           ││application/vnd.calve.review+json          │
-│ SYSTEM             ││                                                                                           ││Attached to Fix daemon race condition      │
-│  Projects          ││                                                                                           ││Generation  2                              │
-│  Inbox           2 ││                                                                                           ││Status      ✓ VALID                        │
-│  Doctor            ││                                                                                           ││                                           │
-│  Extensions        ││                                                                                           ││Used by                                    │
-│                    ││                                                                                           ││  Loading…                                 │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││Actions                                    │
-│                    ││                                                                                           ││  Show evidence                            │
-│                    ││                                                                                           ││  a all actions                            │
+│  Intents           ││                                                                                           ││Type        Rejection/v1                   │
+│  Work              ││                                                                                           ││Digest      sha256:b11d06b0…fb8ec2ee7bdda3 │
+│  Change Graph      ││                                                                                           ││Created     1m ago · 2026-10-29 00:35:13   │
+│  ChangePacks       ││                                                                                           ││UTC                                        │
+│  Baselines         ││                                                                                           ││Producer    pri_agqykfh2bj3htd7lklnzq6eeeu │
+│  Resources         ││                                                                                           ││Media                                      │
+│› Evidence          ││                                                                                           ││application/vnd.calve.review+json          │
+│  Events            ││                                                                                           ││Attached to Fix daemon race condition      │
+│  Authority         ││                                                                                           ││Generation  2                              │
+│                    ││                                                                                           ││Status      ✓ VALID                        │
+│ SYSTEM             ││                                                                                           ││                                           │
+│  Projects          ││                                                                                           ││Used by                                    │
+│  Inbox           2 ││                                                                                           ││  Loading…                                 │
+│  Providers         ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││Actions                                    │
+│  Extensions        ││                                                                                           ││  Show evidence                            │
+│  Settings          ││                                                                                           ││  a all actions                            │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

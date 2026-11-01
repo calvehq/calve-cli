@@ -763,6 +763,7 @@ impl Project {
             .collect();
         if !apply || !blocked.is_empty() {
             return Ok(json!({"applied":false,"plan":plan,
+            "code":(!blocked.is_empty()).then_some("UNSAFE_MATERIALIZATION"),
             "blocked":blocked.iter().map(|step| step["path"].clone()).collect::<Vec<_>>(),
             "note": if blocked.is_empty() {
                 "review the plan, then rerun with --apply"

@@ -224,12 +224,34 @@ pub fn search(query: Option<&str>) -> Result<Value> {
     Ok(json!(out))
 }
 
+/// Installs refuse revocation data past its maximum age: refresh first.
+fn require_fresh(catalog: Option<&str>) -> Result<()> {
+    let paths = machine_paths()?;
+    for name in install::catalog_names(&paths)? {
+        if catalog.is_some_and(|c| c != name) {
+            continue;
+        }
+        if let Ok((c, _)) = install::open_catalog(&paths, &name)
+            && freshness(c.accepted_at, REVOCATION_MAX_AGE) == install::Freshness::Expired
+        {
+            return Err(crate::coded(
+                "CATALOG_STALE",
+                format!(
+                    "catalog {name} has expired revocation data; run `calve extension catalog refresh {name}`"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn install_package(
     id: &str,
     version: Option<&str>,
     catalog: Option<&str>,
     acknowledge_native: bool,
 ) -> Result<Value> {
+    require_fresh(catalog)?;
     let rec = installer()?.install(&InstallRequest {
         id,
         version,
@@ -649,6 +671,7 @@ impl Project {
         if !widening.is_empty() {
             return Ok(
                 json!({"id": id, "installed_version": r.version, "active_version": current.version, "updated": false,
+                "code": (!widening.is_empty()).then_some("EXTENSION_PERMISSION_REQUIRED"),
                 "permission_widening": capability_names(&widening),
                 "reason": "new version requests more host capabilities; rerun with --grant for each to accept"}),
             );

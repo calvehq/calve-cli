@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfiycb375huv2wnokrbreu ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
 │  Overview        5 ││                                                                                           ││cpk_…ycb375huv2wnokrbreu                   │
-│  Work              ││cpk_…b375huv2wnokrbreu · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
-│  Change Graph      ││                                                                                           ││                                           │
-│› ChangePacks     6 ││Changes                                                                                    ││State       ! QUARANTINED                  │
-│  Baselines         ││  0 files   +0 -0                                                                          ││Risk        not evaluated                  │
-│  Evidence          ││                                                                                           ││Generation  1                              │
-│  Events            ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-29 00:35:14   │
-│                    ││                                                                                           ││UTC by pri_…d7lklnzq6eeeu                  │
-│ SYSTEM             ││                                                                                           ││Changed     0 files  +0 -0                 │
-│  Projects          ││                                                                                           ││Evidence    0                              │
+│  Intents           ││cpk_…b375huv2wnokrbreu · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││Changes                                                                                    ││State       ! QUARANTINED                  │
+│› ChangePacks     6 ││  0 files   +0 -0                                                                          ││Risk        not evaluated                  │
+│  Baselines         ││                                                                                           ││Generation  1                              │
+│  Resources         ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-29 00:35:14   │
+│  Evidence          ││                                                                                           ││UTC by pri_…d7lklnzq6eeeu                  │
+│  Events            ││                                                                                           ││Changed     0 files  +0 -0                 │
+│  Authority         ││                                                                                           ││Evidence    0                              │
+│                    ││                                                                                           ││                                           │
+│ SYSTEM             ││                                                                                           ││! Promote: pack is quarantined             │
+│  Projects          ││                                                                                           ││x explain                                  │
 │  Inbox           2 ││                                                                                           ││                                           │
-│  Doctor            ││                                                                                           ││! Promote: pack is quarantined             │
-│  Extensions        ││                                                                                           ││x explain                                  │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││Actions                                    │
-│                    ││                                                                                           ││  Release quarantine                       │
-│                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││Actions                                    │
+│  Doctor            ││                                                                                           ││  Release quarantine                       │
+│  Extensions        ││                                                                                           ││  a all actions                            │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

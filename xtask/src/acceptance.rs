@@ -82,7 +82,7 @@ pub const SCENARIOS: [Scenario; 16] = [
         "extensions",
         "scenario_n_third_party_extension",
         false,
-        Some("evidence only: creating resource instances needs integration metadata"),
+        None,
     ),
     s('O', "examples", "scenario_o", false, None),
     s(

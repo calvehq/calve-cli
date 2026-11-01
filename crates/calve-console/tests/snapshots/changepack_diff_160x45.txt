@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││File                                       │
 │  Overview        5 ││                                                                                           ││crates/runner/http.rs                      │
-│  Work              ││2 files changed                crates/runner/http.rs  file 1/2                             ││                                           │
-│  Change Graph      ││crates/runner/http.rs    +6 -2 @@ -1 +1 @@                                                 ││Status      ○ MODIFIED                     │
-│› ChangePacks       ││crates/runner/mod.rs     +1 -0    1      -pub const DEFAULT_TIMEOUT: u64 = 10;             ││Lines       +6 -2                          │
-│  Baselines         ││                                       1 +use std::time::Duration;                         ││Size        119 bytes                      │
-│  Evidence          ││                                       2 +                                                 ││Digest      sha256:c717a…6edecb3954f       │
-│  Events            ││                                       3 +pub const DEFAULT_TIMEOUT: u64 = 30;             ││Hunks       1                              │
-│                    ││                                  2    4                                                   ││                                           │
-│ SYSTEM             ││                                  3      -pub fn run() {}                                  ││Actions                                    │
-│  Projects          ││                                       5 +pub fn run() {                                   ││  Run snapshot verification                │
-│  Inbox           2 ││                                       6 +    retry(3, Duration::from_secs(1));            ││  Run language checks                      │
-│  Doctor            ││                                       7 +}                                                ││  Evaluate change size                     │
-│  Extensions        ││                                                                                           ││  Approve                                  │
-│                    ││                                                                                           ││  Reject                                   │
-│                    ││                                                                                           ││  Refresh qualification                    │
-│                    ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Intents           ││2 files changed                crates/runner/http.rs  file 1/2                             ││                                           │
+│  Work              ││crates/runner/http.rs    +6 -2 @@ -1 +1 @@                                                 ││Status      ○ MODIFIED                     │
+│  Change Graph      ││crates/runner/mod.rs     +1 -0    1      -pub const DEFAULT_TIMEOUT: u64 = 10;             ││Lines       +6 -2                          │
+│› ChangePacks       ││                                       1 +use std::time::Duration;                         ││Size        119 bytes                      │
+│  Baselines         ││                                       2 +                                                 ││Digest      sha256:c717a…6edecb3954f       │
+│  Resources         ││                                       3 +pub const DEFAULT_TIMEOUT: u64 = 30;             ││Hunks       1                              │
+│  Evidence          ││                                  2    4                                                   ││                                           │
+│  Events            ││                                  3      -pub fn run() {}                                  ││Actions                                    │
+│  Authority         ││                                       5 +pub fn run() {                                   ││  Run snapshot verification                │
+│                    ││                                       6 +    retry(3, Duration::from_secs(1));            ││  Run language checks                      │
+│ SYSTEM             ││                                       7 +}                                                ││  Evaluate change size                     │
+│  Projects          ││                                                                                           ││  Approve                                  │
+│  Inbox           2 ││                                                                                           ││  Reject                                   │
+│  Providers         ││                                                                                           ││  Refresh qualification                    │
+│  Doctor            ││                                                                                           ││  a all actions                            │
+│  Extensions        ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

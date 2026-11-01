@@ -183,7 +183,7 @@ pub(crate) fn resource_state(
 }
 
 /// Ordered candidate-content projection digest (CCE, §12).
-fn cce(effects: &[AppliedEffect]) -> String {
+pub(crate) fn cce(effects: &[AppliedEffect]) -> String {
     let p: Vec<String> = effects.iter().map(applied_projection).collect();
     crate::journal::sha256_hex(&crate::journal::jcs(&json!(p)))
 }
@@ -954,6 +954,7 @@ impl Project {
                             [&replacement],
                         )?;
                         tx.commit()?;
+                        crate::journal::fault("supersede.S7.before_ack");
                         let (_, vp) = self.commitment(&pack_id)?;
                         let (_, vp2) = self.commitment(&replacement)?;
                         j.append("ack", json!({"step": "relink", "outcome": {"receipt": {"result": {"version_p": vp, "version_p2": vp2}}}})).map_err(corrupt)?;
@@ -1045,7 +1046,13 @@ impl Project {
         Ok(
             json!({"saga": id, "state": saga.state, "pack": saga.data.get("pack"),
             "replacement": saga.data.get("replacement"), "outcome": saga.data.get("outcome"),
-            "duplicates_compensated": saga.data.get("duplicates_compensated")}),
+            "duplicates_compensated": saga.data.get("duplicates_compensated"),
+            // A Done saga passed S6: the replacement's resource and candidate-content states equal
+            // the reference. The candidate digest itself still differs: the effects are new.
+            "rse_holds": (saga.state == DONE).then_some(true),
+            "cce_holds": (saga.state == DONE).then_some(true),
+            "reference_rse": saga.data.get("reference_rse"),
+            "reference_cce": saga.data.get("reference_cce")}),
         )
     }
 
@@ -1115,6 +1122,7 @@ impl Project {
                     ));
                 }
             }
+            crate::journal::fault("supersede.C1");
             // C2: undo a committed relink, compare-and-swap on both versions.
             if let (Some(vp), Some(before)) = (
                 saga.data.get("version_p").and_then(Value::as_i64),
@@ -1155,6 +1163,7 @@ impl Project {
                 [r],
             )?;
         }
+        crate::journal::fault("supersede.C2");
         // C3.
         Self::saga_state(
             j,

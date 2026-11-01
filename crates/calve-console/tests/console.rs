@@ -1814,3 +1814,135 @@ fn recovery_catalog_and_t2_surfaces() {
     h.key(KeyCode::Enter);
     assert_eq!(h.commands.len(), before + 1);
 }
+
+/// The routes the plan names over commands the CLI already serves.
+#[test]
+fn project_and_system_routes_render_their_data() {
+    let mut h = Harness::new(160, 45);
+    for (key, value) in [
+        (
+            "intents",
+            json!([{"id": "int_1", "title": "Ship it", "state": "OPEN"}]),
+        ),
+        (
+            "intent:int_1",
+            json!({"id": "int_1", "title": "Ship it", "state": "OPEN",
+            "description": "why", "linked_packs": ["cpk_1"]}),
+        ),
+        (
+            "resources",
+            json!([{"path": "src/lib.rs", "kind": "file", "digest": "sha256:ab"}]),
+        ),
+        ("principals", json!([{"id": "pri_1", "kind": "KEY"}])),
+        (
+            "grants",
+            json!([{"digest": "sha256:cd", "revoked": true, "grant": {"subject": "pri_1"}}]),
+        ),
+        (
+            "providers",
+            json!([{"id": "shell", "kind": "local-process", "source": "global"}]),
+        ),
+        (
+            "settings",
+            json!({"color": "auto", "page_size": 100, "sources": ["/c/config.toml"],
+            "warnings": ["unapproved"]}),
+        ),
+    ] {
+        h.data.insert(key.to_owned(), value);
+    }
+    for (route, needles) in [
+        (Route::Intents, &["Ship it"][..]),
+        (Route::Intent("int_1".into()), &["why", "cpk_1"]),
+        (Route::Resources, &["src/lib.rs"]),
+        (Route::Authority, &["pri_1", "revoked"]),
+        (Route::Providers, &["shell", "local-process"]),
+        (Route::Settings, &["page_size", "unapproved"]),
+    ] {
+        h.app.navigate(route.clone());
+        h.pump();
+        let screen = h.render();
+        for needle in needles {
+            assert!(screen.contains(needle), "{route:?}: {needle}\n{screen}");
+        }
+        assert!(!screen.contains("\"envelope\""), "{route:?} shows raw JSON");
+    }
+}
+
+/// Hostile text on a surface a screen forgot to clean still cannot reach the terminal.
+#[test]
+fn no_disguised_character_survives_the_last_pass() {
+    let mut buffer = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 40, 1));
+    buffer.set_string(
+        0,
+        0,
+        "a\u{202e}b\u{200b}c\u{e0041}d\u{061c}e\u{1b}f",
+        ratatui::style::Style::default(),
+    );
+    calve_console::render::scrub(&mut buffer);
+    let text: String = buffer.content.iter().map(|c| c.symbol()).collect();
+    assert!(
+        !text.chars().any(calve_console::text::disguises),
+        "{text:?}"
+    );
+    assert!(text.contains('a') && text.contains('f'));
+}
+
+/// Hostile values in every new table, through the real draw path.
+#[test]
+fn hostile_text_in_tables_is_inert() {
+    let hostile = "x\u{202e}gnp.exe\u{1b}[31m\u{200b}y";
+    let mut h = Harness::new(120, 35);
+    h.data.insert(
+        "resources".into(),
+        json!([{"path": hostile, "kind": hostile, "digest": hostile}]),
+    );
+    h.data.insert(
+        "providers".into(),
+        json!([{"id": hostile, "kind": hostile, "source": hostile}]),
+    );
+    for route in [Route::Resources, Route::Providers] {
+        h.app.navigate(route.clone());
+        h.pump();
+        let screen = h.render();
+        assert!(
+            !screen
+                .chars()
+                .any(|c| c != '\n' && calve_console::text::disguises(c)),
+            "{route:?}\n{screen}"
+        );
+    }
+}
+
+/// Narrow and in-between widths of §48.4 render every primary screen without panicking.
+#[test]
+fn every_width_renders() {
+    for width in [70, 89, 90, 119] {
+        let mut h = Harness::new(width, 30);
+        for route in [
+            Route::Overview,
+            Route::Work,
+            Route::ChangePacks,
+            Route::Doctor,
+            Route::Events,
+        ] {
+            h.app.navigate(route.clone());
+            h.pump();
+            assert!(!h.render().is_empty(), "{route:?} at {width}");
+        }
+    }
+}
+
+mod properties {
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Sanitizing removes every disguised character from anything (CT9), and is stable.
+        #[test]
+        fn sanitize_is_total_and_idempotent(input in any::<String>(), extra in 0u32..0x11_0000) {
+            let mixed = format!("{input}{}", char::from_u32(extra).unwrap_or('x'));
+            let clean = calve_console::text::line(&mixed);
+            prop_assert!(!clean.chars().any(calve_console::text::disguises));
+            prop_assert_eq!(calve_console::text::line(&clean), clean);
+        }
+    }
+}

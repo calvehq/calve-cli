@@ -426,6 +426,15 @@ impl Catalog {
                 Ok(())
             }
         };
+        // Trust state is per machine and processes share it: one transition at a time, and only
+        // from the state this process actually read, so a stale one can never lower the floors.
+        let lock = fs::File::create(self.dir.join("transition.lock")).map_err(io)?;
+        lock.lock().map_err(io)?;
+        if read_current(&self.dir).is_some_and(|k| k != self.active) {
+            return Err(GenError::Io(
+                "another process changed this catalog; try again".into(),
+            ));
+        }
         let n = self.active + 1;
         let tmp = self.dir.join(format!("gen-{n}.tmp"));
         let _ = fs::remove_dir_all(&tmp);
@@ -604,14 +613,7 @@ impl Catalog {
         let intact = |k: u64, st: &Value| {
             state_digest(&gen_dir(k)).is_ok_and(|d| Some(d.as_str()) == st["state_digest"].as_str())
         };
-        let current: Option<u64> = fs::read(dir.join("CURRENT"))
-            .ok()
-            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-            .and_then(|c| {
-                let k = c["gen"].as_u64()?;
-                let st = fs::read(gen_dir(k).join("state.json")).ok()?;
-                (sha(&st) == c["state_sha256"].as_str()?).then_some(k)
-            });
+        let current = read_current(dir);
         let active = match current {
             Some(k) => k,
             None => {
@@ -765,6 +767,27 @@ impl Catalog {
             serde_json::to_vec(&log).unwrap(),
         )
         .map_err(io)?;
-        Catalog::bootstrap(dir, root, pinned, mirror)
+        let reset = Catalog::bootstrap(dir, root, pinned, mirror);
+        if reset.is_err() {
+            // The old trust state goes back: a refused reset must leave the catalog as it was.
+            for e in fs::read_dir(dir).map_err(io)?.filter_map(|e| e.ok()) {
+                if !e.file_name().to_string_lossy().starts_with("archive-") {
+                    let _ = fs::remove_dir_all(e.path()).or_else(|_| fs::remove_file(e.path()));
+                }
+            }
+            for e in fs::read_dir(&archive).map_err(io)?.filter_map(|e| e.ok()) {
+                fs::rename(e.path(), dir.join(e.file_name())).map_err(io)?;
+            }
+            let _ = fs::remove_dir(&archive);
+        }
+        reset
     }
+}
+
+/// The activated generation `CURRENT` names, if its state file is intact.
+fn read_current(dir: &Path) -> Option<u64> {
+    let c: Value = serde_json::from_slice(&fs::read(dir.join("CURRENT")).ok()?).ok()?;
+    let k = c["gen"].as_u64()?;
+    let st = fs::read(dir.join(format!("gen-{k}")).join("state.json")).ok()?;
+    (sha(&st) == c["state_sha256"].as_str()?).then_some(k)
 }

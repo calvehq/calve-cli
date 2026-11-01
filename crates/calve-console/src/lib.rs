@@ -354,7 +354,14 @@ async fn event_loop(
                     app.connection = app.connection.after(connection(backend));
                     input::on_response(&mut app, &key, result);
                 } else if key.starts_with("cmd:") {
-                    input::on_response(&mut app, &key, result);
+                    // A dialog for the Project left behind must not act on this one.
+                    let acknowledgment = matches!(
+                        &result,
+                        Err(error) if error.contains("T2_ACKNOWLEDGMENT_REQUIRED")
+                    );
+                    if !acknowledgment {
+                        input::on_response(&mut app, &key, result);
+                    }
                 }
             }
             _ = tick.tick() => {

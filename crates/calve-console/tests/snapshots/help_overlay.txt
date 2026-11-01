@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ │NAVIGATION                                                            │ector ─────────────────┐
 │ PROJECT            ││ │  j / ↓       next                                                    │ary  Relations         │
 │  Overview        5 ││ │  k / ↑       previous                                                │bility  Raw  [ ]       │
-│  Work              ││c│  gg / G      first / last                                            │ufbyifoybnnpkrzexje    │
-│  Change Graph      ││ │  h l         outward / inward                                        │tor verification rules │
-│› ChangePacks       ││C│  enter       open                                                    │                       │
-│  Baselines         ││ │  esc         back / close                                            │       ○ OPEN          │
-│  Evidence          ││ │  tab         next pane or tab                                        │       not evaluated   │
-│  Events            ││ │  g           go to                                                   │ation  2               │
-│                    ││ │  alt+← →     history                                                 │ed     1m ago ·        │
-│ SYSTEM             ││ │                                                                      │10-29 00:35:13 UTC by  │
-│  Projects          ││ │THIS SCREEN                                                           │d7lklnzq6eeeu          │
-│  Inbox           2 ││ │  tab         tabs                                                    │ed     1 files  +1 -0  │
-│  Doctor            ││ │  a           actions                                                 │nce    0               │
-│  Extensions        ││ │  x           explain                                                 │                       │
-│                    ││ │  esc         back                                                    │mote: pack is OPEN;    │
-│                    ││ │  a           contextual actions                                      │and qualify it first   │
-│                    ││ │  x           explain state                                           │lain                   │
-│                    ││ │  e           evidence                                                │                       │
-│                    ││ │  A           abandon                                                 │ns                     │
+│  Intents           ││c│  gg / G      first / last                                            │ufbyifoybnnpkrzexje    │
+│  Work              ││ │  h l         outward / inward                                        │tor verification rules │
+│  Change Graph      ││C│  enter       open                                                    │                       │
+│› ChangePacks       ││ │  esc         back / close                                            │       ○ OPEN          │
+│  Baselines         ││ │  tab         next pane or tab                                        │       not evaluated   │
+│  Resources         ││ │  g           go to                                                   │ation  2               │
+│  Evidence          ││ │  alt+← →     history                                                 │ed     1m ago ·        │
+│  Events            ││ │                                                                      │10-29 00:35:13 UTC by  │
+│  Authority         ││ │THIS SCREEN                                                           │d7lklnzq6eeeu          │
+│                    ││ │  tab         tabs                                                    │ed     1 files  +1 -0  │
+│ SYSTEM             ││ │  a           actions                                                 │nce    0               │
+│  Projects          ││ │  x           explain                                                 │                       │
+│  Inbox           2 ││ │  esc         back                                                    │mote: pack is OPEN;    │
+│  Providers         ││ │  a           contextual actions                                      │and qualify it first   │
+│  Doctor            ││ │  x           explain state                                           │lain                   │
+│  Extensions        ││ │  e           evidence                                                │                       │
+│  Settings          ││ │  A           abandon                                                 │ns                     │
 │                    ││ │  Q           quarantine                                              │l candidate            │
 │                    ││ │                                                                      │ndon                   │
 │                    ││ │GLOBAL                                                                │rantine                │

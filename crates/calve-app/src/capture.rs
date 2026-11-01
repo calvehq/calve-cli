@@ -534,6 +534,14 @@ impl Project {
                 match state.as_str() {
                     "SUCCEEDED" => break 'attempts,
                     "RUNNING" | "STARTING" | "PENDING" => live = Some((n, wu, exe, lease)),
+                    // Someone cancelled it: that is a decision, not a lost attempt to repeat.
+                    "CANCELLED" if self.effects_of(&pack, &[wu]).await.is_empty() => {
+                        return Err(crate::detailed(
+                            "CAPTURE_INCOMPLETE",
+                            format!("capture {id} was cancelled; roll it back or start it again"),
+                            json!({"session": id, "attempt": n, "execution": exe}),
+                        ));
+                    }
                     // Effects of an execution that did not succeed can never be promoted, so a
                     // new attempt would only add to an unpromotable candidate.
                     _ if !self.effects_of(&pack, &[wu]).await.is_empty() => {
@@ -961,13 +969,16 @@ impl Project {
                 let report = self.run_capture(comp, vec![]).await?;
                 let after = self.pack(&pack).await?;
                 let pre_state: Vec<_> = after.candidate_effects[..pre.len()].to_vec();
+                crate::journal::fault("capture.compensate.after_run");
                 let rse_holds =
                     crate::supersede::resource_state(Some(&d), &after.candidate_effects)
                         == crate::supersede::resource_state(Some(&d), &pre_state);
+                let cce_holds = crate::supersede::cce(&after.candidate_effects)
+                    == crate::supersede::cce(&pre_state);
                 self.mark_capture(id, "Compensated", json!({"compensation_session": report["session"], "rse_holds": rse_holds, "cce_holds": false}))?;
                 Ok(
                     json!({"session": id, "mode": "compensate", "compensation_session": report["session"],
-                    "rse_holds": rse_holds, "cce_holds": false,
+                    "rse_holds": rse_holds, "cce_holds": cce_holds,
                     "note": "the pack's effects now include the capture and its compensation, so candidate content differs from the pre-capture candidate (CCE); its resource state equals it (RSE)"}),
                 )
             }

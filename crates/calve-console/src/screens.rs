@@ -290,6 +290,8 @@ fn field(app: &App, name: &str, value: impl AsRef<str>) -> Line<'static> {
 }
 
 fn field_state(app: &App, name: &str, state: &str) -> Line<'static> {
+    let state = line(state);
+    let state = state.as_str();
     let tone = state_tone(state);
     Line::from(vec![
         Span::styled(format!("{:<12}", name), app.theme.muted()),
@@ -527,6 +529,38 @@ pub fn build(app: &App) -> Screen {
         Route::Inbox => inbox(app),
         Route::Doctor => doctor(app),
         Route::Extensions => extensions(app),
+        Route::Intents => listing(
+            app,
+            "intents",
+            "intents",
+            &[
+                ("title", "Intent"),
+                ("state", "State"),
+                ("created_at", "Created"),
+            ],
+            "No Intents yet.",
+        ),
+        Route::Intent(id) => intent(app, id),
+        Route::Resources => listing(
+            app,
+            "resources",
+            "resources",
+            &[("path", "Resource"), ("kind", "Kind"), ("digest", "Digest")],
+            "No resources yet.",
+        ),
+        Route::Authority => authority(app),
+        Route::Providers => listing(
+            app,
+            "providers",
+            "providers",
+            &[
+                ("id", "Provider"),
+                ("kind", "Kind"),
+                ("source", "Defined in"),
+            ],
+            "No providers configured.",
+        ),
+        Route::Settings => settings(app),
     };
     if screen.hints.is_empty() {
         screen.hints = vec![
@@ -2297,7 +2331,7 @@ fn verify_inspector(app: &App, id: &str, pack: &Value) -> (Vec<Line<'static>>, O
             .flatten()
             .any(|a| a["id"] == "verify")
         {
-            "r rerun verification".into()
+            "Close this, then r reruns verification.".into()
         } else {
             "Rerun is not available in this state.".into()
         },
@@ -2910,10 +2944,12 @@ fn baseline(app: &App, id: &str) -> Screen {
     screen.hints = vec![
         ("tab", "tabs"),
         ("hjkl", "navigate"),
-        ("v", "list"),
         ("z", "fullscreen"),
         ("x", "explain"),
     ];
+    if app.tab() == 0 {
+        screen.hints.insert(2, ("v", "list"));
+    }
     screen
 }
 
@@ -3616,6 +3652,110 @@ fn recovery_actions(key: &str) -> Vec<PaletteItem> {
     }
 }
 
+/// A list the CLI already serves: the console adds no capability of its own.
+fn listing(
+    app: &App,
+    key: &str,
+    what: &str,
+    fields: &'static [(&'static str, &'static str)],
+    empty: &str,
+) -> Screen {
+    match status_or(app, key, what) {
+        Ok(value) => Screen::new(table_body(app, key.to_owned(), value, fields, empty)),
+        Err(screen) => *screen,
+    }
+}
+
+fn intent(app: &App, id: &str) -> Screen {
+    let key = format!("intent:{id}");
+    let value = match status_or(app, &key, "intent") {
+        Ok(value) => value,
+        Err(screen) => return *screen,
+    };
+    let mut rows = vec![];
+    for (field, name) in [
+        ("title", "Title"),
+        ("state", "State"),
+        ("description", "Description"),
+    ] {
+        rows.push(json!({"field": name, "value": value[field]}));
+    }
+    for pack in value["linked_packs"].as_array().into_iter().flatten() {
+        rows.push(json!({"field": "Pack", "value": pack}));
+    }
+    Screen::new(table_body(
+        app,
+        key,
+        &Value::Array(rows),
+        &[("field", "Field"), ("value", "Value")],
+        "Nothing to show.",
+    ))
+}
+
+fn authority(app: &App) -> Screen {
+    let principals = match status_or(app, "principals", "principals") {
+        Ok(value) => value,
+        Err(screen) => return *screen,
+    };
+    let grants = app.value("grants").cloned().unwrap_or(json!([]));
+    let mut rows: Vec<Value> = principals
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|p| json!({"id": p["id"], "record": "principal", "detail": p["kind"]}))
+        .collect();
+    rows.extend(grants.as_array().into_iter().flatten().map(|g| {
+        let state = if g["revoked"] == true {
+            "revoked"
+        } else {
+            "grant"
+        };
+        json!({"id": g["digest"], "record": state, "detail": g["grant"]["subject"]})
+    }));
+    Screen::new(table_body(
+        app,
+        "authority".into(),
+        &Value::Array(rows),
+        &[("id", "Id"), ("record", "Record"), ("detail", "Detail")],
+        "No principals.",
+    ))
+}
+
+fn settings(app: &App) -> Screen {
+    let value = match status_or(app, "settings", "settings") {
+        Ok(value) => value,
+        Err(screen) => return *screen,
+    };
+    let rows: Vec<Value> = value
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| !v.is_object() && !v.is_array())
+        .map(|(k, v)| json!({"key": k, "value": v}))
+        .chain(
+            value["sources"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|s| json!({"key": "source", "value": s})),
+        )
+        .chain(
+            value["warnings"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|w| json!({"key": "warning", "value": w})),
+        )
+        .collect();
+    Screen::new(table_body(
+        app,
+        "settings".into(),
+        &Value::Array(rows),
+        &[("key", "Setting"), ("value", "Value")],
+        "No settings.",
+    ))
+}
+
 fn doctor(app: &App) -> Screen {
     let value = match status_or(app, "doctor", "diagnostics") {
         Ok(value) => value,
@@ -3680,7 +3820,7 @@ fn doctor(app: &App) -> Screen {
                 state_cell(app, state),
                 muted(app, detail),
             ],
-            copy: None,
+            copy: Some(detail.clone()),
             tab: None,
             open: None,
             search: search(&[("text", name), ("status", state)]),
@@ -3704,7 +3844,10 @@ fn doctor(app: &App) -> Screen {
     let index = app
         .collections
         .get("doctor")
-        .map_or(0, |c| c.selected_index);
+        .and_then(|c| c.selected_id.as_deref())
+        .and_then(|id| id.strip_prefix("check:"))
+        .and_then(|i| i.parse().ok())
+        .unwrap_or(0);
     let findings = value["findings"].as_array().cloned().unwrap_or_default();
     let base = checks.len() - findings.len();
     screen.inspector = if index >= base {

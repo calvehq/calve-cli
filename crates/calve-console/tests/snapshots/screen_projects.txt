@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Projects ─────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
 │ PROJECT            ││Project                   Path                               Health                        ││openaevc                                   │
 │  Overview        5 ││openaevc                  /home/dev/openaevc                 ✓ HEALTHY            current  ││prj_01a18514-fa0c-7738-8217-144cfdf6d9b6   │
-│  Work              ││                                                                                           ││/home/dev/openaevc                         │
-│  Change Graph      ││                                                                                           ││                                           │
-│  ChangePacks       ││                                                                                           ││Health      ✓ HEALTHY                      │
-│  Baselines         ││                                                                                           ││                                           │
-│  Evidence          ││                                                                                           ││Actions                                    │
-│  Events            ││                                                                                           ││  Open                                     │
-│                    ││                                                                                           ││  Doctor                                   │
-│ SYSTEM             ││                                                                                           ││  Health check                             │
-│› Projects          ││                                                                                           ││  Register                                 │
-│  Inbox           2 ││                                                                                           ││  Relocate                                 │
-│  Doctor            ││                                                                                           ││  Unregister                               │
-│  Extensions        ││                                                                                           ││  a all actions                            │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
-│                    ││                                                                                           ││                                           │
+│  Intents           ││                                                                                           ││/home/dev/openaevc                         │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││                                                                                           ││Health      ✓ HEALTHY                      │
+│  ChangePacks       ││                                                                                           ││                                           │
+│  Baselines         ││                                                                                           ││Actions                                    │
+│  Resources         ││                                                                                           ││  Open                                     │
+│  Evidence          ││                                                                                           ││  Doctor                                   │
+│  Events            ││                                                                                           ││  Health check                             │
+│  Authority         ││                                                                                           ││  Register                                 │
+│                    ││                                                                                           ││  Relocate                                 │
+│ SYSTEM             ││                                                                                           ││  Unregister                               │
+│› Projects          ││                                                                                           ││  a all actions                            │
+│  Inbox           2 ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││                                           │
+│  Doctor            ││                                                                                           ││                                           │
+│  Extensions        ││                                                                                           ││                                           │
+│  Settings          ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │
 │                    ││                                                                                           ││                                           │

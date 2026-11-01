@@ -2,23 +2,23 @@
 ┌ Navigation ────────┐┌ Baseline bsl_agqykfig5z4rnhbjixbszifs2i ─────────────────────────┐┌ Inspector ─────────────────┐
 │ PROJECT            ││ Graph  Packs  Relations  History  Explain  Raw                   ││Baseline                    │
 │  Overview        5 ││                                                                  ││bsl_…rnhbjixbszifs2i        │
-│  Work              ││[✓ Update protocol …]                                             ││staging                     │
-│  Change Graph      ││                                                                  ││                            │
-│  ChangePacks       ││                                                                  ││Validation  ✓ VALID         │
-│› Baselines       1 ││                                                                  ││Members     1               │
-│  Evidence          ││                                                                  ││Heads       1               │
-│  Events            ││                                                                  ││Active      yes             │
-│                    ││                                                                  ││                            │
-│ SYSTEM             ││                                                                  ││Update protocol schemas     │
-│  Projects          ││                                                                  ││State       ✓ PROMOTED      │
-│  Inbox           2 ││                                                                  ││Pack                        │
-│  Doctor            ││                                                                  ││cpk_agqykfiaa54c5gmyaxc2gzmn│
-│  Extensions        ││                                                                  ││7e                          │
-│                    ││                                                                  ││Head        yes             │
-│                    ││                                                                  ││                            │
-│                    ││                                                                  ││Used by                     │
-│                    ││                                                                  ││  none                      │
-│                    ││                                                                  ││                            │
+│  Intents           ││[✓ Update protocol …]                                             ││staging                     │
+│  Work              ││                                                                  ││                            │
+│  Change Graph      ││                                                                  ││Validation  ✓ VALID         │
+│  ChangePacks       ││                                                                  ││Members     1               │
+│› Baselines       1 ││                                                                  ││Heads       1               │
+│  Resources         ││                                                                  ││Active      yes             │
+│  Evidence          ││                                                                  ││                            │
+│  Events            ││                                                                  ││Update protocol schemas     │
+│  Authority         ││                                                                  ││State       ✓ PROMOTED      │
+│                    ││                                                                  ││Pack                        │
+│ SYSTEM             ││                                                                  ││cpk_agqykfiaa54c5gmyaxc2gzmn│
+│  Projects          ││                                                                  ││7e                          │
+│  Inbox           2 ││                                                                  ││Head        yes             │
+│  Providers         ││                                                                  ││                            │
+│  Doctor            ││                                                                  ││Used by                     │
+│  Extensions        ││                                                                  ││  none                      │
+│  Settings          ││                                                                  ││                            │
 │                    ││                                                                  ││Parents                     │
 │                    ││                                                                  ││  none                      │
 │                    ││                                                                  ││                            │

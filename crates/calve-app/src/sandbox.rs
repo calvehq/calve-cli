@@ -608,7 +608,7 @@ pub fn restrict_self() {
     {
         use landlock::{ABI, Access, AccessFs, Ruleset, RulesetAttr};
         let _ = Ruleset::default()
-            .handle_access(AccessFs::from_all(ABI::V2))
+            .handle_access(AccessFs::from_all(ABI::V3))
             .and_then(|r| r.create())
             .and_then(|r| r.restrict_self());
     }

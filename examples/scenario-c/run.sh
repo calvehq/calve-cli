@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # §57 Scenario C — Pre-promotion reopen: generation 1 is sealed, verified and approved; reopen
 # makes generation 2; old verification and review show stale; generation 1's evidence and history
-# stay inspectable. DEVIATION: OpenAEVC v0.1.0 cannot promote a pack's effects after a reopen, so
-# steps 5-7 run on a superseding pack and the limit itself is asserted (see acceptance.md).
+# stay inspectable. OpenAEVC v0.1.0 cannot promote a pack's effects after a reopen, so for a pack
+# with effects steps 5-7 run on a superseding pack and the limit itself is asserted; the end of
+# this script runs the literal lifecycle on one pack. See the decision request in acceptance.md.
 source "$(dirname "$0")/../lib.sh"
 
 enable "$FILES_EXT"
@@ -57,3 +58,20 @@ expect "7 a different candidate" "$(test "$c1" != "$c2" && echo yes)" "yes"
 expect "8 old evidence readable" "$(calve evidence show "$evidence" | q "d['envelope']['body']['generation'] if 'envelope' in d else d['generation']")" "$g1"
 expect "8 old review kept" "$(calve pack review "$p" | q "sum(1 for r in d if r['generation'] == $g1)")" "1"
 expect "8 sealed candidate 1 in history" "$(calve view pack "$p" | q "any(v['generation'] == $g1 for v in d['verifications'])")" "true"
+
+# The literal lifecycle on one pack, where the protocol allows it: generation 1 carries no effects,
+# so nothing stale survives the reopen, and the same pack promotes at a later generation.
+e=$(calve pack create "Reopened empty" --require-review | get '["id"]')
+g1=$(generation "$e")
+calve pack seal "$e" --generation "$g1" >/dev/null
+calve pack approve "$e" --generation "$g1" --reason "empty" >/dev/null
+calve pack reopen "$e" --generation "$g1" >/dev/null
+expect "literal 4 review stale" "$(calve pack review "$e" | q "d[0]['stale']")" "true"
+echo "third" > "$PROJECT/b.txt"
+calve pack capture "$e" b.txt --generation "$(generation "$e")" >/dev/null
+g2=$(generation "$e")
+calve pack seal "$e" --generation "$g2" >/dev/null
+calve pack approve "$e" --generation "$g2" --reason "reviewed again" >/dev/null
+calve pack qualify "$e" --generation "$g2" >/dev/null
+calve pack promote "$e" --generation "$g2" >/dev/null
+expect "literal 7 promoted at the later generation, same pack" "$(calve pack show "$e" | get '["state"]')" "PROMOTED"
