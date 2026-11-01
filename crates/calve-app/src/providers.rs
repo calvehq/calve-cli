@@ -1017,6 +1017,7 @@ impl Project {
             let root = self.root.clone();
             let kind = profile.kind;
             let output_file = output_path(&self.root, &execution.to_string());
+            crate::journal::pause("execution.admitted");
             drop(writer.take());
             let outcome = tokio::task::spawn_blocking(move || {
                 run_worker(&launch, kind, &root, &env, &context, &cancelled, &output_file)

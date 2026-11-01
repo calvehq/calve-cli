@@ -655,8 +655,16 @@ async fn starting_execution_can_be_inspected_and_cancelled() {
         .await
         .unwrap();
     let inbox = project.inbox(false).await.unwrap();
-    assert_eq!(inbox.len(), 1);
-    assert_eq!(inbox[0]["source_key"], format!("execution:{failed}:FAILED"));
+    let keys: Vec<&str> = inbox
+        .iter()
+        .filter_map(|i| i["source_key"].as_str())
+        .collect();
+    assert!(
+        keys.contains(&format!("execution:{failed}:FAILED").as_str()),
+        "{keys:?}"
+    );
+    assert!(keys.iter().any(|k| k.starts_with("provider:")), "{keys:?}");
+    assert_eq!(keys.len(), 2, "{keys:?}");
 }
 
 #[tokio::test]

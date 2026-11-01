@@ -4,4 +4,4 @@ git-fetch-with-cli = true
 # Tests that open a Project in-process use the default data directory; it must never be the
 # developer's real one, which holds real Project authority.
 [env]
-XDG_DATA_HOME = { value = "target/test-xdg", force = true, relative = true }
+XDG_DATA_HOME = { value = "target/test-xdg", relative = true }

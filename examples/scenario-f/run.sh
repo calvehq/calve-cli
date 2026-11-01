@@ -18,7 +18,7 @@ calve task depends-on "$te" "$tb" >/dev/null
 # 4. Two local fake-agent executions on independent Tasks, running at the same time. Each worker
 # finishes only after it has seen the other one running, so a run that held the Project for
 # itself would time out and fail.
-marks=$(mktemp -d "${TMPDIR:-/tmp}/calve-f.XXXXXX")
+marks="$WORK/marks"; mkdir "$marks"
 "$CALVE_BIN" --json --no-daemon-start provider add fake-agent --kind local-process --executable sh --env TMPDIR >/dev/null
 cfg=$(calve config edit-path --scope project | get '["path"]')
 worker() {
