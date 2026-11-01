@@ -18,10 +18,16 @@ fn reviewer_identity_and_self_review_rule() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(root.join(".calve/identities/reviewer.toml"))
+        let project = env.ok(&["project", "list"])[0]["project_id"]
+            .as_str()
             .unwrap()
-            .permissions()
-            .mode();
+            .to_owned();
+        let key = env
+            .path()
+            .join("d/calve/authority")
+            .join(project)
+            .join("identities/reviewer.toml");
+        let mode = std::fs::metadata(key).unwrap().permissions().mode();
         assert_eq!(mode & 0o077, 0, "identity keys are private");
     }
     std::fs::write(root.join("a.txt"), "a\n").unwrap();

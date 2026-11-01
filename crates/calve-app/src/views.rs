@@ -871,7 +871,7 @@ impl Project {
         // events, with totals; `calve execution logs` returns everything.
         const OUTPUT_TAIL: usize = 2000;
         const RECENT: usize = 500;
-        let logs = self.execution_logs(id).await?;
+        let logs = self.execution_logs(id, 0).await?;
         let execution = self.execution(id).await?;
         let all_events = logs["events"].as_array().cloned().unwrap_or_default();
         let observed: Vec<&Value> = all_events
@@ -914,6 +914,11 @@ impl Project {
         }
         output.reverse();
         observations.reverse();
+        // Lines as they arrived: all there is while it runs, or after a run that was lost.
+        let live = logs["output"].as_array().cloned().unwrap_or_default();
+        if live.len() > output.len() {
+            output = live[live.len().saturating_sub(OUTPUT_TAIL)..].to_vec();
+        }
         let output_truncated = read_lines > output.len() || observed.len() > observations.len();
         let events_total = all_events.len();
         let observations_total = observed.len();

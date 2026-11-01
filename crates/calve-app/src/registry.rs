@@ -551,6 +551,7 @@ impl Registry {
             "UPDATE projects SET path=?1 WHERE project_id=?2",
             params![project.root.to_string_lossy(), project_id],
         )?;
+        crate::authority::bind(project_id, &project.root)?;
         self.project(project_id)
     }
 

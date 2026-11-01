@@ -81,6 +81,13 @@ pub struct ProviderProfile {
 /// Worker resource limits, enforced by the supervisor: Unix `RLIMIT_AS` / `RLIMIT_CPU`,
 /// Windows Job Object memory and active-process limits. A limit the platform cannot enforce is
 /// refused when the provider is configured, never ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Confinement {
+    Required,
+    BestEffort,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceLimits {
@@ -94,6 +101,10 @@ pub struct ResourceLimits {
     /// every process of the user, so it cannot bound one worker).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub processes: Option<u32>,
+    /// `required` refuses a worker that cannot be confined; `best-effort` runs it and reports
+    /// how far confinement went. Default: required on Linux, best-effort elsewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confinement: Option<Confinement>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,6 +239,9 @@ pub struct EffectiveConfig {
     pub provider_sources: BTreeMap<String, PathBuf>,
     pub sources: Vec<PathBuf>,
     pub warnings: Vec<String>,
+    /// A Project configuration whose protected parts were ignored: they are unapproved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unapproved: Option<PathBuf>,
 }
 
 impl Default for EffectiveConfig {
@@ -243,6 +257,7 @@ impl Default for EffectiveConfig {
             provider_sources: BTreeMap::new(),
             sources: Vec::new(),
             warnings: Vec::new(),
+            unapproved: None,
         }
     }
 }
@@ -342,7 +357,21 @@ impl ConfigPaths {
             .chain(self.project.iter())
             .chain(self.override_file.iter())
         {
-            if let Some(file) = read_file(path)? {
+            if let Some(mut file) = read_file(path)? {
+                if Some(path) == self.project.as_ref()
+                    && protected(&file)
+                    && !crate::authority::config_approved(path, &fs::read(path)?)
+                {
+                    // A worker can reach this file, so its power to run commands needs the host.
+                    file.providers.clear();
+                    file.harnesses.clear();
+                    file.integrations.clear();
+                    result.unapproved = Some(path.clone());
+                    result.warnings.push(format!(
+                        "{}: providers, harnesses and check commands are ignored until `calve config approve`",
+                        path.display()
+                    ));
+                }
                 result.apply(file, path)?;
             }
         }
@@ -704,7 +733,34 @@ fn read_file(path: &Path) -> Result<Option<ConfigFile>> {
     Ok(Some(file))
 }
 
+/// Whether a configuration can choose what runs.
+fn protected(file: &ConfigFile) -> bool {
+    !file.providers.is_empty() || !file.harnesses.is_empty() || !file.integrations.is_empty()
+}
+
 fn write_file(path: &Path, file: &ConfigFile) -> Result<()> {
+    // Host edits keep an approval, or start from a file with nothing to approve; they never
+    // bless changes made behind the host's back.
+    let keep = path.ends_with(".calve/config.toml")
+        && match fs::read(path) {
+            Ok(bytes) => {
+                crate::authority::config_approved(path, &bytes)
+                    || std::str::from_utf8(&bytes)
+                        .ok()
+                        .and_then(|t| toml::from_str::<ConfigFile>(t).ok())
+                        .is_none_or(|old| !protected(&old))
+            }
+            Err(_) => true,
+        };
+    write_config(path, file)?;
+    if keep {
+        // Without an owning Project there is nothing to approve; unapproved is the safe side.
+        let _ = crate::authority::approve_config(path);
+    }
+    Ok(())
+}
+
+fn write_config(path: &Path, file: &ConfigFile) -> Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| invalid("config path has no parent"))?;

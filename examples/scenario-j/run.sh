@@ -15,6 +15,7 @@ nid=$(calve status | get '["project"]["namespace_id"]')
 "$CALVE_BIN" --json --no-daemon-start provider add shell --kind local-process --executable sh >/dev/null
 cfg=$(calve config edit-path --scope project | get '["path"]')
 printf 'format_version = 1\n[harnesses.slow]\nprovider = "shell"\nmode = "check"\ncommand = ["-c", "sleep 30"]\n' > "$cfg"
+calve config approve >/dev/null
 active=$(calve pack create "Active" | get '["id"]')
 daemon=$("$CALVE_BIN" --json daemon start | q "d['pid']")
 calve execution start "$active" --harness slow --generation 1 >/dev/null 2>&1 &

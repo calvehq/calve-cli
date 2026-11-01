@@ -36,6 +36,6 @@ command = ["-c", "cargo fmt"]
 timeout_ms = 600000
 ```
 
-Inspect them with `calve harness list|show|test`.
+Harnesses in a Project's `config.toml` count only after `calve config approve`. Inspect them with `calve harness list|show|test`.
 
 Reference: [providers and harnesses](../reference/providers-and-harnesses.md).

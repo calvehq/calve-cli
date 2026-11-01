@@ -381,7 +381,7 @@ impl Project {
                 };
             checks.retain(|(name, _, _, _)| only.is_empty() || only.contains(name));
             for (name, mut argv, plan, approved) in checks {
-                let env: BTreeMap<String, String> = BASE_ENV
+                let mut env: BTreeMap<String, String> = BASE_ENV
                     .iter()
                     .map(|s| s.to_string())
                     .chain(plan.env.iter().cloned())
@@ -395,6 +395,8 @@ impl Project {
                     })
                     .filter_map(|n| std::env::var(&n).ok().map(|v| (n, v)))
                     .collect();
+                // Names the Project whose control state the supervisor hides from this check.
+                env.insert("CALVE_PROJECT_ROOT".into(), self.root.display().to_string());
                 if configured.is_none() && plan.takes_files {
                     argv.extend(
                         files

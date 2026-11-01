@@ -311,6 +311,7 @@ fn finished(t: crate::supervise::Termination) -> std::result::Result<Option<i32>
     match t {
         Termination::Finished { exit_code, .. } => Ok(exit_code),
         Termination::Cancelled => Err("cancelled".into()),
+        Termination::Refused(reason) => Err(reason),
         Termination::HelperLost => {
             Err("HELPER_LOST: the worker's supervisor died before reporting".into())
         }
@@ -395,6 +396,7 @@ fn pump(
 }
 
 struct Outcome {
+    containment: Value,
     status: &'static str,
     reason: Option<String>,
     exit_code: Option<i32>,
@@ -411,6 +413,7 @@ fn run_worker(
     env: &BTreeMap<String, String>,
     context: &WorkerContext,
     cancelled: &dyn Fn() -> bool,
+    output_file: &Path,
 ) -> Result<Outcome> {
     let mut sup = spawn(launch, cwd, env)?;
     let mut stdin = sup.child.stdin.take();
@@ -441,6 +444,7 @@ fn run_worker(
     let mut outcome = Outcome {
         status: "failed",
         reason: None,
+        containment: Value::Null,
         exit_code: None,
         logs: Vec::new(),
         proposals: Vec::new(),
@@ -449,11 +453,17 @@ fn run_worker(
     let mut used = 0u64;
     let mut agent_done: Option<(&'static str, Option<String>)> = None;
     let mut proposed = 0u64;
+    let mut output = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(output_file)?;
     let mut record = |stream: &str, text: String, outcome: &mut Outcome| {
         used += text.len() as u64 + 1;
         if used > launch.max_output {
             outcome.truncated = true;
         } else {
+            // Best effort: losing the live copy must not fail the run; the record follows.
+            let _ = writeln!(output, "{}", json!({"stream": stream, "text": text}));
             outcome.logs.push((stream.to_owned(), text));
         }
     };
@@ -587,6 +597,7 @@ fn run_worker(
             None => outcome.reason = Some("agent exited without a done frame".into()),
         },
     }
+    outcome.containment = crate::supervise::last_containment();
     Ok(outcome)
 }
 
@@ -682,6 +693,23 @@ fn decode_base64(text: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
+/// A run's redacted output, one JSON line per output line, written as it arrives. It outlives
+/// the daemon: when a worker is lost, this is what remains of what it said.
+pub(crate) fn output_path(root: &Path, execution: &str) -> PathBuf {
+    root.join(".calve/logs").join(format!("{execution}.output"))
+}
+
+/// Output lines of `execution` from line `after` on.
+pub(crate) fn read_output(root: &Path, execution: &str, after: usize) -> Option<Vec<Value>> {
+    let text = std::fs::read_to_string(output_path(root, execution)).ok()?;
+    Some(
+        text.lines()
+            .skip(after)
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .collect(),
+    )
+}
+
 fn in_scope(paths: &[String], locator: &str) -> bool {
     paths.is_empty()
         || paths.iter().any(|prefix| {
@@ -762,11 +790,18 @@ impl Project {
         task: Option<&str>,
         retry: Option<(WorkUnitId, ExecutionId)>,
     ) -> Result<Value> {
-        let harness = config.harnesses.get(harness_id).ok_or_else(|| {
-            crate::coded(
+        let harness = config.harnesses.get(harness_id).ok_or_else(|| match &config.unapproved {
+            Some(path) => crate::coded(
+                "CONFIG_UNAPPROVED",
+                format!(
+                    "{} is not approved, so its harnesses are ignored; review it, then run `calve config approve`",
+                    path.display()
+                ),
+            ),
+            None => crate::coded(
                 "HARNESS_UNAVAILABLE",
                 format!("harness {harness_id} is not configured"),
-            )
+            ),
         })?;
         let profile = config.providers.get(&harness.provider).ok_or_else(|| {
             crate::coded(
@@ -776,7 +811,13 @@ impl Project {
         })?;
         self.provider_allowed(&harness.provider, profile)?;
         let launch = launch_plan(&harness.provider, profile, harness)?;
+        // The lock covers admission and the recording of the result, never the worker itself:
+        // while that runs, the claim below says what it is using.
+        let mut writer =
+            Some(crate::app::project_writer_wait(&self.root, Duration::from_secs(30)).await?);
         let pack = self.open_pack_at(pack_id, expected_generation).await?;
+        self.admit_claim(&pack.id.to_string(), harness.mode, &harness.paths)
+            .await?;
         // Any execution starts a new generation, and OpenAEVC only promotes effects from the
         // current one: even a check run here would leave this pack's effects unpromotable.
         if !pack.candidate_effects.is_empty() {
@@ -903,6 +944,12 @@ impl Project {
         // the worker runs), and any error records a failure instead of leaving the execution
         // RUNNING until its lease expires and OpenAEVC reports it LOST (M5 lease experiments).
         let _keeper = crate::lease::LeaseKeeper::maybe(self.client.clone(), lease.clone());
+        self.insert_claim(&crate::claims::Claim {
+            execution: execution.to_string(),
+            pack: pack.id.to_string(),
+            mode: harness.mode,
+            paths: harness.paths.clone(),
+        })?;
         let granted: Result<Value> = async {
             if let Some(task) = task {
                 // Linking is product metadata; the execution record stays authoritative.
@@ -968,17 +1015,19 @@ impl Project {
             };
             let root = self.root.clone();
             let kind = profile.kind;
+            let output_file = output_path(&self.root, &execution.to_string());
+            drop(writer.take());
             let outcome = tokio::task::spawn_blocking(move || {
-                run_worker(&launch, kind, &root, &env, &context, &cancelled)
+                run_worker(&launch, kind, &root, &env, &context, &cancelled, &output_file)
             })
             .await
             .map_err(|error| invalid(format!("worker supervisor failed: {error}")))??;
+            let _writer =
+                crate::app::project_writer_wait(&self.root, Duration::from_secs(300)).await?;
             // A cancelled execution is terminal, so OpenAEVC refuses its observations. Its output
             // (already redacted) stays in the Project's logs, removed by `maintenance gc`.
             if outcome.status == "cancelled" {
-                let lines: Vec<&str> = outcome.logs.iter().map(|(_, l)| l.as_str()).collect();
-                let log = self.root.join(".calve/logs").join(format!("{execution}.log"));
-                let log = std::fs::write(&log, lines.join("\n")).is_ok().then_some(log);
+                let log = output_path(&self.root, &execution.to_string());
                 event(
                     &self.db,
                     "execution.cancelled",
@@ -1014,6 +1063,12 @@ impl Project {
                 .map(|(path, _)| path)
                 .collect();
             changed.extend(before.keys().filter(|path| !after.contains_key(*path)));
+            // What overlapping runs changed in their own scopes is theirs.
+            let others = self.other_change_scopes(&execution.to_string())?;
+            changed.retain(|path| {
+                in_scope(&harness.paths, path)
+                    || !others.iter().any(|scope| in_scope(scope, path))
+            });
             let stray: Vec<&&String> = changed
                 .iter()
                 .filter(|path| harness.mode == HarnessMode::Check || !in_scope(&harness.paths, path))
@@ -1119,7 +1174,7 @@ impl Project {
             );
             Ok(
                 json!({"execution":execution,"work_unit":work_unit,"context":context_digest,"state":state,"harness":harness_id,
-                "provider":provider,"exit_code":outcome.exit_code,"reason":failure,"effects":effects,
+                "provider":provider,"exit_code":outcome.exit_code,"reason":failure,"effects":effects,"containment":outcome.containment,
                 "log_lines":outcome.logs.len(),"output_truncated":outcome.truncated}),
             )
         }

@@ -251,6 +251,7 @@ fn cli_links_openaevc_work_unit_to_task() {
         ],
     );
     let pack_id = pack["id"].as_str().unwrap();
+    calve_app::authority::use_data_root(&data_home.join("calve"));
     let project = calve_app::Project::open(&root_path).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let work_unit = runtime
@@ -284,6 +285,7 @@ fn cli_authority_uses_protocol_decisions_and_grants() {
     let root_path = temp.path().join("project");
     let root = root_path.to_str().unwrap();
     run_cli(&data_home, &["init", root]);
+    calve_app::authority::use_data_root(&data_home.join("calve"));
     let project = calve_app::Project::open(&root_path).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let actor = runtime
@@ -402,6 +404,7 @@ fn cli_project_rename_and_health_cover_copies_and_moves() {
         "Updated"
     );
     assert!(calve(&["project", "identity", id]).get("name").is_none());
+    calve_app::authority::use_data_root(&data_home.join("calve"));
     let mut opened = calve_app::Project::open(&root_path).unwrap();
     opened.rename("Diverged").unwrap();
     drop(opened);

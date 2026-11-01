@@ -249,6 +249,7 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
         "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"echo working; sleep 60\"]\n",
     )
     .unwrap();
+    run(&env, &["config", "approve"]);
     let pack = id(&run(&env, &["pack", "create", "Slow"]));
     env.ok(&["daemon", "start"]);
     let client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))

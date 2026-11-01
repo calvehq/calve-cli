@@ -42,6 +42,21 @@ pub fn check_enabled_extensions(
             continue;
         };
         let manifest = query(openaevc::protocol::Query::GetObject { digest })?;
+        let protocol: VersionRange =
+            serde_json::from_value(manifest["envelope"]["body"]["protocol"].clone())?;
+        if SUPPORTED_PROTOCOL.negotiate(&protocol).is_none() {
+            return Err(crate::coded(
+                "EXTENSION_INCOMPATIBLE",
+                format!(
+                    "enabled extension {} speaks protocol {}..={}, this Calve supports {}..={}; disable or update it",
+                    e["id"].as_str().unwrap_or("?"),
+                    protocol.min,
+                    protocol.max,
+                    SUPPORTED_PROTOCOL.min,
+                    SUPPORTED_PROTOCOL.max
+                ),
+            ));
+        }
         let contract: VersionRange =
             serde_json::from_value(manifest["envelope"]["body"]["contract"].clone())?;
         if SUPPORTED_CONTRACT.negotiate(&contract).is_none() {

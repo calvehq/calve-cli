@@ -1,6 +1,6 @@
 # Architecture
 
-Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signed command path, execution leases and provenance, evidence, policy decisions, promotion and Baselines. Calve owns Projects and Workspaces, Intents and Tasks, reviews, provider profiles, extension catalogs, read models and the terminal experience. Calve changes OpenAEVC state only through its commands, and reads through its APIs. The one exception is a read-only count in `maintenance gc --dry-run` ([ADR 0022](../adr/0022-gc-dry-run-read.md)). See [state ownership](state-ownership.md).
+Calve is a product layer over OpenAEVC. OpenAEVC owns change identity, the signed command path, execution leases and provenance, evidence, policy decisions, promotion and Baselines. Calve owns Projects and Workspaces, Intents and Tasks, reviews, provider profiles, extension catalogs, read models and the terminal experience. Calve changes OpenAEVC state only through its commands, and reads through its APIs. See [state ownership](state-ownership.md).
 
 ## Crates
 

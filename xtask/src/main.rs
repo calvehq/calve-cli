@@ -851,14 +851,6 @@ const STORE_TABLES: &[&str] = &[
     "baselines",
 ];
 
-/// The one direct read of `.calve/openaevc/`: §44.3 needs a dry-run count and bytes, and
-/// OpenAEVC v0.1.0 has no API listing what `collect_garbage` would remove.
-/// shortcut: read-only SQL on the runtime's schema, drop it when OpenAEVC offers a GC plan.
-const GC_PLAN: (&str, &[&str]) = (
-    "crates/calve-app/src/gc.rs",
-    &["runtime.sqlite3", "FROM objects", "FROM object_index"],
-);
-
 /// §49 rules 1, 4, 7 and 10: no OpenAEVC internals, no SQL on or tables copying its store, and
 /// no protocol mutation except the commands the runtime applies.
 fn check_store_access(file: &str, source: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -884,15 +876,7 @@ fn check_store_access(file: &str, source: &str) -> Result<(), Box<dyn std::error
             forbidden.push(format!("{verb}{table}"));
         }
     }
-    let excepted: &[&str] = if file.ends_with(GC_PLAN.0) {
-        GC_PLAN.1
-    } else {
-        &[]
-    };
-    if let Some(hit) = forbidden
-        .iter()
-        .find(|f| source.contains(f.as_str()) && !excepted.contains(&f.as_str()))
-    {
+    if let Some(hit) = forbidden.iter().find(|f| source.contains(f.as_str())) {
         return Err(format!("{file} contains forbidden access: {hit}").into());
     }
     // Review decisions reach the protocol only as commands.
@@ -1109,12 +1093,6 @@ mod tests {
         ] {
             assert!(check_store_access(f, bad).is_err(), "{bad}");
         }
-        let gc = "/w/crates/calve-app/src/gc.rs";
-        assert!(check_store_access(gc, "runtime.sqlite3 SELECT 1 FROM objects").is_ok());
-        assert!(check_store_access(gc, "DELETE FROM objects").is_err());
-        assert!(check_store_access(gc, "UPDATE objects SET x=1").is_err());
-        assert!(check_store_access(gc, "INSERT INTO objects VALUES (1)").is_err());
-        assert!(check_store_access(gc, "SELECT 1 FROM event_journal").is_err());
         let review = "crates/calve-app/src/promotion.rs";
         assert!(check_store_access(review, "use openaevc::protocol::Command;").is_ok());
         assert!(check_store_access(review, "use openaevc::store::Store;").is_err());

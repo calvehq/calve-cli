@@ -23,6 +23,8 @@ Profiles live in configuration (`[providers.<id>]`, global scope by default; `--
 | `cpu_seconds` | `RLIMIT_CPU`; past it the kernel stops the worker | refused (`CONTAINMENT_UNAVAILABLE`) |
 | `processes` | refused: `RLIMIT_NPROC` counts every process of the user | Job Object active-process limit |
 
+`confinement` in the same table is `required` or `best-effort`. On Linux the default is `required`: a worker that cannot get its namespaces and Landlock is refused. Hosts that forbid unprivileged user namespaces can set `best-effort`, per provider or with `CALVE_WORKER_CONFINEMENT=best-effort` for the daemon. Elsewhere the default is `best-effort`. Each run reports `containment`.
+
 A limit the platform cannot enforce is refused when the provider is configured or launched, never ignored. On Unix the limits are applied by `calve __exec-limited`, which sets them on itself and then `exec`s the worker under the same supervision and Landlock rules; a worker that cannot start within its limits fails instead of running unlimited.
 
 Two adapters ship:
@@ -32,7 +34,7 @@ Two adapters ship:
 
 ## Harnesses
 
-Harnesses are declared in configuration and validated on load:
+Harnesses are declared in configuration and validated on load. In Project configuration they count only once approved with `calve config approve`:
 
 ```toml
 format_version = 1
@@ -55,3 +57,4 @@ timeout_ms = 600000
 - The lease is renewed while the worker runs.
 - In `change` mode, a `local-process` worker's files changed inside `paths` become snapshot effects. A stdio agent's effects come only from its `propose` frames. Any change outside the scope, or any change in `check` mode, fails the execution and nothing is recorded.
 - A pack takes one effect-producing execution, because OpenAEVC promotes only effects whose provenance matches the current generation.
+- Runs overlap: see [executions](../concepts/execution.md). Output is written to `.calve/logs/<execution>.output` as it arrives, and `execution logs` reads it during the run and after a lost one.

@@ -604,6 +604,7 @@ fn bump_generation(t: &T, pack: &str) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         use openaevc_sdk::{OpenAevcClient as _, TypedClient as _};
+        calve_app::authority::use_data_root(&t.env.path().join("d/calve"));
         let project = calve_app::Project::open(t.root()).unwrap();
         let p = project.pack(pack).await.unwrap();
         project

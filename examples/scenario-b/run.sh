@@ -45,6 +45,7 @@ provider = "shell"
 mode = "check"
 command = ["-c", "grep -q '{ 2 }' src/lib.rs"]
 TOML
+calve config approve >/dev/null
 # An execution starts a new generation, so a harness cannot run on a pack that holds captures
 # (Calve refuses, or those effects could never be promoted); it runs in its own pack over the
 # same working tree, and the candidate's own checks run through `pack check` below.

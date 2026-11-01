@@ -48,6 +48,7 @@ wasmparser = "0.261"
 wat = "1.262"
 sha2 = "0.10"
 landlock = "0.4"
+nix = { version = "0.31", default-features = false, features = ["sched", "mount"] }
 cap-std = "3.4"
 cap-fs-ext = "3.4"
 rustix = { version = "1", features = ["fs", "process", "net"] }

@@ -51,15 +51,7 @@ pub const SCENARIOS: [Scenario; 16] = [
     ),
     s('D', "examples", "scenario_d", false, None),
     s('E', "examples", "scenario_e", false, None),
-    s(
-        'F',
-        "examples",
-        "scenario_f",
-        false,
-        Some(
-            "the two executions do not overlap: a run holds the Project writer lock until it ends",
-        ),
-    ),
+    s('F', "examples", "scenario_f", false, None),
     s(
         'G',
         "acceptance",

@@ -28,6 +28,7 @@ mode = "change"
 paths = ["d"]
 command = ["-c", "mkdir -p d && echo \"from $CALVE_TASK\" > d/out.txt"]
 TOML
+calve config approve >/dev/null
 pa=$(calve pack create "A work" --intent "$a" | get '["id"]')
 pd=$(calve pack create "D work" --intent "$d" | get '["id"]')
 ea=$(calve execution start "$pa" --harness write-a --generation 1 --task "$ta" | get '["execution"]')

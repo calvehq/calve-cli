@@ -133,6 +133,7 @@ fn secrets_never_reach_any_sink() {
         ),
     )
     .unwrap();
+    ok(data, &["--project", p, "config", "approve"]);
     let (pack, out) = ok(data, &["--project", p, "pack", "create", "Leak"]);
     seen += &out;
     let pack = pack["id"].as_str().unwrap().to_owned();
@@ -173,6 +174,7 @@ fn secrets_never_reach_any_sink() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let text = rt.block_on(async {
         use openaevc_sdk::OpenAevcClient as _;
+        calve_app::authority::use_data_root(&data.join("d/calve"));
         let project = calve_app::Project::open(&root).unwrap();
         let mut all = String::new();
         for d in &digests {

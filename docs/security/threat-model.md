@@ -22,7 +22,7 @@ This document states what Calve defends, what it deliberately does not, and wher
 | Extension planning code (T1) | the host | `cic.wasm` | wasm without imports, memory/fuel caps, supervised child (`calve __cic-sandbox`, Linux Landlock deny-all) with a hard wall-clock kill; every response validated (cardinality, order, paths, canonical JSON) | FG3, FG4, FG13; M2 `cic_host`, `cic_sessions`, `cic_fixture`, calve-extensions conformance |
 | Check plans (T1 output run as T3) | the user's approval | a package's `check_plan` | runs only after the user approves a digest covering the plan, the package (id, version, target, file digests) and the resolved executable (path + sha256), re-checked before each spawn; bare program on absolute `PATH` entries only; candidate copied without following symlinks; credential/loader environment names refused (defence in depth) | M2 `checks` unit tests, `domains` e2e incl. `check_plan_approval_is_bound_to_the_resolved_executable` |
 | Native extensions (T2) | — | — | **not confined** (OpenAEVC spawns them directly, F4); TUF-verified package, per-spawn re-hash, cleared env, grants for host-mediated calls, explicit user acknowledgment (`--acknowledge-native`, recorded per artifact) | ADR 0005; `t2_native_code_is_not_confined_residual` (M2) |
-| Workers and checks (T3) | the host | the worker | process group / Job Object; Linux Landlock via the helper | FG12 (Linux); M5 |
+| Workers and checks (T3) | the host | the worker | process group / Job Object; on Linux a user and mount namespace hides `.calve/` and Calve's private directories, including the daemon socket, then Landlock. A worker that cannot be confined is refused by default on Linux | `apps/calve/tests/confinement.rs` |
 
 ## 3. In scope (defended)
 

@@ -530,6 +530,15 @@ pub enum ProjectCommand {
     },
     /// Point a registration at a moved Project.
     Relocate { project: String, path: PathBuf },
+    /// Write this Project's authority to a file, to import it on another machine.
+    AuthorityExport {
+        project: String,
+        file: PathBuf,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Install an exported authority for the Project at `path`.
+    AuthorityImport { path: PathBuf, file: PathBuf },
     /// Make a copied Project directory a new Project with its own identity and Namespace.
     AdoptCopy {
         path: PathBuf,
@@ -550,6 +559,9 @@ pub enum ConfigCommand {
     List,
     /// Read one configuration key.
     Get { key: String },
+    /// Approve this Project's configuration as it is on disk. Its providers, harnesses and
+    /// check commands are ignored until the host has approved these exact bytes.
+    Approve,
     /// Set a configuration key in a scope.
     Set {
         key: String,
@@ -1104,8 +1116,13 @@ pub enum ExecutionCommand {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Journal events for an execution.
-    Logs { id: String },
+    /// Journal events and output of an execution, also while it runs. `--after` skips the
+    /// lines already read: pass the `next` of the previous call.
+    Logs {
+        id: String,
+        #[arg(long, default_value_t = 0)]
+        after: usize,
+    },
     /// Start the protocol successor of a failed attempt.
     Retry { id: String },
     /// Run a configured harness as an OpenAEVC execution against an open pack.
@@ -1624,7 +1641,9 @@ impl Action {
                 _ => OperationKind::Command,
             },
             Self::Config { command } => match command {
-                ConfigCommand::Set { .. } | ConfigCommand::Unset { .. } => OperationKind::Command,
+                ConfigCommand::Set { .. }
+                | ConfigCommand::Unset { .. }
+                | ConfigCommand::Approve => OperationKind::Command,
                 _ => OperationKind::Query,
             },
             Self::Intent { command } => match command {

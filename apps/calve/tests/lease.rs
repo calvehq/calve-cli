@@ -100,6 +100,7 @@ command = ["-c", "true"]
 "#,
     )
     .unwrap();
+    ok(&data, &["--project", &p, "config", "approve"]);
     T {
         _temp: temp,
         _catalog: catalog,

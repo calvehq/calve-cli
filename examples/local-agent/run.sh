@@ -18,6 +18,7 @@ calve provider add fake --kind stdio-agent --executable "$agent" >/dev/null
 expect "provider healthy" "$(calve provider test fake | get '["healthy"]')" "true"
 cfg=$(calve config edit-path --scope project | get '["path"]')
 printf 'format_version = 1\n[harnesses.changelog]\nprovider = "fake"\nmode = "change"\n' > "$cfg"
+calve config approve >/dev/null
 pack=$(calve pack create "Agent changelog" | get '["id"]')
 run=$(calve execution start "$pack" --harness changelog --generation 1)
 expect "agent run succeeded" "$(get '["state"]' <<<"$run")" "SUCCEEDED"

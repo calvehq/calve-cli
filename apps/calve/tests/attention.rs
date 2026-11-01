@@ -195,3 +195,53 @@ fn attention_status_and_gc() {
     ok(&["pack", "show", &id]);
     assert_eq!(ok(&["maintenance", "check"])["ok"], true);
 }
+
+/// The dry run's count is what OpenAEVC's collector then removes, and the dry run removes nothing.
+#[test]
+fn the_dry_run_counts_with_the_real_collector() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let shard = root.join(".calve/openaevc/objects/sha256/ab");
+    fs::create_dir_all(&shard).unwrap();
+    let orphan = shard.join("ab".repeat(32));
+    fs::write(&orphan, b"orphan").unwrap();
+    let args = [
+        "--project",
+        p,
+        "maintenance",
+        "gc",
+        "--dry-run",
+        "--grace-secs",
+        "0",
+    ];
+    let plan = env.ok(&args);
+    let class = plan["classes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["class"] == "openaevc_unreachable_objects")
+        .unwrap()
+        .clone();
+    assert_eq!(class["count"], 1, "{plan}");
+    assert_eq!(class["estimated_bytes"], 6, "{plan}");
+    assert!(orphan.exists(), "the dry run removed nothing");
+    assert!(
+        fs::read_dir(root.join(".calve/tmp"))
+            .unwrap()
+            .next()
+            .is_none(),
+        "the view is gone"
+    );
+    env.ok(&[
+        "--project",
+        p,
+        "maintenance",
+        "gc",
+        "--grace-secs",
+        "0",
+        "--yes",
+    ]);
+    assert!(!orphan.exists(), "the collector removed what was counted");
+}

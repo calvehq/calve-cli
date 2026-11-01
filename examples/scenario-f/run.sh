@@ -15,38 +15,38 @@ td=$(calve task create "$d" "Task D" | get '["id"]')
 te=$(calve task create "$d" "Task E" | get '["id"]')
 # 3. E depends on B.
 calve task depends-on "$te" "$tb" >/dev/null
-# 4. Two local fake-agent executions on independent Tasks, running at the same time.
-"$CALVE_BIN" --json --no-daemon-start provider add fake-agent --kind local-process --executable sh >/dev/null
+# 4. Two local fake-agent executions on independent Tasks, running at the same time. Each worker
+# finishes only after it has seen the other one running, so a run that held the Project for
+# itself would time out and fail.
+marks=$(mktemp -d "${TMPDIR:-/tmp}/calve-f.XXXXXX")
+"$CALVE_BIN" --json --no-daemon-start provider add fake-agent --kind local-process --executable sh --env TMPDIR >/dev/null
 cfg=$(calve config edit-path --scope project | get '["path"]')
-cat > "$cfg" <<'TOML'
+worker() {
+  printf 'mkdir -p %s; echo \\"from $CALVE_TASK\\" > %s/out.txt; touch %s/%s; n=0; until test -e %s/%s; do n=$((n+1)); test $n -lt 300 || exit 1; sleep 0.1; done' \
+    "$1" "$1" "$marks" "$1" "$marks" "$2"
+}
+cat > "$cfg" <<TOML
 format_version = 1
 [harnesses.write-a]
 provider = "fake-agent"
 mode = "change"
 paths = ["a"]
-command = ["-c", "mkdir -p a && echo \"from $CALVE_TASK\" > a/out.txt"]
+command = ["-c", "$(worker a d)"]
 [harnesses.write-d]
 provider = "fake-agent"
 mode = "change"
 paths = ["d"]
-command = ["-c", "mkdir -p d && echo \"from $CALVE_TASK\" > d/out.txt"]
+command = ["-c", "$(worker d a)"]
 TOML
+calve config approve >/dev/null
 pa=$(calve pack create "A work" --intent "$a" | get '["id"]')
 pd=$(calve pack create "D work" --intent "$d" | get '["id"]')
 "$CALVE_BIN" --json daemon start >/dev/null
-# Started together; writes to one Project are serialized, so the one that finds the Project
-# locked gets the retryable PROJECT_LOCKED and retries, as the error says.
-start() {
-  for _ in $(seq 1 100); do
-    if calve execution start "$1" --harness "$2" --generation 1 --task "$3" > "$4" 2> "$4.err"; then return 0; fi
-    grep -q PROJECT_LOCKED "$4.err" || { cat "$4.err" >&2; return 1; }
-    sleep 0.2
-  done
-  return 1
-}
-start "$pa" write-a "$ta" "$WORK/ea.json" & first=$!
-start "$pd" write-d "$td" "$WORK/ed.json" & second=$!
+calve execution start "$pa" --harness write-a --generation 1 --task "$ta" > "$WORK/ea.json" & first=$!
+calve execution start "$pd" --harness write-d --generation 1 --task "$td" > "$WORK/ed.json" & second=$!
 wait "$first"; wait "$second"
+expect "4 A ran alongside D" "$(get '["state"]' < "$WORK/ea.json")" "SUCCEEDED"
+expect "4 D ran alongside A" "$(get '["state"]' < "$WORK/ed.json")" "SUCCEEDED"
 ea=$(get '["execution"]' < "$WORK/ea.json")
 ed=$(get '["execution"]' < "$WORK/ed.json")
 # 5. Dependency-aware UI: the console, over the daemon, shows E waiting on B.

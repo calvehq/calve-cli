@@ -176,7 +176,7 @@ impl Project {
     }
 
     /// Protocol journal events that mention the execution, in sequence order.
-    pub async fn execution_logs(&self, id: &str) -> Result<Value> {
+    pub async fn execution_logs(&self, id: &str, after: usize) -> Result<Value> {
         let execution = self.execution(id).await?;
         let id = execution["id"].as_str().unwrap_or(id).to_owned();
         let mut events: Vec<Event> = Vec::new();
@@ -199,7 +199,12 @@ impl Project {
                 .await?;
             }
         }
-        Ok(json!({"execution":id,"state":execution["state"],"events":events}))
+        let output = crate::providers::read_output(&self.root, &id, after);
+        let next = output.as_ref().map(|lines| after + lines.len());
+        Ok(
+            json!({"execution":id,"state":execution["state"],"events":events,
+            "output":output.unwrap_or_default(),"next":next}),
+        )
     }
 
     /// Every captured snapshot of one resource across packs, oldest pack first.

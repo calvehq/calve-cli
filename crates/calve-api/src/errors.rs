@@ -57,6 +57,7 @@ pub const CODES: &[(&str, i32)] = &[
     ("ALREADY_EXISTS", exit::CONFLICT),
     ("CONFIRMATION_REQUIRED", exit::DENIED),
     ("UNSUPPORTED_API_VERSION", exit::INCOMPATIBLE),
+    ("CONFIG_UNAPPROVED", exit::DENIED),
     ("UNSUPPORTED_PAYLOAD_VERSION", exit::INCOMPATIBLE),
     ("INVALID_OPERATION_KIND", exit::GENERAL),
     // Catalog and packages (rev 10)

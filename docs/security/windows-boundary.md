@@ -13,7 +13,7 @@
 
 Native results come from Windows 11 x86_64 with cross-compiled `x86_64-pc-windows-gnu` binaries. The MSVC target, which is the one the release workflow builds, has not been run.
 
-**Not available on Windows:** Landlock, so workers have no filesystem confinement there; and `cpu_seconds` limits, which are refused. Job Objects apply memory and process limits. A process started out of the job by another service escapes it.
+**Not available on Windows:** Landlock and mount namespaces, so workers have no filesystem confinement there and can reach `.calve/`, the daemon pipe and anything else the user can. Keys are still outside the Project directory, and Project configuration still needs approval; and `cpu_seconds` limits, which are refused. Job Objects apply memory and process limits. A process started out of the job by another service escapes it.
 
 **Materialization:** see [materialization guarantees](materialization-guarantees.md).
 

@@ -5,10 +5,12 @@ pub use calve_api::{ActivityFilter, GrantOptions};
 
 pub mod adopt;
 pub mod app;
+pub mod authority;
 pub mod backup;
 pub mod capture;
 pub mod catalog;
 pub mod checks;
+mod claims;
 pub mod client;
 pub mod closure;
 pub mod compatibility;
@@ -103,7 +105,7 @@ impl From<openaevc::protocol::ProtocolError> for Error {
     }
 }
 
-fn invalid(message: impl Into<String>) -> Error {
+pub(crate) fn invalid(message: impl Into<String>) -> Error {
     Error::Message(message.into())
 }
 
@@ -484,11 +486,11 @@ fn calve_pack_metadata(title: &str) -> Metadata {
 
 /// The public key of a Project's runtime signer (verifies its signed journal checkpoints).
 pub(crate) fn project_runtime_key(state: &Path) -> Result<openaevc::protocol::PublicKey> {
-    let keys: Keys = toml::from_str(&fs::read_to_string(state.join("keys.toml"))?)?;
+    let keys: Keys = toml::from_str(&fs::read_to_string(authority::keys_for(state)?)?)?;
     Ok(signing_key(&keys.runtime_seed)?.public_key())
 }
 
-fn write_private(path: &Path, content: &str) -> Result<()> {
+pub(crate) fn write_private(path: &Path, content: &str) -> Result<()> {
     use std::io::Write;
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -605,7 +607,7 @@ const PROJECT_SCHEMA: &str = "
          );";
 
 /// Current product database schema.
-pub const PRODUCT_SCHEMA: u32 = 16;
+pub const PRODUCT_SCHEMA: u32 = 17;
 
 /// Exact counts and the most recent items per live pack state.
 type LiveSummary = (BTreeMap<String, u64>, BTreeMap<String, Vec<Value>>);
@@ -630,6 +632,7 @@ const MIGRATIONS: &[fn(&mut Connection) -> Result<()>] = &[
     migrate_store_binding,
     migrate_pack_commitments,
     migrate_read_model_indexes,
+    migrate_execution_claims,
 ];
 
 /// How the product database is opened (§46.4: only a writer migrates, after the gate).
@@ -665,7 +668,8 @@ fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
             tx.execute_batch(PROJECT_SCHEMA)?;
             tx.execute_batch(PACK_COMMITMENTS_SCHEMA)?;
             read_model_schema(&tx)?;
-            tx.execute_batch("INSERT INTO schema_migrations VALUES (15); INSERT INTO schema_migrations VALUES (16);")?;
+            tx.execute_batch(EXECUTION_CLAIMS_SCHEMA)?;
+            tx.execute_batch("INSERT INTO schema_migrations VALUES (15); INSERT INTO schema_migrations VALUES (17); INSERT INTO schema_migrations VALUES (16);")?;
             tx.execute_batch(&format!("PRAGMA user_version={PRODUCT_SCHEMA}"))?;
             tx.commit()?;
             return Ok(db);
@@ -1018,6 +1022,26 @@ fn migrate_read_model_indexes(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+const EXECUTION_CLAIMS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS execution_claims (
+    execution_id TEXT PRIMARY KEY,
+    pack_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    paths TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER
+);";
+
+fn migrate_execution_claims(db: &mut Connection) -> Result<()> {
+    let tx = db.transaction()?;
+    tx.execute_batch(EXECUTION_CLAIMS_SCHEMA)?;
+    tx.execute_batch(
+        "INSERT INTO schema_migrations VALUES (17);
+         PRAGMA user_version=17;",
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 fn migrate_store_binding(db: &mut Connection) -> Result<()> {
     let tx = db.transaction()?;
     tx.execute_batch(STORE_BINDING_SCHEMA)?;
@@ -1203,7 +1227,8 @@ impl Project {
                 created_by: roots[0],
                 name: None,
             };
-            write_private(&staging.join("keys.toml"), &toml::to_string(&keys)?)?;
+            authority::write_keys(&identity.project_id, &toml::to_string(&keys)?)?;
+            authority::bind(&identity.project_id, &root)?;
             fs::write(staging.join("project.toml"), toml::to_string(&identity)?)?;
             let db = init_db(&staging.join("product.sqlite3"), DbOpen::Create)?;
             db.execute(
@@ -1224,6 +1249,10 @@ impl Project {
         result?;
         exclude_from_git(&root)?;
         Self::open(&root)
+    }
+
+    pub(crate) fn tick(&self) {
+        let _ = self.runtime.tick();
     }
 
     /// Walks up from `start` to the first directory holding `.calve/project.toml` (§13.3),
@@ -1351,7 +1380,11 @@ impl Project {
                 "unsupported project format",
             ));
         }
-        let key_path = state.join("keys.toml");
+        authority::migrate_legacy(&state, &identity, &root)?;
+        let key_path = authority::keys_path(&identity.project_id)?;
+        if !key_path.is_file() {
+            return Err(authority::unavailable(&identity.project_id));
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

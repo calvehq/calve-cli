@@ -26,6 +26,10 @@ mode = "change"
 paths = ["CHANGELOG.md"]
 ```
 
+```sh
+calve config approve        # harnesses in a Project file count only once approved
+```
+
 Run it on an open pack with no effects:
 
 ```sh
@@ -36,10 +40,10 @@ calve execution logs <execution>
 calve execution wait <execution> --timeout-ms 600000
 ```
 
-The worker's output is recorded when the run ends, with secrets redacted, so `execution logs` shows nothing during the run. A stdio agent's effects come only from its `propose` frames; files it writes itself are not recorded. For a `local-process` worker, files changed inside `paths` become effects. A change outside `paths` fails the run and records nothing.
+The worker's output is recorded as it arrives, with secrets redacted, so `execution logs` shows it during the run. A stdio agent's effects come only from its `propose` frames; files it writes itself are not recorded. For a `local-process` worker, files changed inside `paths` become effects. A change outside `paths` fails the run and records nothing.
 
 Review what it did as you would any other change: `calve pack diff <pack>`, then seal and promote. Nothing an agent produces is accepted until it passes the same gates as a human's change.
 
 If a run fails or is lost, `calve execution retry <execution>` creates a successor attempt on the same work unit. `calve execution cancel <execution> --reason <why>` stops a running worker.
 
-Running workers concurrently means separate packs. They take turns writing to the Project, and a blocked writer gets a retryable `PROJECT_LOCKED`. The [`parallel-intents`](../../examples/parallel-intents) example shows two.
+Running workers concurrently means separate packs with separate paths, under `calved`. They overlap, and a real collision gets a retryable `PROJECT_LOCKED`. The [`parallel-intents`](../../examples/parallel-intents) example shows two.

@@ -81,16 +81,24 @@ pub async fn serve(endpoint: &Path) -> Result<()> {
     calve_app::app::enable_project_cache();
     // Groups left by a daemon that died (macOS has no parent-death signal): reap them first.
     let _ = calve_app::supervise::reap();
-    calve_ipc::serve(
+    let serve = calve_ipc::serve(
         endpoint,
         calve_ipc::ServerInfo {
             product_version: env!("CARGO_PKG_VERSION").into(),
             openaevc_revision: calve_app::compatibility::OPENAEVC_REVISION.into(),
         },
         calve_app::app::execute,
-    )
-    .await
-    .map_err(ipc_error)
+    );
+    let maintenance = async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            calve_app::app::tick_projects();
+        }
+    };
+    tokio::select! {
+        served = serve => served.map_err(ipc_error),
+        () = maintenance => Ok(()),
+    }
 }
 
 /// Returns the daemon's version report when a compatible daemon answers.

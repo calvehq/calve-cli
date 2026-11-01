@@ -42,17 +42,16 @@ fn name_ok(name: &str) -> bool {
 }
 
 impl Project {
-    fn identity_path(&self, name: &str) -> std::path::PathBuf {
-        self.root
-            .join(".calve/identities")
-            .join(format!("{name}.toml"))
+    fn identity_path(&self, name: &str) -> Result<std::path::PathBuf> {
+        Ok(crate::authority::identities_dir(&self.identity.project_id)?
+            .join(format!("{name}.toml")))
     }
 
     fn read_identity(&self, name: &str) -> Result<IdentityFile> {
         if !name_ok(name) {
             return Err(invalid(format!("invalid identity name {name:?}")));
         }
-        let path = self.identity_path(name);
+        let path = self.identity_path(name)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -99,7 +98,7 @@ impl Project {
                 "identity names are lowercase letters, digits and '-', up to 40",
             ));
         }
-        let path = self.identity_path(name);
+        let path = self.identity_path(name)?;
         if path.exists() {
             return Err(invalid(format!("identity {name} already exists")));
         }
@@ -153,7 +152,7 @@ impl Project {
     }
 
     pub fn list_identities(&self) -> Result<Value> {
-        let dir = self.root.join(".calve/identities");
+        let dir = crate::authority::identities_dir(&self.identity.project_id)?;
         let mut items = Vec::new();
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
@@ -181,7 +180,7 @@ impl Project {
                 revoked.push(id.to_owned());
             }
         }
-        fs::remove_file(self.identity_path(name))?;
+        fs::remove_file(self.identity_path(name)?)?;
         event(
             &self.db,
             "identity.removed",

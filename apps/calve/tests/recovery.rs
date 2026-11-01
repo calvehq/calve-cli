@@ -53,6 +53,7 @@ fn crash_during_execution_is_reported_lost() {
         "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"sleep 8\"]\n",
     )
     .unwrap();
+    env.ok(&["--project", p, "config", "approve"]);
     let pack = env.ok(&["--project", p, "pack", "create", "slow"])["id"]
         .as_str()
         .unwrap()

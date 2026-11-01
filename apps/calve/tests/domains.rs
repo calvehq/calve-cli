@@ -18,6 +18,7 @@ fn language_checks_gate_promotion_through_openaevc() {
     let config = env.ok(&["--project", &p, "config", "edit-path", "--scope", "project"]);
     let config_path = config["path"].as_str().unwrap().to_owned();
     fs::write(&config_path, "format_version = 1\n[integrations.\"org.example.toy\".checks]\ncontent = [\"sh\", \"-c\", \"grep -q candidate src/lib.toy\"]\n").unwrap();
+    env.ok(&["--project", &p, "config", "approve"]);
     fs::write(root.join("toy.toml"), "").unwrap();
     fs::create_dir(root.join("src")).unwrap();
     fs::write(root.join("src/lib.toy"), "// candidate\n").unwrap();
@@ -116,6 +117,7 @@ fn language_checks_gate_promotion_through_openaevc() {
     // not installed, which is INCONCLUSIVE, never a pass.
     let run_checks = |env: &Env, content: &str| {
         fs::write(&config_path, content).unwrap();
+        env.ok(&["--project", &p, "config", "approve"]);
         let other = env.ok(&["--project", &p, "pack", "create", "Other"])["id"]
             .as_str()
             .unwrap()

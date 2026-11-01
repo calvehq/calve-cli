@@ -24,6 +24,41 @@ pub const HELPER_MODE: &str = "__exec-confined";
 /// Trampoline that sets the worker's resource limits on itself, then becomes the worker.
 pub const RLIMIT_MODE: &str = "__exec-limited";
 
+/// What a confined worker must not reach: the Project's control state, and Calve's private
+/// directories (authority, trust state, configuration, the daemon socket).
+fn hidden_paths(env: &[(&str, &str)], cwd: &Path) -> Vec<PathBuf> {
+    let project = env
+        .iter()
+        .find(|(k, _)| *k == "CALVE_PROJECT_ROOT")
+        .map(|(_, v)| Path::new(v).join(".calve"));
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(|r| PathBuf::from(r).join("calve"));
+    [
+        Some(cwd.join(".calve")),
+        project,
+        crate::registry::default_data_root().ok(),
+        crate::config::default_config_root().ok(),
+        crate::registry::runtime_dir().ok(),
+        runtime,
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|p| p.exists() && !cwd.starts_with(p))
+    .collect()
+}
+
+fn confinement_required(limits: &crate::config::ResourceLimits) -> bool {
+    use crate::config::Confinement;
+    match limits.confinement {
+        Some(c) => c == Confinement::Required,
+        // An environment override for hosts that forbid user namespaces; workers never set it.
+        None => match std::env::var("CALVE_WORKER_CONFINEMENT").as_deref() {
+            Ok("best-effort") => false,
+            Ok("required") => true,
+            _ => cfg!(target_os = "linux"),
+        },
+    }
+}
+
 /// How a supervised process ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Termination {
@@ -34,6 +69,8 @@ pub enum Termination {
     },
     /// Cancelled by the parent (journaled before the group kill).
     Cancelled,
+    /// The worker was never started: its required confinement is unavailable here.
+    Refused(String),
     /// The helper died without a result (killed externally, crashed).
     HelperLost,
 }
@@ -234,6 +271,10 @@ mod unix {
             .arg(&dir)
             .arg(&id)
             .arg(limit_arg(limits))
+            .arg(
+                json!({"required": confinement_required(limits), "hide": hidden_paths(env, cwd)})
+                    .to_string(),
+            )
             .arg("--")
             .args(argv)
             .current_dir(cwd)
@@ -308,6 +349,7 @@ mod unix {
             Termination::Finished { .. } => "result",
             Termination::Cancelled => "cancelled",
             Termination::HelperLost => "lost",
+            Termination::Refused(_) => "refused",
         };
         if kind != "result" {
             s.inner.journal.append(kind, json!({})).map_err(jerr)?;
@@ -327,6 +369,12 @@ mod unix {
     }
 
     fn parse_result(v: &Value) -> Termination {
+        CONTAINMENT.with(|c| {
+            *c.borrow_mut() = json!({"namespace": v["namespace"], "landlock": v["landlock"]});
+        });
+        if let Some(reason) = v["refused"].as_str() {
+            return Termination::Refused(reason.to_owned());
+        }
         Termination::Finished {
             exit_code: v["exit_code"].as_i64().map(|c| c as i32),
             signal: v["signal"].as_i64().map(|c| c as i32),
@@ -466,9 +514,16 @@ mod unix {
     /// The helper. Returns its exit code only on set-up failure; otherwise it ends by killing
     /// its own group.
     pub fn helper(args: &[String]) -> i32 {
-        let [parent, dir, id, limits, dashdash, argv @ ..] = args else {
+        let [parent, dir, id, limits, confine, dashdash, argv @ ..] = args else {
             return 2;
         };
+        // First of all: a user namespace needs a single thread, and entering one clears the
+        // parent-death signal set below.
+        #[cfg(target_os = "linux")]
+        let namespaced = enter_namespaces();
+        #[cfg(not(target_os = "linux"))]
+        let namespaced = false;
+        let confine: Value = serde_json::from_str(confine).unwrap_or_default();
         let limited = limits != "-";
         if dashdash != "--" || argv.is_empty() {
             return 2;
@@ -520,15 +575,39 @@ mod unix {
         ) else {
             return 4;
         };
-        // 4. Landlock: the worker can read system paths and work in its directory, temp and
-        // home; the spawn directory (runtime dir) is outside every rule.
+        // 4. Control state disappears from the worker's view: Landlock rules inherit, so they
+        // cannot carve `.calve` out of the directory a worker works in, and they do not cover
+        // connecting to the daemon's socket. Then Landlock: the worker can read system paths and
+        // work in its directory, temp and home; the spawn directory is outside every rule.
         // A limited worker starts through the trampoline, which must stay executable too.
         let me = std::env::current_exe().ok();
+        #[cfg(target_os = "linux")]
+        let hidden = namespaced && hide(confine["hide"].as_array().into_iter().flatten());
+        #[cfg(not(target_os = "linux"))]
+        let hidden = false;
         #[cfg(target_os = "linux")]
         let landlock =
             restrict_worker(&dir, Path::new(&argv[0]), me.as_deref().filter(|_| limited));
         #[cfg(not(target_os = "linux"))]
         let landlock = "unsupported";
+        let confined = hidden && matches!(landlock, "full" | "partial");
+        if !confined && confine["required"] == true {
+            let line = format!(
+                "{}\n",
+                json!({"refused": format!(
+                    "this worker must be confined, but the host gave namespaces: {namespaced}, control state hidden: {hidden}, Landlock: {landlock}; set `confinement = \"best-effort\"` in the provider's limits to run it unconfined"
+                ), "landlock": landlock, "namespace": namespaced})
+            );
+            let acked = conn.write_all(line.as_bytes()).is_ok();
+            if !acked {
+                let _ = fallback.write_all(line.as_bytes());
+            }
+            let mut ack = String::new();
+            let _ = conn.set_read_timeout(Some(ACK_TIMEOUT));
+            let _ = BufReader::new(&conn).read_line(&mut ack);
+            kill_group(pgid);
+            return 0;
+        }
         // 5. The worker inherits the helper's group, stdio, environment and directory.
         let started = Instant::now();
         let status = match (&me, limited) {
@@ -546,7 +625,7 @@ mod unix {
         };
         let result = match status {
             Ok(s) => {
-                json!({"exit_code": s.code(), "signal": s.signal(), "wall_ms": started.elapsed().as_millis() as u64, "landlock": landlock})
+                json!({"namespace": hidden, "exit_code": s.code(), "signal": s.signal(), "wall_ms": started.elapsed().as_millis() as u64, "landlock": landlock})
             }
             Err(e) => {
                 json!({"exit_code": 127, "signal": null, "spawn_error": e.to_string(), "landlock": landlock})
@@ -570,6 +649,46 @@ mod unix {
         // 7. Only now the group (stragglers, then the helper itself).
         kill_group(pgid);
         0
+    }
+
+    /// Enters new user and mount namespaces, mapping this user to itself.
+    #[cfg(target_os = "linux")]
+    fn enter_namespaces() -> bool {
+        use nix::mount::{MsFlags, mount};
+        use nix::sched::{CloneFlags, unshare};
+        let (uid, gid) = (
+            rustix::process::getuid().as_raw(),
+            rustix::process::getgid().as_raw(),
+        );
+        unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS).is_ok()
+            && std::fs::write("/proc/self/setgroups", "deny").is_ok()
+            && std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1")).is_ok()
+            && std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1")).is_ok()
+            && mount(
+                None::<&str>,
+                "/",
+                None::<&str>,
+                MsFlags::MS_REC | MsFlags::MS_PRIVATE,
+                None::<&str>,
+            )
+            .is_ok()
+    }
+
+    /// Covers each path with an empty read-only tmpfs. The worker holds no capability after
+    /// exec, and a namespace it creates itself inherits these mounts locked.
+    #[cfg(target_os = "linux")]
+    fn hide<'a>(paths: impl Iterator<Item = &'a Value>) -> bool {
+        use nix::mount::{MsFlags, mount};
+        paths.filter_map(Value::as_str).all(|path| {
+            mount(
+                Some("tmpfs"),
+                path,
+                Some("tmpfs"),
+                MsFlags::MS_RDONLY | MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+                Some("size=4k"),
+            )
+            .is_ok()
+        })
     }
 
     /// Applies the worker ruleset; returns how far the kernel enforced it.
@@ -666,6 +785,16 @@ mod unix {
 
 #[cfg(unix)]
 pub use unix::{helper, reap};
+
+thread_local! {
+    /// How the last worker finished on this thread was confined.
+    static CONTAINMENT: std::cell::RefCell<Value> = const { std::cell::RefCell::new(Value::Null) };
+}
+
+/// How far the worker this thread last waited for was confined; null where nothing confines it.
+pub fn last_containment() -> Value {
+    CONTAINMENT.with(|c| c.borrow().clone())
+}
 
 /// The helper's limits argument: `<memory bytes>,<cpu seconds>` (`-` for none), or `-`.
 #[cfg(unix)]

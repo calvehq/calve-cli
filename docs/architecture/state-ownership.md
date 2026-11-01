@@ -16,7 +16,7 @@ Every fact has one owner, and nothing else may change it.
 
 Three rules follow, each enforced by `xtask check-architecture` with a negative test:
 
-1. **Calve does not reach into OpenAEVC's store.** Mutations are commands through the SDK or runtime API; reads are its query API. There is one documented exception: `maintenance gc --dry-run` counts collectable objects with a read-only query, because OpenAEVC v0.1.0 has no API for it. See [ADR 0022](../adr/0022-gc-dry-run-read.md).
+1. **Calve does not reach into OpenAEVC's store.** Mutations are commands through the SDK or runtime API; reads are its query API.
 2. **Calve copies no protocol state as truth.** A projection can always be dropped and rebuilt, and when it disagrees with OpenAEVC, OpenAEVC wins.
 3. **The host has no domain knowledge.** Calve's code names no first-party domain (INV-022).
 

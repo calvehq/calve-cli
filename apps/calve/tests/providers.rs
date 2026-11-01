@@ -113,6 +113,7 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
 "#,
     )
     .unwrap();
+    ok(data, &["--project", p, "config", "approve"]);
     let pack = |title: &str| {
         ok(data, &["--project", p, "pack", "create", title])["id"]
             .as_str()
@@ -161,6 +162,7 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
     let rt = tokio::runtime::Runtime::new().unwrap();
     let body = rt.block_on(async {
         use openaevc_sdk::OpenAevcClient as _;
+        calve_app::authority::use_data_root(&data.join("d/calve"));
         let project = calve_app::Project::open(&root).unwrap();
         let digest: openaevc::protocol::Digest = context.parse().unwrap();
         project
@@ -383,6 +385,7 @@ fn keyring_secrets_resolve_at_launch() {
         "format_version = 1\n[harnesses.w]\nprovider = \"sh\"\nmode = \"change\"\ncommand = [\"-c\", \"echo $TOKEN > t.txt\"]\n",
     )
     .unwrap();
+    run(&["--project", p, "config", "approve"]);
     let pack = run(&["--project", p, "pack", "create", "t"]).1["id"]
         .as_str()
         .unwrap()
@@ -504,6 +507,7 @@ fn provider_limits_reach_the_worker() {
         ),
     )
     .unwrap();
+    ok(data, &["--project", p, "config", "approve"]);
     for (harness, expected) in [("free", "SUCCEEDED"), ("small", "FAILED")] {
         let pack = ok(data, &["--project", p, "pack", "create", harness])["id"]
             .as_str()

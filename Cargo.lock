@@ -362,6 +362,7 @@ dependencies = [
  "futures-util",
  "jiff",
  "landlock",
+ "nix 0.31.3",
  "openaevc",
  "openaevc-sdk",
  "proptest",

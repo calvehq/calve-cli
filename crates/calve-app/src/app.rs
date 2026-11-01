@@ -153,7 +153,7 @@ pub fn fault(error: Error) -> Fault {
             code,
             message,
             detail,
-        } => (code, message, false, Some(detail)),
+        } => (code, message, code == "PROJECT_LOCKED", Some(detail)),
         Error::Busy(message) => ("PROJECT_LOCKED", message, true, None),
         Error::Io(error) => ("IO_ERROR", error.to_string(), false, None),
         Error::Database(error) => match error.sqlite_error_code() {
@@ -215,6 +215,9 @@ fn project_command(
     Ok(match command {
         ProjectCommand::List => json!(registry.projects()?),
         ProjectCommand::Show { project } => json!(registry.project(&project)?),
+        ProjectCommand::AuthorityExport { .. } | ProjectCommand::AuthorityImport { .. } => {
+            unreachable!("handled before a registry command")
+        }
         ProjectCommand::Register { path } => {
             let project = Project::peek(&path)?;
             json!(registry.register_project(&project, workspace)?)
@@ -376,8 +379,58 @@ fn takes_writer_lock(command: &Action) -> bool {
             command,
             Action::Execution {
                 command: ExecutionCommand::Cancel { .. }
+                    | ExecutionCommand::Start { .. }
+                    | ExecutionCommand::Retry { .. }
             }
         )
+}
+
+/// The part of the working tree a command touches, when it must not race a run changing it.
+fn tree_scope(action: &Action) -> Option<(&'static str, Vec<String>)> {
+    let path = |p: &std::path::Path| p.to_string_lossy().replace('\\', "/");
+    match action {
+        Action::Baseline {
+            command: BaselineCommand::Materialize { apply: true, .. },
+        }
+        | Action::Materialize { .. } => Some(("materialization", vec![])),
+        Action::Resource {
+            command:
+                ResourceCommand::Materialize {
+                    path: p,
+                    apply: true,
+                    ..
+                },
+        } => Some(("materialization", vec![p.clone()])),
+        Action::Pack {
+            command: PackCommand::Lifecycle(LifecycleCommand::Capture { path: p, .. }),
+        }
+        | Action::Revision {
+            command: RevisionCommand::Lifecycle(LifecycleCommand::Capture { path: p, .. }),
+        } => Some(("this capture", vec![path(p)])),
+        Action::Pack {
+            command: PackCommand::CaptureTree { .. },
+        } => Some(("this capture", vec![])),
+        _ => None,
+    }
+}
+
+/// Waits briefly for the writer lock: runs and commands now hold it for short sections.
+pub(crate) async fn project_writer_wait(
+    root: &Path,
+    wait: std::time::Duration,
+) -> Result<std::fs::File> {
+    let deadline = tokio::time::Instant::now() + wait;
+    loop {
+        match project_writer(root) {
+            Err(crate::Error::Detailed {
+                code: "PROJECT_LOCKED",
+                ..
+            }) if tokio::time::Instant::now() < deadline => {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            other => return other,
+        }
+    }
 }
 
 fn resolve_project_path(
@@ -466,6 +519,13 @@ fn config_command(
         ConfigCommand::Validate => {
             let effective = paths.load()?;
             json!({"valid":true,"warnings":effective.warnings,"sources":effective.sources})
+        }
+        ConfigCommand::Approve => {
+            let path = paths.project.clone().ok_or_else(|| {
+                crate::coded("PROJECT_NOT_FOUND", "no Project configuration here")
+            })?;
+            let digest = crate::authority::approve_config(&path)?;
+            json!({"approved": digest, "path": path})
         }
         ConfigCommand::EditPath { scope } => {
             let scope: Scope = scope.parse()?;
@@ -696,6 +756,16 @@ fn release_project(root: &Path) -> bool {
         map.remove(root);
         true
     })
+}
+
+/// The daemon's periodic maintenance: OpenAEVC expires leases on a tick or a command, so without
+/// this a daemon restarted under a dead run would keep reporting it RUNNING.
+pub fn tick_projects() {
+    PROJECTS.with(|cell| {
+        for project in cell.borrow().iter().flat_map(|map| map.values()) {
+            project.tick();
+        }
+    });
 }
 
 pub fn evict_project(root: &Path) {
@@ -950,6 +1020,22 @@ async fn dispatch(request: Request) -> Result<Value> {
             command: InboxCommand::Summary,
         } => return inbox_summary(&registry),
         Action::Project {
+            command: ProjectCommand::AuthorityExport { project, file, yes },
+        } => {
+            if !yes {
+                return Err(crate::coded(
+                    "CONFIRMATION_REQUIRED",
+                    "the exported file can act as this Project; confirm with --yes",
+                ));
+            }
+            let entry = registry.project(&project).ok().map(|e| e.path);
+            let root = entry.unwrap_or_else(|| PathBuf::from(&project));
+            return crate::authority::export(&Project::discover(&root)?, &file);
+        }
+        Action::Project {
+            command: ProjectCommand::AuthorityImport { path, file },
+        } => return crate::authority::import(&Project::discover(&path)?, &file),
+        Action::Project {
             command: ProjectCommand::AdoptCopy { path, name },
         } => {
             let (project, mut summary) = crate::adopt::adopt_copy(&path, name.as_deref()).await?;
@@ -1056,20 +1142,23 @@ async fn dispatch(request: Request) -> Result<Value> {
         (Err(_), Action::Recover { .. }) if path.is_dir() => std::fs::canonicalize(&path)?,
         (Err(error), _) => return Err(error),
     };
+    if mutates_project(&action)
+        && !matches!(action, Action::Recover { .. })
+        && root.join(".calve/project.toml").is_file()
+    {
+        crate::authority::ensure_instance(&root)?;
+    }
     let _writer = if takes_writer_lock(&action) && root.join(".calve").is_dir() {
-        Some(project_writer(&root)?)
+        Some(project_writer_wait(&root, std::time::Duration::from_secs(5)).await?)
     } else {
         None
     };
     if let Action::Recover { command } = &action {
         return recover(&root, command).await;
     }
-    // Store maintenance needs the runtime closed (one runtime per data root). The dry run reads
-    // without it, and must not close the runtime a running request depends on.
+    // Store maintenance needs the runtime closed (one runtime per data root), and must not close
+    // one a running request depends on.
     let store_free = match action {
-        Action::Maintenance {
-            command: MaintenanceCommand::Gc { dry_run: true, .. },
-        } => true,
         Action::Maintenance {
             command:
                 MaintenanceCommand::VerifyStore
@@ -1146,6 +1235,9 @@ async fn dispatch(request: Request) -> Result<Value> {
     if mutates_project(&action) {
         registry.ensure_project_path(&project.identity, &project.root)?;
         compatibility::query(&project.client).await?;
+        if let Some((what, paths)) = tree_scope(&action) {
+            project.refuse_if_claimed(what, &paths).await?;
+        }
     }
     match action {
         Action::Version
@@ -1531,7 +1623,7 @@ async fn dispatch(request: Request) -> Result<Value> {
             ExecutionCommand::Cancel { id, reason } => {
                 project.cancel_execution(&id, reason.as_deref()).await
             }
-            ExecutionCommand::Logs { id } => project.execution_logs(&id).await,
+            ExecutionCommand::Logs { id, after } => project.execution_logs(&id, after).await,
             ExecutionCommand::Retry { id } => project.retry_execution(&settings, &id).await,
             ExecutionCommand::Start {
                 pack,
@@ -2017,8 +2109,14 @@ fn init_report(project: &Project, registered: bool) -> Result<Value> {
 
 /// Recovery must work when the Project cannot open: inspect and plan open nothing writable.
 async fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
-    // Inspect reports a store in use, so a running request keeps its runtime.
-    release_project(root);
+    // Inspect reports a store in use, so a running request keeps its runtime; apply must not
+    // change anything under one.
+    if !release_project(root) && matches!(command, RecoverCommand::Apply { .. }) {
+        return Err(crate::Error::Busy(format!(
+            "{} is in use by a running request; retry recovery when it ends",
+            root.display()
+        )));
+    }
     match command {
         RecoverCommand::Inspect => crate::recovery::inspect(root),
         RecoverCommand::Plan => Ok(

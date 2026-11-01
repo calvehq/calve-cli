@@ -138,3 +138,117 @@ fn scenario_p_version_incompatibility() {
     let packs = env.ok(&["--project", &project, "pack", "list"]);
     assert_eq!(packs.as_array().unwrap().len(), 1, "{packs}");
 }
+
+/// §60 Test L: a copy cannot quietly become a second writer with the same identity, registered
+/// or not. The boundary is this machine: another machine holds no authority until it imports one.
+#[test]
+fn test_l_a_copy_is_inactive_until_adopted() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("original");
+    env.ok(&["init", root.to_str().unwrap(), "--no-register"]);
+    let original = root.to_str().unwrap();
+    let copy = env.path().join("copy");
+    calve_testkit::copy_tree(&root, &copy);
+    let copied = copy.to_str().unwrap();
+
+    // The copy reads, and every write is refused before it changes anything.
+    env.ok(&["--project", copied, "intent", "list"]);
+    let refused = env.fails(&["--project", copied, "intent", "create", "second writer"]);
+    assert!(refused.contains("PROJECT_IDENTITY_CONFLICT"), "{refused}");
+    assert!(refused.contains("adopt-copy"), "{refused}");
+    assert_eq!(
+        env.ok(&["--project", copied, "intent", "list"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    // The active instance is unaffected, also after unregistering.
+    env.ok(&["--project", original, "intent", "create", "first writer"]);
+
+    // Adoption gives the copy its own identity, and both then write.
+    let adopted = env.ok(&["project", "adopt-copy", copied]);
+    let new_id = adopted["project_id"].as_str().unwrap();
+    let original_identity = fs::read_to_string(root.join(".calve/project.toml")).unwrap();
+    assert!(!original_identity.contains(new_id), "{adopted}");
+    env.ok(&["--project", copied, "intent", "create", "own writer"]);
+    env.ok(&["--project", original, "intent", "create", "still writing"]);
+}
+
+/// A moved Project keeps its identity: the authority follows when the old root is gone.
+#[test]
+fn test_l_a_moved_project_stays_active() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("before");
+    env.ok(&["init", root.to_str().unwrap(), "--no-register"]);
+    let moved = env.path().join("after");
+    std::fs::rename(&root, &moved).unwrap();
+    env.ok(&[
+        "--project",
+        moved.to_str().unwrap(),
+        "intent",
+        "create",
+        "moved",
+    ]);
+}
+
+/// Another machine: no authority, so nothing opens as this Project until it is imported.
+#[test]
+fn test_l_another_machine_needs_the_authority() {
+    let here = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = here.path().join("project");
+    let p = root.to_str().unwrap();
+    here.ok(&["init", p, "--no-register"]);
+    let file = here.path().join("authority.json");
+    here.fails(&["project", "authority-export", p, file.to_str().unwrap()]);
+    here.ok(&[
+        "project",
+        "authority-export",
+        p,
+        file.to_str().unwrap(),
+        "--yes",
+    ]);
+
+    let there = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let copy = there.path().join("project");
+    calve_testkit::copy_tree(&root, &copy);
+    let c = copy.to_str().unwrap();
+    let refused = there.fails(&["--project", c, "intent", "create", "no authority"]);
+    assert!(refused.contains("no authority"), "{refused}");
+    there.ok(&["project", "authority-import", c, file.to_str().unwrap()]);
+    there.ok(&["--project", c, "intent", "create", "imported"]);
+}
+
+/// No key material stays where a worker works.
+#[test]
+fn the_project_directory_holds_no_authority() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    env.ok(&["--project", p, "authority", "identity-add", "reviewer"]);
+    assert!(!root.join(".calve/keys.toml").exists());
+    assert!(!root.join(".calve/identities").exists());
+}
+
+/// Keys of a Project from before they moved leave the directory on first open.
+#[test]
+fn legacy_keys_move_out_on_first_open() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let id = env.ok(&["project", "list"])[0]["project_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let keys = env
+        .path()
+        .join("d/calve/authority")
+        .join(&id)
+        .join("keys.toml");
+    std::fs::rename(&keys, root.join(".calve/keys.toml")).unwrap();
+    env.ok(&["--project", p, "intent", "create", "still works"]);
+    assert!(keys.is_file() && !root.join(".calve/keys.toml").exists());
+}

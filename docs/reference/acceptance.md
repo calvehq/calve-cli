@@ -9,7 +9,7 @@
 | C — Pre-promotion reopen | `examples::scenario_c` | **Deviation** | Steps 1–4 and 8 hold. Steps 5–7 cannot run on the same pack: OpenAEVC v0.1.0 keeps a pack's effects on reopen and promotes only effects of the current generation, so a pack with effects cannot be promoted after a reopen. The script asserts that refusal, then runs 5–7 on a superseding pack. |
 | D — Independent Baselines | `examples::scenario_d` | Pass (Linux) | B0→B1 touches only file2/file3; shared files keep their inodes. |
 | E — Revision | `examples::scenario_e` | Pass (Linux) | |
-| F — Parallel agent work | `examples::scenario_f` | **Deviation** | The console engine reads a real daemon for step 5. The two executions do not overlap: a run holds the Project writer lock until it ends, so the second meets the retryable `PROJECT_LOCKED` and runs afterwards. |
+| F — Parallel agent work | `examples::scenario_f` | Pass (Linux) | Each worker finishes only after it has seen the other running, so the two really overlap. The console engine reads a real daemon for step 5. |
 | G — Capability denial | `acceptance::scenario_g_capability_denial` | Pass (Linux) | A fixture extension's real `process.execute` host call; OpenAEVC denies it and Calve reports `CAPABILITY_DENIED` with the grant command. |
 | H — Extension permission widening | `extensions::scenario_h_permission_widening` | Pass (Linux) | |
 | I — Project relocation | `examples::scenario_i` | Pass (Linux) | |

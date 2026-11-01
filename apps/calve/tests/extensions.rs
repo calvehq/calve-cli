@@ -40,6 +40,13 @@ fn openaevc_only(version: &'static str, caps: &[&str]) -> Package<'static> {
     }
 }
 
+fn openaevc_only_bytes(bytes: Vec<u8>) -> Package<'static> {
+    Package {
+        native: ("fixture_ext", bytes),
+        ..openaevc_only("1.0.0", &[])
+    }
+}
+
 fn trust(env: &Env, name: &str, r: &Repo) {
     let root = r.root_bytes(1);
     let file = env.path().join(format!("{name}-root.json"));
@@ -488,6 +495,51 @@ fn fixture_project(env: &Env, r: &mut Repo) -> String {
     p
 }
 
+/// §57 P with a real package: an extension built for a protocol this Calve does not speak is
+/// refused before anything is enabled, naming both ranges.
+#[test]
+fn scenario_p_an_extension_of_an_unsupported_protocol_is_refused() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut r = Repo::new();
+    let mut bytes = fs::read(fixture_ext()).unwrap();
+    bytes.extend(
+        format!(
+            "\nCALVE-FIXTURE:{}",
+            json!({"version": "1.0.0", "caps": [], "protocol_major": 9})
+        )
+        .as_bytes(),
+    );
+    r.add_package("targets", openaevc_only_bytes(bytes));
+    r.targets.insert(
+        "index.json".into(),
+        br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
+    );
+    r.publish();
+    trust(&env, "example", &r);
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let refused = env.fails(&[
+        "--project",
+        p,
+        "extension",
+        "enable",
+        "org.example.fixture",
+        "--acknowledge-native",
+    ]);
+    assert!(
+        refused.contains("EXTENSION_INCOMPATIBLE") || refused.contains("protocol"),
+        "{refused}"
+    );
+    assert_eq!(
+        env.ok(&["--project", p, "extension", "list"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
 /// The two catalog commands that change trust: moving an id to another publisher, and the
 /// audited reset, which needs both confirmations.
 #[test]
@@ -674,6 +726,71 @@ fn scenario_n_third_party_extension() {
         env.ok(&["--project", &p, "extension", "health"])[0]["healthy"],
         true
     );
+    // 3. Its resources are created and viewed from nothing but its signed manifest.
+    let kind = "org.example.fixture.record.set";
+    let edit = env.ok(&["--project", &p, "pack", "create", "records"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&[
+        "--project",
+        &p,
+        "resource",
+        "set",
+        &edit,
+        "--generation",
+        "1",
+        "--set",
+        &format!("{kind}:item-1={{\"score\":3}}"),
+    ]);
+    let refused = env.fails(&[
+        "--project",
+        &p,
+        "resource",
+        "set",
+        &edit,
+        "--generation",
+        "1",
+        "--set",
+        &format!("{kind}:item-2=[1]"),
+    ]);
+    assert!(!refused.is_empty());
+    let generation = env.ok(&["--project", &p, "pack", "show", &edit])["generation"].to_string();
+    env.ok(&[
+        "--project",
+        &p,
+        "pack",
+        "seal",
+        &edit,
+        "--generation",
+        &generation,
+    ]);
+    env.ok(&[
+        "--project",
+        &p,
+        "pack",
+        "qualify",
+        &edit,
+        "--generation",
+        &generation,
+    ]);
+    env.ok(&[
+        "--project",
+        &p,
+        "pack",
+        "promote",
+        &edit,
+        "--generation",
+        &generation,
+    ]);
+    let shown = env.ok(&[
+        "--project",
+        &p,
+        "resource",
+        "show",
+        &format!("{kind}:item-1"),
+    ]);
+    assert!(shown.to_string().contains("score"), "{shown}");
     // 3. Its evidence is created and viewed by kind.
     let pack = env.ok(&["--project", &p, "pack", "create", "third party"])["id"]
         .as_str()

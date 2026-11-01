@@ -14,6 +14,7 @@
 | `CALVE_CORRELATION_ID` | Correlation id for the request, to tie related requests together |
 | `CALVE_EXECUTION_LEASE_MS` | Execution lease, 5 s to 1 h; default two minutes |
 | `CALVE_KEYRING_COMMAND` | Program run as `<command> <name>` to resolve `keyring:` secrets |
+| `CALVE_WORKER_CONFINEMENT` | `required` or `best-effort`: default for workers on this host |
 | `SOURCE_DATE_EPOCH` | Timestamp used by `xtask dist` |
 
 ## Set by Calve for workers

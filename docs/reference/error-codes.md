@@ -46,3 +46,5 @@ OpenAEVC's structured error stays in `detail.openaevc` (code, message, retryable
 Messages and details are redacted against the secrets in use ([secrets](../security/secrets.md)). `PRODUCT_ERROR` remains for messages not yet classified (exit 1).
 
 Reserved, not emitted yet: `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION` (materialization reports `blocked` paths instead), `UNSUPPORTED_PLATFORM_FEATURE`, `EXTENSION_PERMISSION_REQUIRED`, `CATALOG_STALE`.
+
+`CONFIG_UNAPPROVED`: a Project configuration names providers, harnesses or check commands the host has not approved. Review the file, then run `calve config approve`.

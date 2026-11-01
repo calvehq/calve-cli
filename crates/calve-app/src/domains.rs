@@ -142,21 +142,40 @@ impl Project {
         }
     }
 
-    /// `(extension, declaration)` of every non-file resource kind of the active packages.
+    /// `(extension, declaration)` of every non-file resource kind of the active packages. A
+    /// package with integration metadata declares them there. One without has its signed
+    /// OpenAEVC manifest, whose effect kinds name their resource kinds and actions, so each
+    /// effect kind is usable as is; what its payload means stays the extension's business.
     pub(crate) async fn resource_domains(&self) -> Result<Vec<(String, ResourceDecl)>> {
-        Ok(self
-            .active_packages()
-            .await?
-            .into_iter()
-            .flat_map(|r| {
-                let id = r.id.clone();
-                r.metadata
-                    .map(|m| m.resources)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(move |d| (id.clone(), d))
-            })
-            .collect())
+        let mut out = Vec::new();
+        for r in self.active_packages().await? {
+            let id = r.id.clone();
+            match r.metadata {
+                Some(m) => out.extend(m.resources.into_iter().map(|d| (id.clone(), d))),
+                None => {
+                    let manifest: openaevc::protocol::ExtensionManifest = serde_json::from_value(
+                        self.extension_info(&id).await?["manifest"].clone(),
+                    )?;
+                    out.extend(manifest.effect_kinds.into_iter().map(|e| {
+                        (
+                            id.clone(),
+                            ResourceDecl {
+                                short: e.kind.clone(),
+                                kind: e.resource_kind,
+                                set: e.kind,
+                                remove: String::new(),
+                                write_action: e
+                                    .required_actions
+                                    .into_iter()
+                                    .next()
+                                    .unwrap_or_default(),
+                            },
+                        )
+                    }));
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Active packages that run language checks.

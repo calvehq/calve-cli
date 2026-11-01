@@ -13,6 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use openaevc::store::{SqliteOptions, SqliteStore};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 
@@ -87,47 +88,63 @@ fn class(class: &'static str, owner: GcOwner, reason: String, paths: Vec<PathBuf
     }
 }
 
-/// OpenAEVC's collectable set, computed read-only with its own criteria.
+/// OpenAEVC's collectable set, from its own collector run on a disposable view of the store:
+/// the database is copied, objects are hard-linked, and only the view loses anything. While the
+/// store is in use there is no consistent view, so nothing is counted.
 fn protocol(root: &Path, grace: Duration) -> Result<Class> {
-    let store = root.join(".calve/openaevc");
-    let db = Connection::open_with_flags(
-        store.join("runtime.sqlite3"),
-        OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )?;
-    let (mut count, mut bytes): (u64, u64) = db.query_row(
-        "SELECT count(*), coalesce(sum(size),0) FROM objects o
-         WHERE NOT EXISTS (SELECT 1 FROM object_index i WHERE i.digest = o.digest)",
-        [],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )?;
-    for shard in entries(&store.join("objects/sha256")) {
-        for f in entries(&shard) {
-            let name = f
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            let known: i64 = db.query_row(
-                "SELECT count(*) FROM objects WHERE digest=?1",
-                [format!("sha256:{name}")],
-                |r| r.get(0),
-            )?;
-            if known == 0 && age(&f) >= grace {
-                count += 1;
-                bytes += size(&f);
-            }
-        }
-    }
-    Ok(Class {
+    let class = |counted, reason: String| Class {
         class: "openaevc_unreachable_objects",
         owner: GcOwner::OpenaevcRuntime,
-        reason: format!(
-            "indexed in no Namespace, or orphan CAS files older than {}s; indexed history is never removed",
-            grace.as_secs()
-        ),
+        reason,
         paths: vec![],
-        counted: Some((count, bytes)),
-    })
+        counted,
+    };
+    let store = root.join(".calve/openaevc");
+    let reason = format!(
+        "indexed in no Namespace, or orphan CAS files older than {}s; indexed history is never removed",
+        grace.as_secs()
+    );
+    // Held while copying: no other runtime can write underneath.
+    let Ok(_live) = SqliteStore::open(&store, SqliteOptions::default()) else {
+        return Ok(class(
+            None,
+            format!("{reason}; not counted while the store is in use"),
+        ));
+    };
+    let view = root
+        .join(".calve/tmp")
+        .join(format!("gc-plan-{}", uuid::Uuid::now_v7()));
+    let counted = (|| {
+        fs::create_dir_all(view.join("objects/sha256"))?;
+        for f in entries(&store) {
+            if f.is_file() {
+                fs::copy(&f, view.join(f.file_name().unwrap_or_default()))?;
+            }
+        }
+        let mut before = 0;
+        for shard in entries(&store.join("objects/sha256")) {
+            let target = view
+                .join("objects/sha256")
+                .join(shard.file_name().unwrap_or_default());
+            fs::create_dir_all(&target)?;
+            for f in entries(&shard) {
+                before += size(&f);
+                let to = target.join(f.file_name().unwrap_or_default());
+                if fs::hard_link(&f, &to).is_err() {
+                    fs::copy(&f, &to)?;
+                }
+            }
+        }
+        let report = SqliteStore::open(&view, SqliteOptions::default())?.collect_garbage(grace)?;
+        let after: u64 = entries(&view.join("objects/sha256"))
+            .iter()
+            .flat_map(|s| entries(s))
+            .map(|f| size(&f))
+            .sum();
+        Ok::<_, crate::Error>((report.removed as u64, before - after))
+    })();
+    let _ = fs::remove_dir_all(&view);
+    Ok(class(Some(counted?), reason))
 }
 
 /// Last `state` recorded in a journal, if it can be read.

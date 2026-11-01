@@ -12,6 +12,7 @@ format_version = 1
 [integrations."org.calve.rust".checks]
 build = ["sh", "-c", "grep -q 'pub fn greet' src/lib.rs"]
 TOML
+calve config approve >/dev/null
 mkdir -p "$PROJECT/src"
 printf '[package]\nname = "hello"\nversion = "0.1.0"\n' > "$PROJECT/Cargo.toml"
 printf 'pub fn greet() -> &%sstr { "hi" }\n' "'static" > "$PROJECT/src/lib.rs"

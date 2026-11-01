@@ -12,6 +12,6 @@ The worker's output becomes observations. In `change` mode, a local process's ch
 
 Workers renew a lease while they run. If `calved` dies, the lease expires and OpenAEVC reports the execution as `LOST`. A retry creates a successor attempt; the failed record is never rewritten.
 
-In one Project, writes are serialized. Parallel work means parallel packs whose executions take turns, not simultaneous writers. A second concurrent writer gets the retryable `PROJECT_LOCKED`.
+Runs in one Project overlap. Each pack takes one run at a time, because a run advances its generation, and two changing runs cannot share paths. Anything else proceeds alongside a run. A real collision gets the retryable `PROJECT_LOCKED`, naming the execution in the way. Overlap needs `calved`; without a daemon, the process running the worker holds the store.
 
 More: [executions](../reference/executions.md), [providers and harnesses](../reference/providers-and-harnesses.md).

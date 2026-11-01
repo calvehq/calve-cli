@@ -419,9 +419,10 @@ fn the_lock_owner_and_the_actor_are_recorded() {
     let config = t.ok(&["config", "edit-path", "--scope", "project"]);
     fs::write(
         config["path"].as_str().unwrap(),
-        "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"sleep 6\"]\n",
+        "format_version = 1\n[harnesses.slow]\nprovider = \"shell\"\nmode = \"check\"\ncommand = [\"-c\", \"true\"]\n",
     )
     .unwrap();
+    t.ok(&["config", "approve"]);
     let pack = t.ok(&["pack", "create", "busy"])["id"]
         .as_str()
         .unwrap()
@@ -430,6 +431,8 @@ fn the_lock_owner_and_the_actor_are_recorded() {
         .env("XDG_DATA_HOME", t.env.path().join("d"))
         .env("XDG_CONFIG_HOME", t.env.path().join("c"))
         .envs(t.env.vars.iter().map(|(k, v)| (k, v)))
+        // A run takes the lock to record its result; this holds it there.
+        .env("CALVE_TEST_PAUSE", "execution.after_worker=6000")
         .args(t.args(&[
             "--no-daemon-start",
             "--direct",

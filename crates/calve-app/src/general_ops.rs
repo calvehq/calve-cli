@@ -62,6 +62,9 @@ impl Project {
             .chain(removes.iter().map(|r| (r, None)));
         for (reference, value) in refs {
             let (ext, d, name) = self.parse_ref(reference).await?;
+            if value.is_none() && d.remove.is_empty() {
+                return Err(invalid(format!("{reference} has no removal effect")));
+            }
             if owner.as_ref().is_some_and(|(e, _)| *e != ext) {
                 return Err(invalid(
                     "one edit changes resources of one extension; split it into separate packs",

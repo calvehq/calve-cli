@@ -14,7 +14,7 @@ calve execution retry <execution-id>
 
 `start` runs a harness (see [providers and harnesses](providers-and-harnesses.md)) as an OpenAEVC execution on an OPEN pack. The worker's output becomes observations, and in `change` mode the files it changes inside the harness scope become snapshot effects with provenance. Changes outside the scope fail the execution and are not recorded. Supervised commands (`start`, `retry`) run under `calved` so the worker survives the CLI exiting; Calve starts the daemon automatically unless `--no-daemon-start` is given, and otherwise runs in-process.
 
-`logs` returns the journal events for an execution. `view`-level detail, including resolved output lines, observations and produced effects, is shown on the console's Execution screen.
+`logs` returns the journal events and output of an execution, also while it runs. Pass the returned `next` as `--after` to read only new lines. `view`-level detail, including resolved output lines, observations and produced effects, is shown on the console's Execution screen.
 
 `cancel` sends OpenAEVC's cancellation command; the running worker notices within half a second and its process group is terminated. `retry` asks OpenAEVC for the successor attempt of a `FAILED`, `LOST` or `CANCELLED` execution on the same work unit; the failed record is never rewritten, and the retry budget is OpenAEVC's (`max_attempts`, 3 for Calve harnesses and captures).
 

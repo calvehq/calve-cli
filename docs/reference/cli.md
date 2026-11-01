@@ -45,6 +45,8 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve project register <path>` | Register an existing Project directory |
 | `calve project unregister <project> [--yes]` | Forget a Project registration (keeps its files) |
 | `calve project relocate <project> <path>` | Point a registration at a moved Project |
+| `calve project authority-export <project> <file> [--yes]` | Write this Project's authority to a file, to import it on another machine |
+| `calve project authority-import <path> <file>` | Install an exported authority for the Project at `path` |
 | `calve project adopt-copy <path> [--name <name>]` | Make a copied Project directory a new Project with its own identity and Namespace |
 | `calve project rename <project> <name>` | Change the Project display name |
 | `calve project identity <project>` | Show immutable Project identity |
@@ -56,6 +58,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 |---|---|
 | `calve config list` | Show effective configuration and its sources |
 | `calve config get <key>` | Read one configuration key |
+| `calve config approve` | Approve this Project's configuration as it is on disk. Its providers, harnesses and check commands are ignored until the host has approved these exact bytes |
 | `calve config set <key> <value> [--scope <scope>]` | Set a configuration key in a scope |
 | `calve config unset <key> [--scope <scope>]` | Remove a configuration key from a scope |
 | `calve config validate` | Validate every configuration file in scope |
@@ -201,7 +204,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 | `calve execution show <id>` | Show an execution |
 | `calve execution wait <id> [--timeout-ms <timeout_ms>]` | Wait for an execution to finish |
 | `calve execution cancel <id> [--reason <reason>]` | Cancel a running execution |
-| `calve execution logs <id>` | Journal events for an execution |
+| `calve execution logs <id> [--after <after>]` | Journal events and output of an execution, also while it runs. `--after` skips the lines already read: pass the `next` of the previous call |
 | `calve execution retry <id>` | Start the protocol successor of a failed attempt |
 | `calve execution start <pack> --harness <harness> --generation <generation> [--task <task>]` | Run a configured harness as an OpenAEVC execution against an open pack |
 

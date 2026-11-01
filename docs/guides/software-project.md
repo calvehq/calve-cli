@@ -41,6 +41,8 @@ format_version = 1
 test = ["cargo", "test", "--locked"]
 ```
 
+Then run `calve config approve`: a Project file's check commands count only once approved.
+
 Do not run a harness on this pack. An execution starts a new generation, and OpenAEVC only promotes effects from the current one, so Calve refuses. Use a separate pack for test runs.
 
 ## Promote and materialize
