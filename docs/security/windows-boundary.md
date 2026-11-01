@@ -17,6 +17,6 @@ Native results come from Windows 11 x86_64 with cross-compiled `x86_64-pc-window
 
 **Materialization:** see [materialization guarantees](materialization-guarantees.md).
 
-**Install rename:** a Windows telemetry service can briefly hold a newly written executable open, which refuses the install rename. Calve retries for up to 5 seconds, and a holder that lasts longer fails and is named in the error.
+**Install rename:** a Windows telemetry service can briefly hold a newly written executable open, which refuses the install rename. Calve retries for up to 5 seconds, and a holder that lasts longer fails and is named in the error. This is a mitigation: a slower holder, or another service, can still fail an install, and retrying the install is then safe.
 
 Decision record: [ADR 0016](../adr/0016-windows-daemon-boundary.md).
