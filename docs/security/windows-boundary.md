@@ -17,6 +17,6 @@ Native results come from Windows 11 x86_64 with cross-compiled `x86_64-pc-window
 
 **Materialization:** see [materialization guarantees](materialization-guarantees.md).
 
-**Open issue:** a rename during extension install has failed intermittently on Windows. It has not been reproduced under stress (0 of 40), there is no root cause, and it is not classified as harmless. Install keeps diagnostics that name what holds the file.
+**Install rename:** a Windows telemetry service can briefly hold a newly written executable open, which refuses the install rename. Calve retries for up to 5 seconds, and a holder that lasts longer fails and is named in the error.
 
 Decision record: [ADR 0016](../adr/0016-windows-daemon-boundary.md).

@@ -65,6 +65,21 @@ fn io(e: impl std::fmt::Display) -> InstallError {
     err("IO_ERROR", e.to_string())
 }
 
+/// Windows services inspect a freshly written executable and hold it open briefly (seen: the
+/// telemetry service), which refuses the rename. A holder that lasts past 5 s still fails, named.
+fn rename_staged(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut retries = if cfg!(windows) { 50 } else { 0 };
+    loop {
+        match fs::rename(from, to) {
+            Err(e) if retries > 0 && e.kind() == std::io::ErrorKind::PermissionDenied => {
+                retries -= 1;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Windows: which processes hold files under `dir` open (a refused rename's usual cause); a
 /// note for the error message. Directory handles (a process's working directory) are not
 /// visible to the Restart Manager, so "none" points at those.
@@ -1065,7 +1080,7 @@ impl Installer {
         } else {
             // Read-only only after the move: renaming a directory to a new parent updates its
             // `..` entry, which needs write permission on the directory itself.
-            fs::rename(&staging, &final_dir).map_err(|e| {
+            rename_staged(&staging, &final_dir).map_err(|e| {
                 let base = io_at("rename staging to", &final_dir)(e);
                 err(
                     base.code,

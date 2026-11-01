@@ -39,6 +39,7 @@ All notable changes to Calve are documented here.
 - Resource limits that cannot be applied refuse the worker instead of being dropped.
 - The console and CLI neutralize more invisible and control characters in untrusted text, and the
   console explains a `PROJECT_LOCKED` refusal.
+- On Windows, an install retries when another process briefly holds the new package open.
 - `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
   receipts.
 - `execution start` refuses any pack with effects. An execution would start a new generation and
