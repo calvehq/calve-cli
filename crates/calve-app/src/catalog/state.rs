@@ -579,6 +579,12 @@ impl Catalog {
     /// Deterministic recovery (§9.2): never re-validates from the network, never activates on
     /// checksums alone, never falls back to a parent of the activated generation.
     pub fn open(dir: &Path) -> Result<Catalog, GenError> {
+        // The scan below moves unactivated generations aside, so it must not run while another
+        // process is between accepting a generation and activating it.
+        let lock = fs::File::create(dir.join("transition.lock")).ok();
+        if let Some(lock) = &lock {
+            let _ = lock.lock();
+        }
         let rr = |m: &str| GenError::RecoveryRequired(m.into());
         let pinned_repo = fs::read_to_string(dir.join("REPO_ID"))
             .map_err(|_| rr("trust_state: REPO_ID missing"))?;

@@ -590,6 +590,11 @@ const TEST_HOOKS: &[&str] = &[
     "CALVE_FAULT",
     "CALVE_FS_PRIMITIVES",
     "CALVE_REPLAY_WINDOW_MS",
+    "CALVE_HELPER_DELAY_MS",
+    "CALVE_KEEP_SPAWN_RECORDS",
+    "CALVE_TEST_NO_LEASE_KEEPER",
+    "CALVE_JSON_RECORD",
+    "CALVE_SANDBOX_PROGRAM",
 ];
 
 /// The first test hook named in a binary.

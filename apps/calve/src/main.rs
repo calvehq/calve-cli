@@ -73,6 +73,9 @@ fn command_key(matches: &clap::ArgMatches) -> String {
 /// `<dir>/<command>@<pid>-<n>.json` (parallel runs never interleave), the input of
 /// `xtask json-schemas`.
 fn record(key: &str, data: &Value) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
     let Some(dir) = std::env::var_os("CALVE_JSON_RECORD") else {
         return;
     };
@@ -279,7 +282,7 @@ async fn real_main() -> i32 {
     };
     if cli.json
         && !calve_api::json::declares(&out.key)
-        && std::env::var_os("CALVE_JSON_RECORD").is_none()
+        && !(cfg!(debug_assertions) && std::env::var_os("CALVE_JSON_RECORD").is_some())
     {
         eprintln!(
             "error: --json is not supported by `calve {}` (it declares no JSON schema)",

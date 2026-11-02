@@ -172,8 +172,10 @@ impl Primitives for Fallback {
 /// tree). Debug builds: `CALVE_FS_PRIMITIVES=fallback` simulates a weak filesystem and
 /// `=displace` (Linux) uses displace-then-place replacement.
 pub(crate) fn primitives(root: &Path) -> Box<dyn Primitives> {
-    let forced = std::env::var("CALVE_FS_PRIMITIVES").ok();
-    let forced = forced.as_deref().filter(|_| cfg!(debug_assertions));
+    let forced = cfg!(debug_assertions)
+        .then(|| std::env::var("CALVE_FS_PRIMITIVES").ok())
+        .flatten();
+    let forced = forced.as_deref();
     if forced == Some("fallback") {
         return Box::new(Fallback);
     }

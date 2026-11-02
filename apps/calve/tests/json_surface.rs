@@ -90,7 +90,9 @@ fn remaining_commands_succeed_with_json() {
             "still not",
         ],
     );
-    run(&env, &["pack", "reopen", &pack, "--generation", &g]);
+    let empty = id(&run(&env, &["pack", "create", "empty"]));
+    run(&env, &["pack", "seal", &empty, "--generation", "1"]);
+    run(&env, &["pack", "reopen", &empty, "--generation", "1"]);
 
     // A promoted pack, a revision through its whole lifecycle, Baselines and aliases.
     let p1 = id(&run(&env, &["pack", "create", "P1"]));

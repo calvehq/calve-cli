@@ -217,21 +217,38 @@ fn a_crash_after_the_remaining_commands_converges() {
         &["pack", "qualify", &id, "--generation", &g],
     );
     t.ok(&["pack", "qualify", &id, "--generation", &g]);
-    // Reopen moves to a new generation exactly once.
-    t.crash(
-        "openaevc.ReopenChangePack",
-        &["pack", "reopen", &id, "--generation", &g],
-    );
-    let shown = t.ok(&["pack", "show", &id]);
-    assert_eq!(shown["state"], "OPEN");
-    assert_eq!(
-        shown["generation"].as_u64().unwrap(),
-        g.parse::<u64>().unwrap() + 1
-    );
+    // A pack with effects cannot reopen on OpenAEVC v0.1.0: refused, and nothing crossed.
     let refused = t
         .env
         .run(&t.args(&["pack", "reopen", &id, "--generation", &g]));
-    assert!(!refused.success, "a stale reopen is refused");
+    assert!(
+        refused.stderr.contains("REOPEN_UNSAFE"),
+        "{}",
+        refused.stderr
+    );
+    {
+        // An effect-free pack reopens to a new generation exactly once.
+        let empty = t.ok(&["pack", "create", "empty"])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let g = t.ok(&["pack", "show", &empty])["generation"].to_string();
+        t.ok(&["pack", "seal", &empty, "--generation", &g]);
+        t.crash(
+            "openaevc.ReopenChangePack",
+            &["pack", "reopen", &empty, "--generation", &g],
+        );
+        let shown = t.ok(&["pack", "show", &empty]);
+        assert_eq!(shown["state"], "OPEN");
+        assert_eq!(
+            shown["generation"].as_u64().unwrap(),
+            g.parse::<u64>().unwrap() + 1
+        );
+        let refused = t
+            .env
+            .run(&t.args(&["pack", "reopen", &empty, "--generation", &g]));
+        assert!(!refused.success, "a stale reopen is refused");
+    }
     // Quarantine and release.
     t.crash(
         "openaevc.QuarantineChangePack",
@@ -242,7 +259,7 @@ fn a_crash_after_the_remaining_commands_converges() {
         "openaevc.ReleaseQuarantine",
         &["pack", "release-quarantine", &id],
     );
-    assert_eq!(t.ok(&["pack", "show", &id])["state"], "OPEN");
+    assert_eq!(t.ok(&["pack", "show", &id])["state"], "SEALED");
     // A revision of a promoted pack.
     let (_, digest) = t.promoted("base", "b.txt");
     t.crash(

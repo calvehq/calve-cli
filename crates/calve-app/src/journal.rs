@@ -31,11 +31,15 @@ pub fn pause(point: &str) {
     if !cfg!(debug_assertions) {
         return;
     }
-    if let Some(ms) = std::env::var("CALVE_TEST_PAUSE").ok().and_then(|v| {
-        v.split_once('=')
-            .filter(|(p, _)| *p == point)
-            .and_then(|(_, ms)| ms.parse().ok())
-    }) {
+    if let Some(ms) = cfg!(debug_assertions)
+        .then(|| std::env::var("CALVE_TEST_PAUSE").ok())
+        .flatten()
+        .and_then(|v| {
+            v.split_once('=')
+                .filter(|(p, _)| *p == point)
+                .and_then(|(_, ms)| ms.parse().ok())
+        })
+    {
         std::thread::sleep(std::time::Duration::from_millis(ms));
     }
 }
