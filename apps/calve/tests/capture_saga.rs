@@ -465,6 +465,135 @@ fn a_crash_between_relink_commit_and_ack_converges() {
     assert_eq!(t.ok(&["pack", "show", &pack])["state"], "ABANDONED");
 }
 
+/// A sealed pack with effects, the case a reopen cannot serve.
+fn sealed_setup() -> (T, String, u64) {
+    let (t, pack, _) = supersede_setup();
+    let g = t.ok(&["pack", "show", &pack])["generation"]
+        .as_u64()
+        .unwrap();
+    t.ok(&["pack", "seal", &pack, "--generation", &g.to_string()]);
+    (t, pack, g)
+}
+
+/// Scenario C on OpenAEVC v0.1.0: the reopen is refused before anything changes, and the explicit
+/// replacement carries the work on to a promotion, with the original kept as history.
+#[test]
+fn an_effect_bearing_pack_refuses_reopen_and_is_replaced_explicitly() {
+    let (t, pack, g) = sealed_setup();
+    let before = t.ok(&["pack", "show", &pack]);
+    let refused = t.fails(&["pack", "reopen", &pack, "--generation", &g.to_string()]);
+    assert!(refused.contains("REOPEN_UNSAFE"), "{refused}");
+    assert!(refused.contains("supersede start"), "{refused}");
+    assert_eq!(t.ok(&["pack", "show", &pack]), before, "nothing changed");
+    // Nothing happens on its own: the original is still the live pack.
+    assert!(t.ok(&["supersede", "list"]).as_array().unwrap().is_empty());
+
+    let done = t.ok(&["supersede", "start", &pack, "--keep", "1", "--yes"]);
+    assert_eq!(done["state"], "Done", "{done}");
+    assert_eq!(done["rse_holds"], true, "{done}");
+    assert_eq!(done["cce_holds"], true, "{done}");
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "ABANDONED");
+    let replacement = done["replacement"].as_str().unwrap();
+    let g = t.ok(&["pack", "show", replacement])["generation"].to_string();
+    t.ok(&["pack", "seal", replacement, "--generation", &g]);
+    t.ok(&["pack", "qualify", replacement, "--generation", &g]);
+    t.ok(&["pack", "promote", replacement, "--generation", &g]);
+    assert_eq!(t.ok(&["pack", "show", replacement])["state"], "PROMOTED");
+    // History stays: the abandoned pack's effects can still be read.
+    assert_eq!(
+        t.effects(&pack).len(),
+        before["candidate_effects"].as_array().unwrap().len()
+    );
+}
+
+/// A crash at any step from a sealed original converges on one replacement, original last.
+#[test]
+fn replacing_a_sealed_pack_converges_after_a_crash_at_every_step() {
+    for point in [
+        "supersede.S0",
+        "supersede.ReplacementCreated",
+        "supersede.replay.1.0.after_send",
+        "supersede.Verified",
+        "supersede.S7.before_ack",
+        "supersede.abandon_original.after_send",
+    ] {
+        let (mut t, pack, _) = sealed_setup();
+        t.crash(
+            point,
+            false,
+            &["supersede", "start", &pack, "--keep", "1", "--yes"],
+        );
+        let saga = saga_of(&t, &pack);
+        if saga["state"] != "Done" {
+            assert_ne!(t.ok(&["pack", "show", &pack])["state"], "OPEN", "{point}");
+            let done = t.ok(&["supersede", "resume", saga["saga"].as_str().unwrap()]);
+            assert_eq!(done["state"], "Done", "{point}: {done}");
+        }
+        assert_eq!(
+            t.ok(&["pack", "show", &pack])["state"],
+            "ABANDONED",
+            "{point}"
+        );
+    }
+}
+
+/// The original changing under the saga stops it; the original keeps its state and its work.
+#[test]
+fn a_conflict_while_replacing_a_sealed_pack_keeps_the_original() {
+    let (mut t, pack, _) = sealed_setup();
+    let effects = t.effects(&pack).len();
+    t.crash(
+        "supersede.ReplayCompleted",
+        false,
+        &["supersede", "start", &pack, "--keep", "1", "--yes"],
+    );
+    t.ok(&["pack", "quarantine", &pack, "--reason", "hold"]);
+    let saga = saga_of(&t, &pack)["saga"].as_str().unwrap().to_owned();
+    let err = t.fails(&["supersede", "resume", &saga]);
+    assert!(err.contains("SUPERSEDE"), "{err}");
+    assert_eq!(saga_of(&t, &pack)["state"], "Conflicted");
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "QUARANTINED");
+    t.ok(&["pack", "release-quarantine", &pack]);
+    assert_eq!(t.ok(&["pack", "show", &pack])["state"], "SEALED");
+    assert_eq!(t.effects(&pack).len(), effects);
+}
+
+/// A replay cancelled or lost after applying effects compensates: the sealed original survives.
+#[test]
+fn a_cancelled_or_lost_replay_keeps_a_sealed_original() {
+    for cancel in [true, false] {
+        let (mut t, pack, _) = sealed_setup();
+        let lease = if cancel { "600000" } else { "5000" };
+        t.env
+            .vars
+            .push(("CALVE_EXECUTION_LEASE_MS".into(), lease.into()));
+        t.crash(
+            "supersede.replay.1.0.after_send",
+            false,
+            &["supersede", "start", &pack, "--keep", "1", "--yes"],
+        );
+        t.env.vars.retain(|(k, _)| k != "CALVE_EXECUTION_LEASE_MS");
+        let saga = saga_of(&t, &pack);
+        if cancel {
+            let replacement = saga["replacement"].as_str().unwrap();
+            let list = t.ok(&["execution", "list", "--pack", replacement]);
+            let exe = list[0]["id"].as_str().unwrap().to_owned();
+            t.ok(&["execution", "cancel", &exe, "--reason", "changed my mind"]);
+        } else {
+            std::thread::sleep(std::time::Duration::from_secs(7));
+        }
+        let _ = t
+            .env
+            .run(&t.args(&["supersede", "resume", saga["saga"].as_str().unwrap()]));
+        assert_ne!(saga_of(&t, &pack)["state"], "Done", "cancel={cancel}");
+        assert_eq!(
+            t.ok(&["pack", "show", &pack])["state"],
+            "SEALED",
+            "cancel={cancel}"
+        );
+    }
+}
+
 fn saga_of(t: &T, pack: &str) -> Value {
     t.ok(&["supersede", "list"])
         .as_array()

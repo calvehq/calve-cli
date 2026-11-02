@@ -46,7 +46,7 @@ fn hidden_paths(env: &[(&str, &str)], cwd: &Path) -> Vec<PathBuf> {
     .collect()
 }
 
-fn confinement_required(limits: &crate::config::ResourceLimits) -> bool {
+pub(crate) fn confinement_required(limits: &crate::config::ResourceLimits) -> bool {
     use crate::config::Confinement;
     match limits.confinement {
         Some(c) => c == Confinement::Required,

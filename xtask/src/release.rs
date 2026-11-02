@@ -580,3 +580,36 @@ mod tests {
         assert!(parse_sums("abc  x\n").is_err());
     }
 }
+
+/// Environment names that only debug builds may read.
+const TEST_HOOKS: &[&str] = &[
+    "CALVE_TEST_RUNTIME_PROTOCOL",
+    "CALVE_TEST_ENOSPC",
+    "CALVE_TEST_PAUSE",
+    "CALVE_TEST_WRITE",
+    "CALVE_FAULT",
+    "CALVE_FS_PRIMITIVES",
+    "CALVE_REPLAY_WINDOW_MS",
+];
+
+/// The first test hook named in a binary.
+pub fn forbidden_hook(binary: &[u8]) -> Option<&'static str> {
+    TEST_HOOKS
+        .iter()
+        .find(|hook| binary.windows(hook.len()).any(|w| w == hook.as_bytes()))
+        .copied()
+}
+
+#[cfg(test)]
+mod hook_tests {
+    use super::forbidden_hook;
+
+    #[test]
+    fn a_binary_naming_a_test_hook_is_refused() {
+        assert_eq!(forbidden_hook(b"plain binary"), None);
+        assert_eq!(
+            forbidden_hook(b"x\0CALVE_TEST_RUNTIME_PROTOCOL\0y"),
+            Some("CALVE_TEST_RUNTIME_PROTOCOL")
+        );
+    }
+}

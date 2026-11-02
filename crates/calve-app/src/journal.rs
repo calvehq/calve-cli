@@ -130,7 +130,12 @@ fn fsync_dir(dir: &Path) -> io::Result<()> {
     {
         File::open(dir)?.sync_all()?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    calve_win_sec::flush_dir_handle(&cap_std::fs::Dir::open_ambient_dir(
+        dir,
+        cap_std::ambient_authority(),
+    )?)?;
+    #[cfg(not(any(unix, windows)))]
     let _ = dir;
     Ok(())
 }

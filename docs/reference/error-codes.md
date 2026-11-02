@@ -48,3 +48,5 @@ Messages and details are redacted against the secrets in use ([secrets](../secur
 Reserved, not emitted yet: `RESOURCE_DIVERGED`, `UNSAFE_MATERIALIZATION` (materialization reports `blocked` paths instead), `UNSUPPORTED_PLATFORM_FEATURE`, `EXTENSION_PERMISSION_REQUIRED`, `CATALOG_STALE`.
 
 `CONFIG_UNAPPROVED`: a Project configuration names providers, harnesses or check commands the host has not approved. Review the file, then run `calve config approve`.
+
+`REOPEN_UNSAFE`: the pack has effects, so OpenAEVC v0.1.0 could never promote it after a reopen. Nothing changed. Continue with `calve supersede start`.

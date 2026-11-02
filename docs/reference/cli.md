@@ -320,7 +320,7 @@ Global flags: `--project <path-or-id>`, `--workspace <name>`, `--as <identity>`,
 |---|---|
 | `calve recover inspect` | Report whether the Project opens and what was left behind |
 | `calve recover plan` | List the exact recovery actions |
-| `calve recover apply [--yes] [--restore-backup <restore_backup>]` | Perform the planned recovery actions |
+| `calve recover apply [--yes] [--restore-backup <restore_backup>] [--rebuild-product]` | Perform the planned recovery actions |
 
 ## `calve daemon`
 

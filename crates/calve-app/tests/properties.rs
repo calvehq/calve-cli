@@ -87,3 +87,36 @@ fn identity_round_trips() {
     let back: ProjectIdentity = toml::from_str(&text).unwrap();
     assert_eq!(toml::to_string(&back).unwrap(), text);
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(8))]
+
+    /// Keyset pages at any size show every pack exactly once, in one stable order.
+    #[test]
+    fn read_model_pages_cover_every_pack_once(count in 1usize..12, limit in 1u32..6) {
+        let temp = tempfile::tempdir().unwrap();
+        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+            let project = Project::init(temp.path(), Some("p")).await.unwrap();
+            let mut created = Vec::new();
+            for n in 0..count {
+                created.push(project.create_pack(&format!("p{n}"), None).await.unwrap().to_string());
+            }
+            created.sort();
+            let (mut seen, mut after) = (Vec::new(), None::<String>);
+            loop {
+                let page = project.view_packs(after.as_deref(), Some(limit), None).await.unwrap();
+                seen.extend(page["items"].as_array().unwrap().iter()
+                    .map(|p| p["id"].as_str().unwrap().to_owned()));
+                match page["next"].as_str() {
+                    Some(next) => after = Some(next.to_owned()),
+                    None => break,
+                }
+            }
+            let mut unique = seen.clone();
+            unique.sort();
+            unique.dedup();
+            assert_eq!(unique.len(), seen.len(), "a pack appeared twice");
+            assert_eq!(unique, created, "a pack went missing");
+        });
+    }
+}

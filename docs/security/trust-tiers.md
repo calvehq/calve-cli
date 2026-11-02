@@ -5,7 +5,7 @@ Calve runs code from several sources. A tier says how far that code is confined,
 | Tier | What runs | Confinement | What you trust |
 |---|---|---|---|
 | **T0** | `calve`, `calved`, OpenAEVC | none; your permissions | The release you verified |
-| **T1** | `cic.wasm` modules | Wasm with no imports, memory and fuel caps, supervised child with a hard kill, Landlock deny-all on Linux, every response validated | Very little: it can give wrong answers but cannot reach the host |
+| **T1** | `cic.wasm` modules | Wasm with no imports, memory and fuel caps, supervised child with a hard kill, every response validated. On Linux also Landlock deny-all: where confinement is required, a module does not run without it. `calve doctor` reports `cic_landlock` and whether the policy is fail-closed or best-effort. macOS and Windows have the wasm boundary only | Very little: it can give wrong answers but cannot reach the host |
 | **T2** | Native extension artifacts | **None.** OpenAEVC spawns them with your permissions. Package verification, re-hash on spawn, cleared environment, grants on host-mediated calls | The publisher, entirely |
 | **T3** | Workers and checks | Process group or Job Object, resource limits. On Linux: user and mount namespaces hide `.calve/`, Calve's data and config directories and the daemon socket, then Landlock; refused if unavailable, unless the provider sets `confinement = "best-effort"`. Windows and macOS have neither, and such workers run unconfined. Descendants that leave the group escape it | The program you configured or approved |
 

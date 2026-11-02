@@ -32,14 +32,13 @@ A decision binds to this exact candidate. After a rejection, change the work and
 
 ## Change after sealing
 
-`pack reopen` is possible, but with OpenAEVC v0.1.0 a pack with effects cannot then be promoted, because reopening keeps old effects and only effects of the current generation can be promoted. To carry on with the work, supersede it:
+A pack with no effects can reopen. A pack with effects cannot on OpenAEVC v0.1.0: `pack reopen` is refused with `REOPEN_UNSAFE`, and nothing changes, because such a pack could never be promoted afterwards. Replace it explicitly:
 
 ```sh
-calve pack reopen <pack> --generation <n>
 calve supersede start <pack> --keep <keep> --yes
 ```
 
-`supersede start` replaces the OPEN pack with a new one, which you then capture into, seal and review. See [Scenario C](../reference/acceptance.md).
+The replacement holds the first `<keep>` effects, and you capture into it, seal and review it. The original is abandoned last, and stays in history. See [Scenario C](../reference/acceptance.md).
 
 ## Promote
 

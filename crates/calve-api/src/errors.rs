@@ -93,6 +93,7 @@ pub const CODES: &[(&str, i32)] = &[
     ("UNSTABLE_FILE", exit::CONFLICT),
     ("FILE_TOO_LARGE", exit::REJECTED),
     ("LIMIT_EXCEEDED", exit::REJECTED),
+    ("REOPEN_UNSAFE", exit::CONFLICT),
     ("SUPERSEDE_CONFLICT", exit::CONFLICT),
     ("SUPERSEDE_DIVERGED", exit::CONFLICT),
     ("MATERIALIZE_CONFLICT", exit::CONFLICT),

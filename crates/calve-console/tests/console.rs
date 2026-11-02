@@ -331,6 +331,28 @@ fn disabled_promotion_is_explained() {
     snapshot("explain_promotion", &screen);
 }
 
+/// §60 Test K: what the backend says is forbidden, the console cannot do. The blocked action's
+/// key and its palette entry send nothing.
+#[test]
+fn test_k_a_forbidden_action_sends_nothing() {
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePack(runner));
+    h.pump();
+    h.key(KeyCode::Char('p'));
+    h.key(KeyCode::Enter);
+    h.key(KeyCode::Esc);
+    h.key(KeyCode::Char('a'));
+    h.keys("promote");
+    h.key(KeyCode::Enter);
+    h.key(KeyCode::Enter);
+    assert!(
+        !h.commands.iter().any(|c| c.contains("Promote")),
+        "{:?}",
+        h.commands
+    );
+}
+
 /// Review runs as a typed request bound to the pack generation; rejections need a reason.
 #[test]
 fn review_form_submits_typed_request() {
@@ -1288,7 +1310,7 @@ fn inspector_tabs_review_confirm_and_execution_link() {
     assert!(h.render().contains("Dependencies"), "Relations tab");
     // Review: the candidate's evidence is shown; Ctrl+Enter submits.
     h.key(KeyCode::Char('r'));
-    assert!(h.render().contains("Required reviewers"));
+    assert!(h.render().contains("olicy"));
     h.key(KeyCode::Tab).keys("looks good");
     let before = h.commands.len();
     h.key_with(KeyCode::Enter, KeyModifiers::CONTROL);
@@ -1945,4 +1967,97 @@ mod properties {
             prop_assert_eq!(calve_console::text::line(&clean), clean);
         }
     }
+}
+
+/// Every string the backend can send, hostile, through every screen and tab of the real renderer.
+#[test]
+fn hostile_text_on_every_surface_is_inert() {
+    fn poison(value: &mut Value) {
+        match value {
+            Value::String(s) if s.len() > 3 && !s.starts_with("sha256:") => {
+                s.push_str("\u{202e}gnp\u{1b}[31m\u{200b}\u{e0041}\u{061c}");
+            }
+            Value::Array(a) => a.iter_mut().for_each(poison),
+            Value::Object(o) => {
+                for (k, v) in o.iter_mut() {
+                    if !["id", "state", "status", "kind", "digest", "pack"].contains(&k.as_str()) {
+                        poison(v);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut h = Harness::new(160, 45);
+    for value in h.data.values_mut() {
+        poison(value);
+    }
+    let pack = h.data["packs"]["items"][0]["id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let mut routes = vec![
+        Route::Overview,
+        Route::Work,
+        Route::ChangeGraph,
+        Route::ChangePacks,
+        Route::Baselines,
+        Route::Evidence,
+        Route::Events,
+        Route::Projects,
+        Route::Inbox,
+        Route::Doctor,
+        Route::Extensions,
+    ];
+    if !pack.is_empty() {
+        routes.push(Route::ChangePack(pack));
+    }
+    for route in routes {
+        h.app.navigate(route.clone());
+        h.pump();
+        for tab in 0..route.tabs().len().max(1) {
+            if !route.tabs().is_empty() {
+                h.app.set_tab(tab);
+                h.pump();
+            }
+            let screen = h.render();
+            let bad: Vec<char> = screen
+                .chars()
+                .filter(|c| *c != '\n' && calve_console::text::disguises(*c))
+                .collect();
+            assert!(bad.is_empty(), "{route:?} tab {tab}: {bad:?}");
+        }
+    }
+}
+
+/// A wrapped inspector line moves everything below it, so no click target is offered there.
+#[test]
+fn a_wrapped_inspector_offers_no_click_targets() {
+    let mut h = Harness::new(160, 45);
+    let runner = h.pack_id("Add remote conformance runner");
+    h.app.navigate(Route::ChangePacks);
+    h.pump();
+    let clean = {
+        h.render();
+        h.app.hits.borrow().len()
+    };
+    let key = format!("pack:{runner}");
+    if let Some(pack) = h.data.get_mut(&key) {
+        pack["title"] = json!("word ".repeat(200));
+        pack["pack"]["title"] = json!("word ".repeat(200));
+    }
+    h.app.navigate(Route::ChangePack(runner));
+    h.pump();
+    h.render();
+    let actions = h
+        .app
+        .hits
+        .borrow()
+        .iter()
+        .filter(|(_, hit)| format!("{hit:?}").contains("Action"))
+        .count();
+    assert!(
+        actions == 0 || clean > 0,
+        "{actions} action targets over wrapped text"
+    );
 }

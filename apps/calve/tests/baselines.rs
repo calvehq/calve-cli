@@ -159,3 +159,63 @@ fn baselines_come_from_openaevc_derive_and_compare() {
         2
     );
 }
+
+/// §48.2: `baseline compare` is set logic over members, for every pair of compositions.
+#[test]
+fn compare_is_set_logic_over_every_pair_of_compositions() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    let mut env = env;
+    env.ok(&["init", p]);
+    env.enable_toy(&root);
+    let run = |a: &[&str]| env.ok(&[&["--project", p][..], a].concat());
+    let mut digests = Vec::new();
+    for n in 0..3 {
+        fs::write(root.join(format!("f{n}.toy")), format!("{n}")).unwrap();
+        let pack = run(&["pack", "create", &format!("p{n}")])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let name = format!("f{n}.toy");
+        run(&["pack", "capture", &pack, &name, "--generation", "1"]);
+        let g = run(&["pack", "show", &pack])["generation"].to_string();
+        run(&["pack", "seal", &pack, "--generation", &g]);
+        run(&["pack", "qualify", &pack, "--generation", &g]);
+        let done = run(&["pack", "promote", &pack, "--generation", &g]);
+        digests.push(done["promoted_digest"].as_str().unwrap().to_owned());
+    }
+    let subset = |mask: usize| -> Vec<String> {
+        (0..3)
+            .filter(|b| mask >> b & 1 == 1)
+            .map(|b| digests[b].clone())
+            .collect()
+    };
+    let mut baselines = Vec::new();
+    for mask in 1..8usize {
+        let members = subset(mask);
+        let label = format!("b{mask}");
+        let mut args = vec!["baseline", "create", label.as_str()];
+        args.extend(members.iter().map(String::as_str));
+        baselines.push((mask, run(&args)["id"].as_str().unwrap().to_owned()));
+    }
+    let set = |v: &serde_json::Value| -> std::collections::BTreeSet<String> {
+        v.as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|d| d.as_str().map(str::to_owned))
+            .collect()
+    };
+    for (a, left) in &baselines {
+        for (b, right) in &baselines {
+            let got = run(&["baseline", "compare", left, right]);
+            let (x, y): (std::collections::BTreeSet<_>, std::collections::BTreeSet<_>) = (
+                subset(*a).into_iter().collect(),
+                subset(*b).into_iter().collect(),
+            );
+            assert_eq!(set(&got["shared_members"]), &x & &y, "{a} {b}: {got}");
+            assert_eq!(set(&got["only_left_members"]), &x - &y, "{a} {b}: {got}");
+            assert_eq!(set(&got["only_right_members"]), &y - &x, "{a} {b}: {got}");
+        }
+    }
+}

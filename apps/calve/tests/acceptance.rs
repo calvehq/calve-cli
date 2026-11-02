@@ -123,7 +123,7 @@ fn scenario_p_version_incompatibility() {
     let doctor = env.run(&["--project", &project, "doctor"]);
     assert!(!doctor.success);
     assert!(
-        doctor.stderr.contains("runtime 9.0.0..=9.0.1"),
+        doctor.stderr.contains("runtime 9.0.0..=9.0.0"),
         "{}",
         doctor.stderr
     );
@@ -251,4 +251,124 @@ fn legacy_keys_move_out_on_first_open() {
     std::fs::rename(&keys, root.join(".calve/keys.toml")).unwrap();
     env.ok(&["--project", p, "intent", "create", "still works"]);
     assert!(keys.is_file() && !root.join(".calve/keys.toml").exists());
+}
+
+/// §57 P, runtime side, SIMULATED: a debug-only report stands in for another OpenAEVC and feeds
+/// the real check. Lower, higher and malformed reports block writes before any mutation, and
+/// ranges touching the supported version pass.
+#[test]
+fn scenario_p_simulated_runtime_ranges() {
+    for (range, compatible) in [
+        ("0.0", false),
+        ("0.2", false),
+        ("9", false),
+        ("garbage", false),
+        ("0.3-0.0", false),
+        ("0.0-0.1", true),
+        ("0.1-0.2", true),
+    ] {
+        let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let root = env.path().join("p");
+        let p = root.to_str().unwrap().to_owned();
+        env.ok(&["init", &p]);
+        env.ok(&["--project", &p, "pack", "create", "before"]);
+        let before = env.ok(&["--project", &p, "pack", "list"]).to_string();
+        env.vars
+            .push(("CALVE_TEST_RUNTIME_PROTOCOL".into(), range.into()));
+        let write = env.run(&["--project", &p, "pack", "create", "after"]);
+        assert_eq!(write.success, compatible, "{range}: {}", write.stderr);
+        if !compatible {
+            assert!(
+                write.stderr.contains("OPENAEVC_INCOMPATIBLE"),
+                "{range}: {}",
+                write.stderr
+            );
+            env.vars.clear();
+            assert_eq!(
+                env.ok(&["--project", &p, "pack", "list"]).to_string(),
+                before,
+                "{range}"
+            );
+        }
+    }
+}
+
+/// §60 Test D: losing the product database with no backup loses product records, never history.
+#[test]
+fn test_d_product_state_rebuilds_without_a_backup() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap();
+    env.ok(&["init", p]);
+    let pack = env.ok(&["--project", p, "pack", "create", "accepted"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&["--project", p, "pack", "seal", &pack, "--generation", "1"]);
+    env.ok(&[
+        "--project",
+        p,
+        "pack",
+        "qualify",
+        &pack,
+        "--generation",
+        "1",
+    ]);
+    let digest = env.ok(&[
+        "--project",
+        p,
+        "pack",
+        "promote",
+        &pack,
+        "--generation",
+        "1",
+    ])["promoted_digest"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    env.ok(&["--project", p, "intent", "create", "product only"]);
+    for entry in fs::read_dir(root.join(".calve")).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("product.sqlite3") || name == "backups" {
+            let _ = fs::remove_file(entry.path()).or_else(|_| fs::remove_dir_all(entry.path()));
+        }
+    }
+    assert!(
+        env.fails(&["--project", p, "intent", "list"])
+            .contains("CORRUPT_PRODUCT_STATE")
+    );
+    env.fails(&["--project", p, "recover", "apply", "--rebuild-product"]);
+    let rebuilt = env.ok(&[
+        "--project",
+        p,
+        "recover",
+        "apply",
+        "--rebuild-product",
+        "--yes",
+    ]);
+    assert!(rebuilt["lost"].to_string().contains("intents"), "{rebuilt}");
+    // Accepted history is whole, verifiable and usable; product records are gone, as stated.
+    assert_eq!(
+        env.ok(&["--project", p, "pack", "show", &pack])["state"],
+        "PROMOTED"
+    );
+    assert_eq!(
+        env.ok(&["--project", p, "intent", "list"])
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    env.ok(&["--project", p, "maintenance", "verify-store"]);
+    env.ok(&["--project", p, "baseline", "create", "after", &digest]);
+    // A database that exists is never replaced this way.
+    let again = env.fails(&[
+        "--project",
+        p,
+        "recover",
+        "apply",
+        "--rebuild-product",
+        "--yes",
+    ]);
+    assert!(again.contains("exists"), "{again}");
 }

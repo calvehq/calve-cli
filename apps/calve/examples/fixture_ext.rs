@@ -13,8 +13,8 @@ const RECORD_SET: &str = "org.example.fixture.record.set";
 struct Fixture {
     version: String,
     caps: Vec<HostCapability>,
-    /// A protocol this build does not speak (`protocol_major` in the trailer): Scenario P.
-    protocol: Option<u32>,
+    /// The protocol range to advertise, for Scenario P: `[[major, minor], [major, minor]]`.
+    protocol: Option<VersionRange>,
 }
 
 fn trailer() -> Value {
@@ -34,12 +34,7 @@ impl Extension for Fixture {
         ExtensionManifest {
             id: "org.example.fixture".into(),
             version: self.version.clone(),
-            protocol: self.protocol.map_or(SUPPORTED_PROTOCOL, |major| {
-                VersionRange::new(
-                    ProtocolVersion::new(major, 0, 0),
-                    ProtocolVersion::new(major, 0, 1),
-                )
-            }),
+            protocol: self.protocol.unwrap_or(SUPPORTED_PROTOCOL),
             contract: SUPPORTED_CONTRACT,
             publisher: None,
             artifact_digest: self_artifact_digest(),
@@ -95,6 +90,15 @@ fn main() -> std::process::ExitCode {
     serve(Fixture {
         version: trailer["version"].as_str().unwrap_or("1.0.0").into(),
         caps: serde_json::from_value(trailer["caps"].clone()).unwrap_or_default(),
-        protocol: trailer["protocol_major"].as_u64().map(|m| m as u32),
+        protocol: trailer["protocol"].as_array().map(|r| {
+            let version = |i: usize| {
+                ProtocolVersion::new(
+                    r[i][0].as_u64().unwrap_or(0) as u32,
+                    r[i][1].as_u64().unwrap_or(0) as u32,
+                    0,
+                )
+            };
+            VersionRange::new(version(0), version(1))
+        }),
     })
 }

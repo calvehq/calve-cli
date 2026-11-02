@@ -46,6 +46,8 @@ calve recover apply --restore-backup <file> --yes
 
 The backup is verified by SHA-256 and an integrity check, and the current database is kept as `pre-restore`. Calve then reconciles against OpenAEVC, which is still the authority. Product state written after the backup was taken, such as Tasks, is lost. Accepted history is not, because it lives in OpenAEVC.
 
+If no backup exists, `calve recover apply --rebuild-product --yes` creates an empty database and rebuilds what derives from OpenAEVC. Accepted history survives; product records do not.
+
 ## Check the store
 
 ```sh

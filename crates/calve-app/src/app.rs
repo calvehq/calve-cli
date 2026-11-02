@@ -2139,7 +2139,13 @@ async fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
         RecoverCommand::Apply {
             yes: true,
             restore_backup: Some(file),
+            ..
         } => crate::recovery::restore_and_reconcile(root, file).await,
+        RecoverCommand::Apply {
+            yes: true,
+            rebuild_product: true,
+            ..
+        } => crate::recovery::rebuild_product(root).await,
         RecoverCommand::Apply { yes: true, .. } => crate::ops::recovery_apply(root),
     }
 }

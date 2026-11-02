@@ -477,6 +477,12 @@ pub enum RecoverCommand {
         #[arg(long, value_name = "FILE")]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         restore_backup: Option<String>,
+        /// Create an empty product database when it is lost and no backup exists. Accepted history
+        /// is intact in OpenAEVC and projections rebuild from it; Intents, Tasks and other
+        /// product-only records are gone.
+        #[arg(long, conflicts_with = "restore_backup")]
+        #[serde(default)]
+        rebuild_product: bool,
     },
 }
 

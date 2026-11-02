@@ -427,6 +427,13 @@ impl SandboxDriver {
                 ]
                 .map(|v| v.to_string()),
             )
+            .arg(
+                if crate::supervise::confinement_required(&Default::default()) {
+                    "required"
+                } else {
+                    "best-effort"
+                },
+            )
             .env_clear()
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -543,11 +550,27 @@ pub fn hidden_mode() -> Option<i32> {
 /// <soft_ms> <max_memory> <max_request> <max_response>`. Reads the module, checks its digest,
 /// self-restricts (Linux: Landlock deny-all + no_new_privs), then serves frames on stdio.
 pub fn serve_child(args: &[String]) -> i32 {
+    // `doctor` measures how far this host confines a module, in a real child.
+    if args.first().map(String::as_str) == Some("--probe") {
+        println!("{}", restrict_self());
+        return 0;
+    }
     let mut out = std::io::stdout().lock();
     let mut input = std::io::stdin().lock();
     let parsed = (|| -> Result<(Vec<u8>, HostConfig), HostError> {
         let bad = || HostError::Internal("sandbox arguments".into());
-        let [wasm, digest, slice, per_call, soft, mem, req, resp] = args else {
+        let [
+            wasm,
+            digest,
+            slice,
+            per_call,
+            soft,
+            mem,
+            req,
+            resp,
+            _required,
+        ] = args
+        else {
             return Err(bad());
         };
         let n = |s: &String| s.parse::<u64>().map_err(|_| bad());
@@ -570,7 +593,16 @@ pub fn serve_child(args: &[String]) -> i32 {
         Ok(p) => p,
         Err(e) => return fail(&mut input, &mut out, e),
     };
-    restrict_self();
+    // The wasm boundary holds either way; this is the second wall, and where it is required a
+    // module does not run without it.
+    let landlock = restrict_self();
+    if args.last().map(String::as_str) == Some("required") && landlock == "none" {
+        return fail(
+            &mut input,
+            &mut out,
+            HostError::Internal("CONTAINMENT_UNAVAILABLE: Landlock is not enforced here".into()),
+        );
+    }
     let mut host = match CalveHost::new(&bytes, cfg) {
         Ok(h) => h,
         Err(e) => return fail(&mut input, &mut out, e),
@@ -601,15 +633,33 @@ fn fail(input: &mut impl Read, out: &mut impl Write, e: HostError) -> i32 {
 
 /// Defense in depth after the module is read: the guest has no imports, so it cannot reach
 /// the OS through the host anyway. Linux: Landlock forbids every filesystem access (stdio fds
-/// stay usable) and sets no_new_privs. macOS: none (documented). Windows: the parent-owned Job
-/// Object (M5).
-pub fn restrict_self() {
+/// stay usable) and sets no_new_privs; the result says how far the kernel went. macOS and
+/// Windows have no equivalent here.
+pub fn restrict_self() -> &'static str {
     #[cfg(target_os = "linux")]
     {
-        use landlock::{ABI, Access, AccessFs, Ruleset, RulesetAttr};
-        let _ = Ruleset::default()
+        use landlock::{ABI, Access, AccessFs, Ruleset, RulesetAttr, RulesetStatus};
+        match Ruleset::default()
             .handle_access(AccessFs::from_all(ABI::V3))
             .and_then(|r| r.create())
-            .and_then(|r| r.restrict_self());
+            .and_then(|r| r.restrict_self())
+            .map(|s| s.ruleset)
+        {
+            Ok(RulesetStatus::FullyEnforced) => "full",
+            Ok(RulesetStatus::PartiallyEnforced) => "partial",
+            _ => "none",
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    "unsupported"
+}
+
+/// What `calve __cic-sandbox` measures on this host.
+pub fn probe_landlock() -> Option<String> {
+    let out = Command::new(sandbox_program().ok()?)
+        .args([SANDBOX_MODE, "--probe"])
+        .env_clear()
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }

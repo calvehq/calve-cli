@@ -253,6 +253,9 @@ fn confirm_dialog(app: &mut App, title: String, args: Vec<String>, label: String
             lines.push(format!("× {}", entry["condition"].as_str().unwrap_or("")));
         }
     }
+    if (word(0), word(1)) == ("pack", "promote") {
+        lines.push("Baselines   none change; add the promoted pack to one afterwards".into());
+    }
     let preflight = ((word(0), word(1)) == ("pack", "promote")).then(|| {
         let key = format!("preflight:{}", args.join(" "));
         let mut words = args.clone();
@@ -311,6 +314,10 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
         return;
     };
     let sent = app.in_flight.remove(key).unwrap_or_default();
+    // A bulk action that succeeded is done with its selection.
+    if result.is_ok() && sent.first().map(String::as_str) == Some("inbox") {
+        app.collection("inbox").marked.clear();
+    }
     let mut parts = rest.splitn(3, ':');
     let (_, show, label) = (
         parts.next(),
@@ -329,8 +336,10 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
             if value.get("only_left_members").is_some() {
                 app.overlays.push(compare_view(app, &value));
             } else if let Some(id) = execution {
+                // The request returns when the run ends.
+                let state = value["state"].as_str().unwrap_or("finished").to_lowercase();
                 app.overlays.push(Overlay::Actions {
-                    title: format!("{label} started"),
+                    title: format!("{label}: {state}"),
                     items: vec![PaletteItem {
                         group: "Actions",
                         label: "Open execution".into(),
@@ -1313,7 +1322,7 @@ fn request_quit(app: &mut App) {
         app.notify(
             Tone::Warning,
             format!(
-                "{} command(s) still running; they cannot be cancelled mid-flight. Press q again to quit",
+                "{} command(s) still running. A run goes on under the daemon, and can be cancelled from its Execution screen. Press q again to quit",
                 app.in_flight.len()
             ),
         );

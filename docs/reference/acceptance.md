@@ -6,7 +6,7 @@
 |---|---|---|---|
 | A — Fresh installation and generic Project | `examples::scenario_a` | Pass (Linux) | Step 9 is OpenAEVC's policy evaluation (general-project declares no verifier or evaluator); step 14 restarts a real daemon. |
 | B — Software project without Git | `examples::scenario_b` | Pass (Linux) | First-party software and Rust extensions. Step 8 runs the harness in its own pack over the same working tree (an execution on the candidate would make it unpromotable, and Calve refuses it) and the candidate's checks through `pack check`. Step 11 copies the Project, relocates the registration to the copy, removes its working files and materializes. |
-| C — Pre-promotion reopen | `examples::scenario_c` | **Blocked by OpenAEVC v0.1.0; decision requested** | The literal lifecycle passes on one pack when generation 1 has no effects. With effects, steps 5–7 cannot pass: see below. |
+| C — Pre-promotion reopen | `examples::scenario_c` | **Approved deviation** | Effect-bearing generations refuse the reopen and continue through an explicit replacement. See below. |
 | D — Independent Baselines | `examples::scenario_d` | Pass (Linux) | B0→B1 touches only file2/file3; shared files keep their inodes. |
 | E — Revision | `examples::scenario_e` | Pass (Linux) | |
 | F — Parallel agent work | `examples::scenario_f` | Pass (Linux) | Each worker finishes only after it has seen the other running, so the two really overlap. The console engine reads a real daemon for step 5. |
@@ -19,31 +19,27 @@
 | M — Unsafe Baseline materialization | `examples::scenario_m` | Pass (Linux) | |
 | N — Third-party extension | `extensions::scenario_n_third_party_extension` | Pass (Linux) | No Calve metadata and no Calve code: the extension's resources come from its signed manifest, and its evidence and resources are created, promoted and viewed generically. |
 | O — Console reconnect | `examples::scenario_o` | Pass (Linux) | The console engine against a real calved, without a terminal. |
-| P — Version incompatibility | `acceptance::scenario_p_version_incompatibility`, `extensions::scenario_p_an_extension_of_an_unsupported_protocol_is_refused` | **Needs review** | See below. |
+| P — Version incompatibility | `acceptance::scenario_p_version_incompatibility`, `acceptance::scenario_p_simulated_runtime_ranges`, `extensions::scenario_p_a_package_is_judged_on_its_protocol_range` | **Approved substitution** | Real packages; the runtime side is simulated. See below. |
 
-## Scenario C: decision request
+## Scenario C: approved v0.1.0 deviation
 
-**Steps:** 1. create, seal, verify, approve generation 1. 2. Reopen. 3. Generation 2. 4. Prior verification and review stale. 5. Modify the candidate. 6. Rerun qualification and review. 7. Promote generation 2. 8. Generation 1 evidence inspectable.
+The original text stands in the acceptance definition. The owner approved a narrow deviation for generations that carry effects.
 
-**Counterexample, frozen OpenAEVC v0.1.0.** `handlers/packs.rs::reopen` keeps `candidate_effects`. `handlers/execution.rs:590` only ever appends to it. `handlers/promotion.rs:95-104` refuses unless every candidate effect has `provenance.generation == generation`. No command removes an effect. So a pack holding any effect at reopen can never be promoted: `pack promote` returns `candidate contains effects without complete provenance for this generation`.
+**Why:** OpenAEVC v0.1.0 keeps a pack's effects on reopen (`handlers/packs.rs::reopen`), only ever appends to them (`handlers/execution.rs:590`), and promotes only when every effect's `provenance.generation` equals the current generation (`handlers/promotion.rs:95-104`). No command removes an effect, so a pack with effects could never be promoted after a reopen.
 
-**Affected invariant:** OpenAEVC's single authority on promotion. Calve cannot change this without modifying v0.1.0.
+**What Calve does:** `pack reopen` on such a pack is refused with `REOPEN_UNSAFE` before anything changes, naming the way on. Nothing supersedes on its own. `supersede start` is the explicit operation: it works from OPEN, SEALED or QUALIFIED, and the original is abandoned last, only when the saga's checks pass. This is **not an unqualified pass**.
 
-**What passes:** steps 1–4 and 8 with effects; all eight steps on one pack when generation 1 has no effects; steps 5–7 with effects through `supersede start`, where the work continues in a replacement pack. `pack reopen` warns about this.
+**Tested:** the literal eight steps on one pack when generation 1 has no effects (`examples::scenario_c`); safe refusal then explicit replacement through promotion (`an_effect_bearing_pack_refuses_reopen_and_is_replaced_explicitly`); crashes, conflict, cancellation and lost attempts (`replacing_a_sealed_pack_converges_after_a_crash_at_every_step`, `a_conflict_while_replacing_a_sealed_pack_keeps_the_original`, `a_cancelled_or_lost_replay_keeps_a_sealed_original`).
 
-**Alternatives:** (a) accept the replacement-pack path for packs with effects, stating that the pack id changes; (b) make `pack reopen` supersede automatically, so the product's reopen always continues, with a new pack id underneath; (c) require an OpenAEVC release that lets a reopened pack drop or re-attribute effects.
-
-**Decision needed:** which of these, scoped to packs with effects at reopen.
-
-## Scenario P: steps and results
+## Scenario P: conditionally approved substitution
 
 | Step | Expected | Actual |
 |---|---|---|
-| 1. Run against an unsupported package or protocol | Refused | A real extension package declaring protocol 9 is refused at install, naming both ranges. For the runtime itself only one OpenAEVC can be linked, so a debug-only report override (`CALVE_TEST_RUNTIME_PROTOCOL`) feeds the real check |
-| 2. Writes blocked before mutation | No change | Asserted by event count and pack list |
-| 3. Doctor reports the mismatch and range | Exact report | `doctor` fails with `OPENAEVC_INCOMPATIBLE` naming the runtime range and the supported range |
+| 1. Run against an unsupported package or protocol | Refused | **Real:** signed packages advertising lower, higher and malformed ranges pass every other check and are refused with `EXTENSION_INCOMPATIBLE`. Ranges touching the supported version are accepted. **Simulated:** runtime ranges come from a debug-only report, because only one OpenAEVC can be linked. This is not a second implementation |
+| 2. Writes blocked before mutation | No change | Asserted for each case |
+| 3. Doctor reports the mismatch and range | Exact report | `doctor` fails with `OPENAEVC_INCOMPATIBLE` naming the reported and supported ranges |
 
-**Proposed:** treat the package fixture as the real test of step 1. The runtime case cannot be run against a real older OpenAEVC until one exists.
+Release builds contain no override: `xtask dist` refuses a binary that names a test hook.
 
 Windows, macOS and aarch64 runs of these scenarios are pending; they need a shell, daemon lifecycle and the catalog on those hosts. Scenarios that use adopt-copy or Baseline transfer depend on FG16 (PASS).
 

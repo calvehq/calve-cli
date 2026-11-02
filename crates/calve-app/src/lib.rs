@@ -651,7 +651,7 @@ pub fn product_schema_version(path: &Path) -> Result<u32> {
     Ok(db.query_row("PRAGMA user_version", [], |row| row.get(0))?)
 }
 
-fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
+pub(crate) fn init_db(path: &Path, mode: DbOpen) -> Result<Connection> {
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | if mode == DbOpen::Create {
             OpenFlags::SQLITE_OPEN_CREATE
@@ -1401,7 +1401,7 @@ impl Project {
         if !db_path.is_file() {
             return Err(coded(
                 "CORRUPT_PRODUCT_STATE",
-                "project product database is missing; restore a backup with `calve recover apply --restore-backup <file>`",
+                "project product database is missing; restore a backup, or rebuild with `calve recover apply --rebuild-product --yes`, with `calve recover apply --restore-backup <file>`",
             ));
         }
         let version = product_schema_version(&db_path)?;
@@ -3641,6 +3641,20 @@ impl Project {
 
     pub async fn reopen(&self, id: &str, generation: u64) -> Result<Value> {
         let pack = self.pack(id).await?;
+        // OpenAEVC v0.1.0 keeps a pack's effects on reopen and promotes only effects of the
+        // current generation, so this reopen would strand the pack for good. Refused here,
+        // before anything changes; continuing is an explicit choice, never a side effect.
+        if !pack.candidate_effects.is_empty() {
+            let effects = pack.candidate_effects.len();
+            return Err(detailed(
+                "REOPEN_UNSAFE",
+                format!(
+                    "{id} has {effects} effect(s); after a reopen OpenAEVC v0.1.0 could never promote it. It is unchanged. Continue in a replacement pack: `calve supersede start {id} --keep <0..{effects}> --yes`"
+                ),
+                json!({"pack": id, "generation": pack.generation, "effects": effects,
+                    "next": ["supersede", "start", id, "--keep", effects.to_string()]}),
+            ));
+        }
         let receipt = self
             .client
             .command(Command::ReopenChangePack {
@@ -3648,14 +3662,7 @@ impl Project {
                 expected_generation: generation,
             })
             .await?;
-        let mut result = serde_json::to_value(receipt)?;
-        // OpenAEVC keeps a pack's effects on reopen and promotes only the current generation's.
-        if !pack.candidate_effects.is_empty() {
-            result["warning"] = json!(
-                "this pack has effects, so OpenAEVC v0.1.0 cannot promote it after a reopen; continue with `calve supersede start`"
-            );
-        }
-        Ok(result)
+        Ok(serde_json::to_value(receipt)?)
     }
 
     pub async fn quarantine_pack(&self, id: &str, reason: &str) -> Result<Value> {

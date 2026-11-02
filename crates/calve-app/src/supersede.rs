@@ -237,11 +237,16 @@ impl Project {
         capture: Option<&str>,
     ) -> Result<Value> {
         let p = self.pack(pack).await?;
-        if p.state != PackState::Open {
+        // A sealed or qualified pack cannot reopen once it has effects, so this is how its work
+        // continues. OpenAEVC can abandon all of them, and the original stays as it is until S8.
+        if !matches!(
+            p.state,
+            PackState::Open | PackState::Sealed | PackState::Qualified
+        ) {
             return Err(crate::coded(
                 "OPENAEVC_OPERATION_REJECTED",
                 format!(
-                    "only an OPEN pack can be superseded; {pack} is {}",
+                    "only an OPEN, SEALED or QUALIFIED pack can be superseded; {pack} is {}",
                     p.state.as_str()
                 ),
             ));
@@ -344,7 +349,7 @@ impl Project {
         .map_err(corrupt)?;
         j.append(
             "state",
-            json!({"state": "Planned", "pack": pack, "m": keep, "total": p.candidate_effects.len(),
+            json!({"state": "Planned", "pack": pack, "state_s0": p.state.as_str(), "m": keep, "total": p.candidate_effects.len(),
                 "generation_s0": p.generation, "reference_cce": cce(reference),
                 "reference_rse": resource_state(Some(&d), reference), "commitment_version": version,
                 "executions_s0": executions_s0,
@@ -859,7 +864,7 @@ impl Project {
                         .to_owned();
                     let p2 = self.pack(&replacement).await?;
                     let mut problems = vec![];
-                    if p.state != PackState::Open {
+                    if p.state.as_str() != saga.data["state_s0"].as_str().unwrap_or("OPEN") {
                         problems.push(format!("{pack_id} is {}", p.state.as_str()));
                     }
                     if Some(p.generation) != saga.data["generation_after_close"].as_u64() {

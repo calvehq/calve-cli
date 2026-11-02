@@ -211,6 +211,29 @@ pub fn plan(root: &Path) -> Result<Vec<Value>> {
     Ok(actions)
 }
 
+/// Replaces a lost product database with an empty one, then rebuilds what derives from OpenAEVC.
+/// Only for a database that is really gone: a present one is never replaced by this.
+pub async fn rebuild_product(root: &Path) -> Result<Value> {
+    let db_path = root.join(".calve/product.sqlite3");
+    if db_path.exists() {
+        return Err(crate::coded(
+            "INVALID_ARGUMENT",
+            "the product database exists; use --restore-backup to replace it",
+        ));
+    }
+    let db = crate::init_db(&db_path, crate::DbOpen::Create)?;
+    db.execute(
+        "INSERT INTO preferences(key,value) VALUES ('project.display_name',?1)",
+        [root.file_name().unwrap_or_default().to_string_lossy()],
+    )?;
+    drop(db);
+    let project = Project::open(root)?;
+    let rebuilt = project.rebuild_projections().await?;
+    crate::observe::record("recovery", json!({"root": root, "rebuilt_product": true}));
+    Ok(json!({"rebuilt": rebuilt, "owner": "CALVE_PRODUCT",
+        "lost": ["intents", "tasks", "review records", "inbox state", "aliases"]}))
+}
+
 /// Restores the product database from a backup, then reconciles it against OpenAEVC: the gate,
 /// identity and continuity (an unrelated backup is refused), then indexes rebuilt from OpenAEVC.
 pub async fn restore_and_reconcile(root: &Path, backup: &str) -> Result<Value> {

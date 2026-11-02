@@ -495,49 +495,69 @@ fn fixture_project(env: &Env, r: &mut Repo) -> String {
     p
 }
 
-/// §57 P with a real package: an extension built for a protocol this Calve does not speak is
-/// refused before anything is enabled, naming both ranges.
+/// §57 P with real signed packages: each passes every other check and is judged on its protocol
+/// range alone. Lower, higher and malformed ranges are refused before anything is written, and
+/// a range touching the supported version at either end is accepted.
 #[test]
-fn scenario_p_an_extension_of_an_unsupported_protocol_is_refused() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
-    let mut r = Repo::new();
-    let mut bytes = fs::read(fixture_ext()).unwrap();
-    bytes.extend(
-        format!(
-            "\nCALVE-FIXTURE:{}",
-            json!({"version": "1.0.0", "caps": [], "protocol_major": 9})
-        )
-        .as_bytes(),
-    );
-    r.add_package("targets", openaevc_only_bytes(bytes));
-    r.targets.insert(
-        "index.json".into(),
-        br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
-    );
-    r.publish();
-    trust(&env, "example", &r);
-    let root = env.path().join("project");
-    let p = root.to_str().unwrap();
-    env.ok(&["init", p]);
-    let refused = env.fails(&[
-        "--project",
-        p,
-        "extension",
-        "enable",
-        "org.example.fixture",
-        "--acknowledge-native",
-    ]);
-    assert!(
-        refused.contains("EXTENSION_INCOMPATIBLE") || refused.contains("protocol"),
-        "{refused}"
-    );
-    assert_eq!(
-        env.ok(&["--project", p, "extension", "list"])
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
+fn scenario_p_a_package_is_judged_on_its_protocol_range() {
+    for (range, accepted) in [
+        (json!([[0, 0], [0, 0]]), false),
+        (json!([[0, 2], [0, 3]]), false),
+        (json!([[9, 0], [9, 1]]), false),
+        (json!([[0, 3], [0, 0]]), false),
+        (json!([[0, 0], [0, 1]]), true),
+        (json!([[0, 1], [0, 2]]), true),
+    ] {
+        let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let mut r = Repo::new();
+        let mut bytes = fs::read(fixture_ext()).unwrap();
+        bytes.extend(
+            format!(
+                "\nCALVE-FIXTURE:{}",
+                json!({"version": "1.0.0", "caps": [], "protocol": range})
+            )
+            .as_bytes(),
+        );
+        r.add_package("targets", openaevc_only_bytes(bytes));
+        r.targets.insert(
+            "index.json".into(),
+            br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
+        );
+        r.publish();
+        trust(&env, "example", &r);
+        let root = env.path().join("project");
+        let p = root.to_str().unwrap();
+        env.ok(&["init", p]);
+        let before = env.ok(&["--project", p, "activity"]).to_string();
+        let enable = [
+            "--project",
+            p,
+            "extension",
+            "enable",
+            "org.example.fixture",
+            "--acknowledge-native",
+        ];
+        if accepted {
+            env.ok(&enable);
+            continue;
+        }
+        let refused = env.fails(&enable);
+        assert!(
+            refused.contains("EXTENSION_INCOMPATIBLE"),
+            "{range}: {refused}"
+        );
+        assert!(
+            refused.to_lowercase().contains("protocol"),
+            "{range}: {refused}"
+        );
+        let listed = env.ok(&["--project", p, "extension", "list"]);
+        assert_eq!(listed.as_array().unwrap().len(), 0, "{range}");
+        assert_eq!(
+            env.ok(&["--project", p, "activity"]).to_string(),
+            before,
+            "{range}"
+        );
+    }
 }
 
 /// The two catalog commands that change trust: moving an id to another publisher, and the
@@ -874,4 +894,65 @@ fn scenario_n_third_party_extension() {
         !text.trim_start().starts_with('{'),
         "structured text, not a raw dump:\n{text}"
     );
+}
+
+/// Two independent processes refreshing one catalog and installing one package: trust state
+/// stays whole, floors never fall, and the package is installed once.
+#[test]
+fn two_processes_share_catalog_state_safely() {
+    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut r = Repo::new();
+    r.add_package("targets", openaevc_only("1.0.0", &["clock.read"]));
+    r.targets.insert(
+        "index.json".into(),
+        br#"{"schema":"calve.index/1","ids":["org.example.fixture"]}"#.to_vec(),
+    );
+    r.publish();
+    trust(&env, "example", &r);
+    let spawn = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+            .env("XDG_DATA_HOME", env.path().join("d"))
+            .env("XDG_CONFIG_HOME", env.path().join("c"))
+            .args(["--json", "--no-daemon-start"])
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let floors = || -> Value {
+        serde_json::from_slice(
+            &fs::read(env.path().join("d/calve/catalogs/example/floors.json")).unwrap(),
+        )
+        .unwrap()
+    };
+    let mut last = floors()["versions"]["timestamp"].as_u64().unwrap();
+    for _ in 0..4 {
+        r.publish();
+        let (a, b) = (
+            spawn(&["extension", "catalog", "refresh", "example"]),
+            spawn(&["extension", "catalog", "refresh", "example"]),
+        );
+        let results = [a.wait_with_output().unwrap(), b.wait_with_output().unwrap()];
+        assert!(results.iter().any(|o| o.status.success()), "{results:?}");
+        for o in results.iter().filter(|o| !o.status.success()) {
+            let e = String::from_utf8_lossy(&o.stderr);
+            assert!(e.contains("try again"), "only a clean retry may fail: {e}");
+        }
+        let now = floors()["versions"]["timestamp"].as_u64().unwrap();
+        assert!(now >= last, "floors fell: {now} < {last}");
+        last = now;
+    }
+    let install = [
+        "extension",
+        "install",
+        "org.example.fixture",
+        "--acknowledge-native",
+    ];
+    let (a, b) = (spawn(&install), spawn(&install));
+    let results = [a.wait_with_output().unwrap(), b.wait_with_output().unwrap()];
+    assert!(results.iter().all(|o| o.status.success()), "{results:?}");
+    let packages = env.path().join("d/calve/packages/org.example.fixture");
+    assert_eq!(fs::read_dir(packages).unwrap().count(), 1, "installed once");
+    env.ok(&["extension", "catalog", "list"]);
 }

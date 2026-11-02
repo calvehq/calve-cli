@@ -340,6 +340,8 @@ impl Workspace {
             dir.rename(&tmp, &dir, name)?;
             #[cfg(unix)]
             dir.open(".")?.sync_all()?;
+            #[cfg(windows)]
+            calve_win_sec::flush_dir_handle(&*dir)?;
             Ok(())
         })();
         if res.is_err() {

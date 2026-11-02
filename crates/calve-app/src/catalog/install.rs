@@ -593,6 +593,17 @@ impl Installer {
     /// Installs (I0–I4). Returns the record; an identical package already installed is
     /// returned unchanged (idempotent).
     pub fn install(&self, req: &InstallRequest) -> Result<PackageRecord> {
+        let installed = self.install_locked(req);
+        // A refused install leaves nothing behind; only a crash leaves work for `recover`.
+        if let Err(e) = &installed
+            && e.code != "CRASH_INJECTED"
+        {
+            let _ = self.recover();
+        }
+        installed
+    }
+
+    fn install_locked(&self, req: &InstallRequest) -> Result<PackageRecord> {
         if !valid_id(req.id) {
             return Err(err(
                 "INVALID_INPUT",
@@ -930,7 +941,14 @@ impl Installer {
                 ..openaevc::extension::host::HostLimits::default()
             },
         )
-        .map_err(|e| err("PACKAGE_INVALID", format!("native handshake failed: {e:?}")))?;
+        .map_err(|e| match e {
+            // The package is fine otherwise: it speaks a version this Calve cannot.
+            openaevc::extension::host::HostError::Incompatible(m) => err(
+                "EXTENSION_INCOMPATIBLE",
+                format!("{}@{}: {m}", req.id, entry.version),
+            ),
+            e => err("PACKAGE_INVALID", format!("native handshake failed: {e:?}")),
+        })?;
         if manifest.artifact_digest.hex() != digests["native"] {
             return Err(err(
                 "PACKAGE_INVALID",

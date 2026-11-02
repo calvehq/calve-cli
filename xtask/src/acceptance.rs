@@ -46,7 +46,7 @@ pub const SCENARIOS: [Scenario; 16] = [
         "scenario_c",
         false,
         Some(
-            "steps 5-7 run on a superseding pack: OpenAEVC v0.1.0 cannot promote a pack's effects after a reopen",
+            "approved v0.1.0 deviation: an effect-bearing generation refuses reopen and continues through an explicit replacement",
         ),
     ),
     s('D', "examples", "scenario_d", false, None),
@@ -91,7 +91,7 @@ pub const SCENARIOS: [Scenario; 16] = [
         "scenario_p_version_incompatibility",
         false,
         Some(
-            "the unsupported runtime is a debug-only report override; no second OpenAEVC exists to link",
+            "approved substitution: real signed packages; the runtime side is simulated by a debug-only report",
         ),
     ),
 ];

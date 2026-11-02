@@ -15,10 +15,10 @@
 │ SYSTEM             ││ │                                                                      │ed     2 files  +7 -2  │
 │  Projects          ││r│Evidence on this candidate                                            │s      1/1             │
 │  Inbox           2 ││ │  none                                                                │nce    0               │
-│  Providers         ││ │Required reviewers: one approval by a principal with review authority │w      ◆ WAITING       │
-│  Doctor            ││ │(pack policy)                                                         │                       │
-│  Extensions        ││ │                                                                      │t                      │
-│  Settings          ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │conformance            │
+│  Providers         ││ │Policy still needs: approved review                                   │w      ◆ WAITING       │
+│  Doctor            ││ │                                                                      │                       │
+│  Extensions        ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │t                      │
+│  Settings          ││ │tab field  ↑↓/space choose  ctrl+enter submit  esc cancel             │conformance            │
 │                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
 │                    ││                                                                  ││! Promote: missing: approved│
 │                    ││                                                                  ││review                      │

@@ -1103,6 +1103,31 @@ fn pack_actions(
         parts.extend([id.as_str(), "--generation", generation.as_str()]);
         args(&parts)
     };
+    // A pack with effects cannot reopen on OpenAEVC v0.1.0: the way on is an explicit replacement.
+    let effects = pack.candidate_effects.len().to_string();
+    let reopen_or_replace = if pack.candidate_effects.is_empty() {
+        action(
+            "reopen",
+            "Reopen (new generation)",
+            "o",
+            true,
+            with_gen(&["reopen"]),
+        )
+    } else {
+        action(
+            "supersede",
+            "Replace with a new pack",
+            "o",
+            true,
+            args(&[
+                "supersede",
+                "start",
+                id.as_str(),
+                "--keep",
+                effects.as_str(),
+            ]),
+        )
+    };
     let missing: Vec<String> = explain["missing"]
         .as_array()
         .into_iter()
@@ -1170,13 +1195,7 @@ fn pack_actions(
                 false,
                 with_gen(&["qualify"]),
             ));
-            available.push(action(
-                "reopen",
-                "Reopen (new generation)",
-                "o",
-                true,
-                with_gen(&["reopen"]),
-            ));
+            available.push(reopen_or_replace.clone());
             available.push(action(
                 "abandon",
                 "Abandon",
@@ -1199,13 +1218,7 @@ fn pack_actions(
                 true,
                 with_gen(&["promote"]),
             ));
-            available.push(action(
-                "reopen",
-                "Reopen (new generation)",
-                "o",
-                true,
-                with_gen(&["reopen"]),
-            ));
+            available.push(reopen_or_replace.clone());
             available.push(action(
                 "abandon",
                 "Abandon",

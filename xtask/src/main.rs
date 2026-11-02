@@ -184,22 +184,26 @@ fn dist(args: &[String]) -> DynResult {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_owned())
         .unwrap_or_default();
-    let mut remap = format!(
-        "--remap-path-prefix={}=/src --remap-path-prefix={}=/cargo",
-        root.display(),
-        home.display()
-    );
-    if !sysroot.is_empty() {
-        remap.push_str(&format!(" --remap-path-prefix={sysroot}=/rustc"));
+    // One argument per flag, so paths with spaces survive; rustc takes them separated by 0x1f.
+    let mut flags: Vec<String> = std::env::var("RUSTFLAGS")
+        .map(|f| f.split_whitespace().map(str::to_owned).collect())
+        .unwrap_or_default();
+    flags.push(format!("--remap-path-prefix={}=/src", root.display()));
+    if !home.as_os_str().is_empty() {
+        flags.push(format!("--remap-path-prefix={}=/cargo", home.display()));
     }
-    let rustflags = match std::env::var("RUSTFLAGS") {
-        Ok(f) if !f.is_empty() => format!("{f} {remap}"),
-        _ => remap,
-    };
+    if !sysroot.is_empty() {
+        flags.push(format!("--remap-path-prefix={sysroot}=/rustc"));
+    }
+    // MSVC links a timestamp into every binary unless told not to.
+    if triple.contains("msvc") {
+        flags.push("-Clink-arg=/Brepro".into());
+    }
     let mut build = std::process::Command::new("cargo");
     build
         .current_dir(&root)
-        .env("RUSTFLAGS", rustflags)
+        .env_remove("RUSTFLAGS")
+        .env("CARGO_ENCODED_RUSTFLAGS", flags.join("\u{1f}"))
         .env("CARGO_INCREMENTAL", "0")
         .args(["build", "--release", "--locked", "-p", "calve", "--bins"]);
     if let Some(target) = &target {
@@ -215,6 +219,13 @@ fn dist(args: &[String]) -> DynResult {
     } else {
         ""
     };
+    // Test hooks are compiled out of release builds; a protocol-check bypass must never ship.
+    for binary in ["calve", "calved"] {
+        let bytes = fs::read(bin_dir.join(format!("{binary}{exe}")))?;
+        if let Some(hook) = release::forbidden_hook(&bytes) {
+            return Err(format!("{binary} contains the test hook {hook}").into());
+        }
+    }
     // Under target/ (ignored): release files are never committed by accident.
     let dist = root.join("target/dist");
     // A previous build's files must not be released with this one's.

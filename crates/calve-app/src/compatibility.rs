@@ -76,19 +76,40 @@ pub fn check_enabled_extensions(
     Ok(())
 }
 
-pub fn check(info: &RuntimeInfo) -> Result<Compatibility> {
-    // Debug builds: `CALVE_TEST_RUNTIME_PROTOCOL=<major>` stands in for a runtime speaking another
-    // protocol (§57 P); only one OpenAEVC exists to link against.
-    let reported = match std::env::var("CALVE_TEST_RUNTIME_PROTOCOL") {
-        Ok(major) if cfg!(debug_assertions) => {
-            let major = major.parse().unwrap_or(99);
-            VersionRange::new(
-                openaevc::protocol::ProtocolVersion::new(major, 0, 0),
-                openaevc::protocol::ProtocolVersion::new(major, 0, 1),
-            )
-        }
-        _ => info.protocol,
+/// Debug builds: `CALVE_TEST_RUNTIME_PROTOCOL` simulates a runtime speaking another protocol, as
+/// `<major>.<minor>` or `<major>.<minor>-<major>.<minor>`, because only one OpenAEVC can be linked
+/// (§57 P). It simulates; it is not a second implementation. Release builds do not contain it,
+/// which `xtask dist` verifies on every archive.
+#[cfg(debug_assertions)]
+fn simulated_protocol() -> Option<Result<VersionRange>> {
+    use openaevc::protocol::ProtocolVersion;
+    let raw = std::env::var("CALVE_TEST_RUNTIME_PROTOCOL").ok()?;
+    let version = |s: &str| -> Option<ProtocolVersion> {
+        let (major, minor) = s.split_once('.').unwrap_or((s, "0"));
+        Some(ProtocolVersion::new(
+            major.parse().ok()?,
+            minor.parse().ok()?,
+            0,
+        ))
     };
+    let (min, max) = raw.split_once('-').unwrap_or((raw.as_str(), raw.as_str()));
+    Some(match (version(min), version(max)) {
+        (Some(min), Some(max)) if min <= max => Ok(VersionRange::new(min, max)),
+        _ => Err(crate::coded(
+            "OPENAEVC_INCOMPATIBLE",
+            format!("OpenAEVC reported a malformed protocol range {raw:?}"),
+        )),
+    })
+}
+
+pub fn check(info: &RuntimeInfo) -> Result<Compatibility> {
+    #[cfg(debug_assertions)]
+    let reported = match simulated_protocol() {
+        Some(simulated) => simulated?,
+        None => info.protocol,
+    };
+    #[cfg(not(debug_assertions))]
+    let reported = info.protocol;
     let protocol = check_range("protocol", &SUPPORTED_PROTOCOL, &reported)?;
     let contract = check_range("extension contract", &SUPPORTED_CONTRACT, &info.contract)?;
     Ok(Compatibility {

@@ -116,10 +116,14 @@ async fn connect(endpoint: &Path) -> Result<tokio::net::UnixStream> {
 #[cfg(windows)]
 async fn connect(endpoint: &Path) -> Result<tokio::net::windows::named_pipe::NamedPipeClient> {
     const ERROR_PIPE_BUSY: i32 = 231;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
     let client = loop {
         match calve_win_sec::pipe_connect(endpoint) {
             Ok(c) => break c,
-            Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => {
+            Err(e)
+                if e.raw_os_error() == Some(ERROR_PIPE_BUSY)
+                    && tokio::time::Instant::now() < deadline =>
+            {
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
             Err(e) => return Err(e.into()),

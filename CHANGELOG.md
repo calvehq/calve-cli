@@ -22,11 +22,17 @@ All notable changes to Calve are documented here.
   signed manifest.
 - Console routes for Intents, Resources, Authority, Providers and Settings.
 - `calve.integration/1` reference.
+- `recover apply --rebuild-product` for a lost product database with no backup.
 - **Acceptance scenarios** A–P run as tests, and `xtask acceptance` reports them with an environment
   fingerprint, keeping deviations apart from passes.
 - **`CAPABILITY_DENIED`**: a host call OpenAEVC denies now reports the extension, the capability and
   the grant command.
 - Concept, architecture, guide, reference and security documentation.
+
+### Changed
+
+- **`pack reopen` refuses a pack with effects** (`REOPEN_UNSAFE`), leaving it unchanged: OpenAEVC
+  v0.1.0 could never promote it afterwards. `supersede start` now also works from SEALED and QUALIFIED.
 
 ### Fixed
 

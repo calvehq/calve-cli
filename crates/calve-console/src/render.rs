@@ -1669,11 +1669,20 @@ fn draw_overlay(frame: &mut Frame<'_>, app: &App, screen: &Screen, overlay: &Ove
                         theme.text(),
                     )));
                 }
+                // What OpenAEVC's policy still wants, in its words; Calve has no reviewer list.
+                let wanted: Vec<&str> = pack["explain"]["missing"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| m["condition"].as_str())
+                    .collect();
                 lines.push(Line::from(span(
-                    if pack["requires_review"] == true {
-                        "Required reviewers: one approval by a principal with review authority (pack policy)"
+                    if pack["requires_review"] != true {
+                        "No review is required by this pack's policy".to_owned()
+                    } else if wanted.is_empty() {
+                        "The pack's review policy is satisfied for this candidate".to_owned()
                     } else {
-                        "No review is required by this pack's policy"
+                        format!("Policy still needs: {}", wanted.join("; "))
                     },
                     theme.muted(),
                 )));
