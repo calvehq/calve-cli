@@ -341,7 +341,7 @@ impl Workspace {
             #[cfg(unix)]
             dir.open(".")?.sync_all()?;
             #[cfg(windows)]
-            calve_win_sec::flush_dir_handle(&*dir)?;
+            calve_win_sec::flush_dir_handle(&dir)?;
             Ok(())
         })();
         if res.is_err() {

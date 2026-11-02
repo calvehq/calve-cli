@@ -26,6 +26,7 @@ pub const RLIMIT_MODE: &str = "__exec-limited";
 
 /// What a confined worker must not reach: the Project's control state, and Calve's private
 /// directories (authority, trust state, configuration, the daemon socket).
+#[cfg(unix)]
 fn hidden_paths(env: &[(&str, &str)], cwd: &Path) -> Vec<PathBuf> {
     let project = env
         .iter()
