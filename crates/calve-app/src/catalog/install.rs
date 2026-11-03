@@ -1042,10 +1042,11 @@ impl Installer {
         let mut s =
             Session::open(driver, &crate::integration::host_hello(), meta).map_err(|e| {
                 err(
-                    if e.code() == "INCOMPATIBLE_CIC" {
-                        "INCOMPATIBLE_CIC"
-                    } else {
-                        "PACKAGE_INVALID"
+                    match e.code() {
+                        "INCOMPATIBLE_CIC" => "INCOMPATIBLE_CIC",
+                        // A slow host says nothing about the package.
+                        "DEADLINE_EXCEEDED" => "IO_ERROR",
+                        _ => "PACKAGE_INVALID",
                     },
                     format!("cic hello: {e}"),
                 )

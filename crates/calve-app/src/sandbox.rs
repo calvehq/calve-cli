@@ -393,11 +393,15 @@ fn hex(b: &[u8]) -> String {
 
 /// Supervised driver (§6.7): the guest runs in a child process (`<program> __cic-sandbox`) that
 /// the parent kills on the hard wall-clock deadline. The parent never runs guest code.
+/// How much longer the first reply may take: see `roundtrip_inner`.
+const STARTUP_ALLOWANCE: Duration = Duration::from_secs(60);
+
 pub struct SandboxDriver {
     child: Child,
     stdin: ChildStdin,
     replies: Receiver<std::io::Result<(u8, Vec<u8>)>>,
     pub hard_deadline: Duration,
+    startup_allowance: Duration,
     /// Time from deadline expiry to the child being reaped (deadline tests).
     pub kill_latency: Option<Duration>,
     dead: bool,
@@ -467,6 +471,7 @@ impl SandboxDriver {
             stdin,
             replies,
             hard_deadline: cfg.hard_deadline,
+            startup_allowance: STARTUP_ALLOWANCE,
             kill_latency: None,
             dead: false,
         })
@@ -486,7 +491,11 @@ impl SandboxDriver {
     fn roundtrip_inner(&mut self, tag: u8, req: &[u8]) -> Result<Vec<u8>, HostError> {
         frame::write(&mut self.stdin, tag, req)
             .map_err(|e| HostError::Internal(format!("sandbox gone: {e}")))?;
-        match self.replies.recv_timeout(self.hard_deadline) {
+        // The first reply also covers starting the child and compiling the module, which take as
+        // long as the host's disk does and run no guest code. Fuel and the soft deadline
+        // bound the guest in the child either way.
+        let startup = std::mem::take(&mut self.startup_allowance);
+        match self.replies.recv_timeout(self.hard_deadline + startup) {
             Ok(Ok((frame::OK, b))) => Ok(b),
             Ok(Ok((_, code))) => Err(HostError::decode(&String::from_utf8_lossy(&code))),
             Ok(Err(e)) => Err(HostError::Internal(format!("sandbox died: {e}"))),

@@ -45,7 +45,7 @@ Every kind must be prefixed with the extension id. Harness and provider ids are 
 - Locators in every body follow ADR 0014; the validator is in the contract crate (`locator::validate`) and shared by the host and extensions.
 
 ## Limits (defaults)
-Guest memory 64 MiB; module 8 MiB; tables 10 000; request/response 4 MiB; chunk 2 048 tuples; `max_group` 64; fuel slice 1e7, per call 5e8; soft deadline 5 s; hard deadline 15 s (supervised child).
+Guest memory 64 MiB; module 8 MiB; tables 10 000; request/response 4 MiB; chunk 2 048 tuples; `max_group` 64; fuel slice 1e7, per call 5e8; soft deadline 5 s; hard deadline 15 s (supervised child), plus 60 s on the first message of a session, which also covers starting the child and compiling the module.
 
 ## Conformance
 Golden transcripts must be byte-identical for every guest and host pair; the reference guests are cic-ref-rust and the independent `no_std` cic-ref-min.

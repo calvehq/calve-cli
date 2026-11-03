@@ -62,6 +62,8 @@ All notable changes to Calve are documented here.
 - The console and CLI neutralize more invisible and control characters in untrusted text, and the
   console explains a `PROJECT_LOCKED` refusal.
 - On Windows, an install retries when another process briefly holds the new package open.
+- Enabling an extension on a slow or busy host no longer fails with `PACKAGE_INVALID`: starting the
+  sandbox and compiling a module are not charged to the guest's deadline.
 - `activity --pack` no longer scans the event index. Views after an unrelated change no longer list
   receipts.
 - `execution start` refuses any pack with effects. An execution would start a new generation and
