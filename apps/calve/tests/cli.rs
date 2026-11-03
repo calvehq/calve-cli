@@ -1127,6 +1127,7 @@ fn cli_operations_surface() {
     );
     let refused = Command::new(env!("CARGO_BIN_EXE_calve"))
         .env("XDG_DATA_HOME", &data_home)
+        .env("XDG_CONFIG_HOME", data_home.join("config"))
         .args(["--project", root_str, "recover", "apply"])
         .output()
         .unwrap();

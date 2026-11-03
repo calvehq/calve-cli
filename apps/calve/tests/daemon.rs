@@ -38,6 +38,7 @@ fn daemon_ipc_and_project_writer() {
     let mut daemon = Daemon(
         Command::new(env!("CARGO_BIN_EXE_calved"))
             .env("XDG_DATA_HOME", &data)
+            .env("XDG_CONFIG_HOME", data.join("config"))
             .env_remove("XDG_RUNTIME_DIR")
             .arg("--endpoint")
             .arg(&endpoint)
@@ -140,7 +141,11 @@ fn daemon_ipc_and_project_writer() {
         serde_json::to_value(&first).unwrap(),
         serde_json::to_value(&repeated).unwrap()
     );
-    assert!(matches!(first.outcome, Outcome::Ok { .. }));
+    assert!(
+        matches!(first.outcome, Outcome::Ok { .. }),
+        "{:?}",
+        first.outcome
+    );
     let mut reused = request;
     reused.action = Action::Intent {
         command: IntentCommand::Create {
@@ -255,6 +260,7 @@ fn daemon_stop_uses_the_ipc_shutdown_frame() {
     let mut daemon = Daemon(
         Command::new(env!("CARGO_BIN_EXE_calved"))
             .env("XDG_DATA_HOME", &data)
+            .env("XDG_CONFIG_HOME", data.join("config"))
             .env_remove("XDG_RUNTIME_DIR")
             .arg("--endpoint")
             .arg(&endpoint)

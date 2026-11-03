@@ -22,6 +22,7 @@ fn chunked_content_is_durable_and_portable() {
         ])
         .env("CALVE_ISOLATED_TEST", "1")
         .env("XDG_DATA_HOME", data.path())
+        .env("XDG_CONFIG_HOME", data.path().join("config"))
         .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .status()
         .unwrap();
