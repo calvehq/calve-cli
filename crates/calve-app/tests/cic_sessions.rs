@@ -13,7 +13,13 @@ use proptest::prelude::*;
 use serde_json::{Value, json};
 
 fn session(g: &str) -> Session<Box<dyn Driver>> {
-    let d: Box<dyn Driver> = Box::new(CalveHost::new(&guest(g), HostConfig::default()).unwrap());
+    // Equivalence is about outputs; host scheduling must not decide it, so wall-clock limits are
+    // out of the way here. They have their own tests, and production keeps its defaults.
+    let relaxed = HostConfig {
+        soft_deadline: std::time::Duration::from_secs(3600),
+        ..HostConfig::default()
+    };
+    let d: Box<dyn Driver> = Box::new(CalveHost::new(&guest(g), relaxed).unwrap());
     Session::open(d, &host_hello(), &toy_metadata()).unwrap()
 }
 
