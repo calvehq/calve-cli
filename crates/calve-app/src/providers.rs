@@ -131,6 +131,16 @@ fn resolve_secret(reference: &str) -> Result<String> {
 /// generic credential `calve:<name>`, the platform tool elsewhere, or
 /// `CALVE_KEYRING_COMMAND <name>` when set.
 fn keyring_lookup(name: &str) -> Result<String> {
+    // Under the test guard only a configured lookup command may answer: never the real store.
+    if cfg!(debug_assertions)
+        && std::env::var_os("CALVE_TEST_GUARD").is_some()
+        && std::env::var_os("CALVE_KEYRING_COMMAND").is_none()
+    {
+        return Err(crate::coded(
+            "SECRET_UNAVAILABLE",
+            "test guard: tests may not read the real credential store; set CALVE_KEYRING_COMMAND",
+        ));
+    }
     #[cfg(windows)]
     if std::env::var_os("CALVE_KEYRING_COMMAND").is_none() {
         return match calve_win_sec::read_credential(name) {

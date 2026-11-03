@@ -5,3 +5,5 @@ git-fetch-with-cli = true
 # developer's real one, which holds real Project authority.
 [env]
 XDG_DATA_HOME = { value = "target/test-xdg", relative = true }
+# Debug builds run under cargo refuse any Calve root outside these and the temp directory.
+CALVE_TEST_GUARD = { value = "target", relative = true }

@@ -300,6 +300,10 @@ pub struct ConfigPaths {
 }
 
 pub fn default_config_root() -> Result<PathBuf> {
+    crate::registry::guard_test_root(user_config_root()?)
+}
+
+fn user_config_root() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME is not set"))?;

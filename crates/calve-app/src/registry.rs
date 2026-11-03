@@ -59,6 +59,7 @@ pub fn runtime_dir() -> Result<PathBuf> {
     let data = default_data_root()?;
     match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
         Some(run) if cfg!(unix) && run.is_absolute() && run.is_dir() => {
+            // Keyed by the (guarded) data root, so a test's runtime state never meets a real one.
             let key = crate::journal::sha256_hex(data.to_string_lossy().as_bytes());
             Ok(run.join("calve").join(&key[..16]))
         }
@@ -66,7 +67,51 @@ pub fn runtime_dir() -> Result<PathBuf> {
     }
 }
 
+/// Debug builds under `cargo test`: `CALVE_TEST_GUARD` lists the roots tests may use, and the
+/// temporary directory is always one. A real user's Calve state is outside them, so a test that
+/// would reach it fails before anything is read or written. Release builds never check.
+pub fn guard_test_root(path: PathBuf) -> Result<PathBuf> {
+    if !cfg!(debug_assertions) {
+        return Ok(path);
+    }
+    guard_with(
+        path,
+        std::env::var_os("CALVE_TEST_GUARD"),
+        std::env::temp_dir(),
+    )
+}
+
+fn guard_with(
+    path: PathBuf,
+    allowed: Option<std::ffi::OsString>,
+    temp: PathBuf,
+) -> Result<PathBuf> {
+    let Some(allowed) = allowed else {
+        return Ok(path);
+    };
+    let mut roots: Vec<PathBuf> = std::env::split_paths(&allowed).collect();
+    roots.push(temp);
+    if roots
+        .iter()
+        .any(|r| !r.as_os_str().is_empty() && path.starts_with(r))
+    {
+        Ok(path)
+    } else {
+        Err(crate::coded(
+            "INVALID_CONFIGURATION",
+            format!(
+                "test guard: {} is outside the test roots; a test must never touch a real user's Calve state",
+                path.display()
+            ),
+        ))
+    }
+}
+
 pub fn default_data_root() -> Result<PathBuf> {
+    guard_test_root(user_data_root()?)
+}
+
+fn user_data_root() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME is not set"))?;
@@ -568,5 +613,26 @@ impl Registry {
         )?;
         tx.commit()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::guard_with;
+    use std::path::PathBuf;
+
+    #[test]
+    fn the_test_guard_admits_only_test_roots() {
+        let temp = PathBuf::from("/tmp");
+        let allowed = Some(std::env::join_paths(["/w/target"]).unwrap());
+        let ok = |p: &str| guard_with(PathBuf::from(p), allowed.clone(), temp.clone()).is_ok();
+        assert!(ok("/w/target/test-xdg/calve"));
+        assert!(ok("/tmp/x/d/calve"));
+        assert!(!ok("/home/u/.local/share/calve"));
+        assert!(!ok("/w/targets/calve"), "a prefix of a name is not a root");
+        assert!(
+            guard_with(PathBuf::from("/home/u/x"), None, temp).is_ok(),
+            "off without the guard"
+        );
     }
 }

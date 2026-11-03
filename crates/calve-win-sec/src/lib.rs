@@ -1147,6 +1147,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "writes the real Windows credential store; run on purpose with --ignored"]
     fn generic_credentials_round_trip() {
         let name = format!("test-{}", std::process::id());
         assert_eq!(read_credential(&name).unwrap(), None);
