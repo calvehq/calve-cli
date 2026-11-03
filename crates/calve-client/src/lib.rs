@@ -217,7 +217,10 @@ impl Client {
                     .stdout(log.try_clone()?)
                     .stderr(log)
                     .spawn()?;
-                for _ in 0..100 {
+                // A cold start on a slow disk can take seconds; a calved that exits is reported
+                // at once, so the wait only bounds a live but silent daemon.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                while std::time::Instant::now() < deadline {
                     if let Some(version) = daemon_alive(&endpoint).await {
                         return Ok(json!({"running":true,"pid":child.id(),"version":version}));
                     }
@@ -230,7 +233,7 @@ impl Client {
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
                 Err(Error::Message(
-                    "DAEMON_UNAVAILABLE: calved did not become ready within 5 s".into(),
+                    "DAEMON_UNAVAILABLE: calved did not become ready within 30 s".into(),
                 ))
             }
             DaemonCommand::Stop => {
