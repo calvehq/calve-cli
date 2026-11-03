@@ -1364,6 +1364,7 @@ mod tests {
     /// A secret stored with the stock `cmdkey` tool resolves (same blob encoding).
     #[cfg(windows)]
     #[test]
+    #[ignore = "writes the real Windows credential store; run on purpose with --ignored"]
     fn keyring_reads_what_cmdkey_stored() {
         let name = format!("m5-test-{}", std::process::id());
         let target = format!("/generic:calve:{name}");
