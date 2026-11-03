@@ -35,6 +35,10 @@ pub struct ServerInfo {
 }
 
 const MAX_FRAME: usize = 8 * 1024 * 1024;
+/// Connections served at once; more wait to be accepted.
+const SLOTS: usize = 64;
+/// A connection that has not said hello by then is closed, freeing its slot.
+const HELLO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Default)]
 struct ReplayCache {
@@ -258,7 +262,7 @@ where
     local
         .run_until(async move {
             let writer = Arc::new(Mutex::new(ReplayCache::default()));
-            let slots = Arc::new(Semaphore::new(64));
+            let slots = Arc::new(Semaphore::new(SLOTS));
             let stop = Rc::new(tokio::sync::Notify::new());
             let mut tasks = tokio::task::JoinSet::new();
             let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
@@ -334,9 +338,16 @@ where
     H: Fn(Request) -> F,
     F: Future<Output = Response>,
 {
-    let hello = match read_frame(&mut stream).await? {
-        Frame::Hello(hello) => hello,
-        _ => return Err(Error::Message("expected IPC hello".into())),
+    let hello = match tokio::time::timeout(HELLO_TIMEOUT, read_frame(&mut stream)).await {
+        Ok(frame) => match frame? {
+            Frame::Hello(hello) => hello,
+            _ => return Err(Error::Message("expected IPC hello".into())),
+        },
+        Err(_) => {
+            return Err(Error::Message(
+                "no IPC hello in time; connection closed".into(),
+            ));
+        }
     };
     let accepted = hello.api_version == app::API_VERSION;
     write_frame(
@@ -448,12 +459,24 @@ where
     local
         .run_until(async move {
             let writer = Arc::new(Mutex::new(ReplayCache::default()));
+            let slots = Arc::new(tokio::sync::Semaphore::new(SLOTS));
             let stop = Rc::new(tokio::sync::Notify::new());
             let mut tasks = tokio::task::JoinSet::new();
             loop {
+                // A slot first: a saturated daemon leaves further clients waiting to connect.
+                let permit = tokio::select! {
+                    result = slots.clone().acquire_owned() => result.map_err(|_| Error::Message("slots closed".into()))?,
+                    result = tokio::signal::ctrl_c() => { result?; break; }
+                    _ = stop.notified() => break,
+                };
                 tokio::select! {
                     result = server.connect() => {
-                        result?;
+                        // A client that left before its slot came free must not stop the daemon.
+                        if let Err(e) = result {
+                            eprintln!("calved: connection lost before it was served: {e}");
+                            server = calve_win_sec::pipe_server(endpoint, false)?;
+                            continue;
+                        }
                         let connected = server;
                         server = calve_win_sec::pipe_server(endpoint, false)?;
                         if let Err(e) = calve_win_sec::verify_pipe_client(&connected) {
@@ -462,6 +485,7 @@ where
                         }
                         let (writer, handler, info, stop) = (writer.clone(), handler.clone(), info.clone(), stop.clone());
                         tasks.spawn_local(async move {
+                            let _permit = permit;
                             if let Err(error) = handle_client(connected, writer, &info, handler, stop).await {
                                 eprintln!("calved: client: {error}");
                             }
@@ -509,5 +533,125 @@ mod frame_tests {
             .await
             .unwrap();
         assert!(read_frame(&mut b).await.is_err());
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+    use calve_api::{Action, Outcome, RequestScope};
+    use std::time::Duration;
+
+    // The test process is the server, so the client's check that the pipe belongs to
+    // `calved.exe` cannot pass here: these tests talk to the endpoint without it.
+    #[cfg(unix)]
+    async fn raw(endpoint: &Path) -> Result<tokio::net::UnixStream> {
+        connect(endpoint).await
+    }
+
+    #[cfg(windows)]
+    async fn raw(endpoint: &Path) -> Result<tokio::net::windows::named_pipe::NamedPipeClient> {
+        loop {
+            match calve_win_sec::pipe_connect(endpoint) {
+                Ok(c) => return Ok(c),
+                Err(e) if e.raw_os_error() == Some(231) => {
+                    tokio::time::sleep(Duration::from_millis(20)).await
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    async fn ask(endpoint: &Path) -> Result<Response> {
+        let mut stream = raw(endpoint).await?;
+        hello(&mut stream).await?;
+        let request = Request::local(
+            RequestScope {
+                project: None,
+                workspace: None,
+                config_file: None,
+                actor: None,
+            },
+            Action::Version,
+        );
+        write_frame(&mut stream, &Frame::Request(Box::new(request))).await?;
+        match read_frame(&mut stream).await? {
+            Frame::Response(response) => Ok(*response),
+            _ => Err(Error::Message("not a response".into())),
+        }
+    }
+
+    /// The daemon serves at most `SLOTS` connections: a further one waits, a closing one frees a
+    /// slot at once, and stalled clients that never say hello are closed after `HELLO_TIMEOUT`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn admission_is_capped_and_stalled_clients_are_dropped() {
+        let dir = std::env::temp_dir().join(format!("calve-ipc-{}", uuid::Uuid::now_v7().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        #[cfg(unix)]
+        let endpoint = {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            dir.join("d.sock")
+        };
+        #[cfg(windows)]
+        let endpoint =
+            calve_win_sec::pipe_name(&dir, |_| uuid::Uuid::now_v7().simple().to_string()).unwrap();
+        let local = tokio::task::LocalSet::new();
+        local
+            .run_until(async {
+                let info = ServerInfo {
+                    product_version: env!("CARGO_PKG_VERSION").into(),
+                    openaevc_revision: "test".into(),
+                };
+                let served = endpoint.clone();
+                tokio::task::spawn_local(async move {
+                    let ended = serve(&served, info, |r: Request| async move {
+                        Response {
+                            api_version: app::API_VERSION,
+                            request_id: r.request_id,
+                            correlation_id: None,
+                            outcome: Outcome::Ok {
+                                value: serde_json::json!(1),
+                            },
+                        }
+                    })
+                    .await;
+                    panic!("the daemon stopped: {ended:?}");
+                });
+                let started = tokio::time::Instant::now();
+                while let Err(e) = ask(&endpoint).await {
+                    assert!(
+                        started.elapsed() < Duration::from_secs(20),
+                        "no daemon: {e}"
+                    );
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                let mut stalled = Vec::new();
+                for _ in 0..SLOTS {
+                    stalled.push(raw(&endpoint).await.unwrap());
+                    tokio::task::yield_now().await;
+                }
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                assert!(
+                    tokio::time::timeout(Duration::from_secs(1), ask(&endpoint))
+                        .await
+                        .is_err(),
+                    "a request was served past the cap"
+                );
+                stalled.pop();
+                let freed = tokio::time::timeout(Duration::from_secs(5), ask(&endpoint))
+                    .await
+                    .expect("a closed connection frees its slot");
+                assert!(freed.is_ok(), "{freed:?}");
+                tokio::time::sleep(HELLO_TIMEOUT + Duration::from_secs(2)).await;
+                // Every stalled client was closed, so all the slots serve again.
+                for _ in 0..SLOTS {
+                    let served = tokio::time::timeout(Duration::from_secs(5), ask(&endpoint)).await;
+                    assert!(matches!(served, Ok(Ok(_))), "{served:?}");
+                }
+                drop(stalled);
+            })
+            .await;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

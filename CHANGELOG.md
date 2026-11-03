@@ -6,6 +6,15 @@ All notable changes to Calve are documented here.
 
 ### Added
 
+- **CIC time budgets are separate.** Starting the sandbox and compiling the module have their own
+  60 s budget (`CIC_STARTUP_DEADLINE`) and no longer lengthen the guest's first call; the guest keeps
+  its 15 s hard deadline per message, and a session ends 600 s after spawn at the latest
+  (`CIC_SESSION_DEADLINE`).
+- **Tests cannot reach real user state.** Debug builds run under cargo refuse a Calve root outside
+  `CALVE_TEST_GUARD` and the temporary directory, and never read the real credential store.
+- **The Windows daemon serves at most 64 connections**, like Unix; a connection that says no hello
+  within 10 s is closed on both.
+
 - **Runs overlap in a Project.** A run holds the writer lock only to admit itself and record its
   result; a durable claim keeps colliding work apart, and real collisions get `PROJECT_LOCKED`.
 - **Live worker output.** `execution logs` returns output as it arrives, with `--after` to continue,
