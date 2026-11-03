@@ -140,3 +140,42 @@ async fn legacy_project_name_remains_readable_after_rename() {
     assert_eq!(reopened.display_name, "Updated");
     assert_eq!(reopened.identity.name.as_deref(), Some("Original"));
 }
+
+/// The test guard: under cargo a debug `calve` refuses a data root outside the test roots, so
+/// a test can never read or write a real user's Calve state. The same command with roots in
+/// the temp directory is not refused, so the refusal is the guard and nothing else.
+#[cfg(unix)]
+#[test]
+fn the_binary_refuses_real_user_state_under_test() {
+    assert!(
+        std::env::var_os("CALVE_TEST_GUARD").is_some(),
+        "cargo sets the guard"
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let inside = temp.path();
+    let calve = |data: &Path, config: &Path| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+            .args(["config", "list", "--json"])
+            .env("XDG_DATA_HOME", data)
+            .env("XDG_CONFIG_HOME", config)
+            .env("HOME", inside)
+            .env_remove("XDG_RUNTIME_DIR")
+            .output()
+            .unwrap()
+    };
+    // Paths no user has, standing in for a real user's directories.
+    let outside = Path::new("/calve-test-guard-outside");
+    for (data, config) in [(outside, inside), (inside, outside)] {
+        let out = calve(&data.join("share"), &config.join("config"));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success(), "{stderr}");
+        assert!(stderr.contains("test guard"), "{stderr}");
+    }
+    let out = calve(&inside.join("share"), &inside.join("config"));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!outside.exists());
+}
