@@ -1493,10 +1493,29 @@ fn doctor_extensions_and_mouse() {
 /// 10,000 ChangePacks (pages of 200), 10,000 tasks, 1,000 graph nodes, a 20,000-line diff and
 /// a bounded log tail. Navigation and rendering stay windowed; timings are printed for the
 /// M6 benchmark record and held to a generous debug-build budget.
+///
+/// Release: each operation's best of three rounds must stay under the budget, so a single
+/// scheduling stall on the host is not a failure and a real slowdown (all rounds) still is.
 #[test]
 fn large_datasets_stay_windowed() {
+    let budget = std::time::Duration::from_millis(500);
+    let rounds: Vec<_> = (0..if cfg!(debug_assertions) { 1 } else { 3 })
+        .map(|_| section_96_round())
+        .collect();
+    for (i, (name, _)) in rounds[0].iter().enumerate() {
+        let all: Vec<_> = rounds.iter().map(|r| r[i].1).collect();
+        let best = *all.iter().min().unwrap();
+        println!("§96 {name}: best {best:?} of {all:?}");
+        // Timing is held in the release benchmark only; debug builds check behaviour.
+        assert!(
+            cfg!(debug_assertions) || best < budget,
+            "{name} took {all:?}"
+        );
+    }
+}
+
+fn section_96_round() -> Vec<(&'static str, std::time::Duration)> {
     use std::time::{Duration, Instant};
-    let budget = Duration::from_millis(500);
     let mut h = Harness::new(160, 45);
     let runner = h.pack_id("Add remote conformance runner");
     let mut worst: Vec<(&str, Duration)> = Vec::new();
@@ -1506,11 +1525,6 @@ fn large_datasets_stay_windowed() {
         h.render();
         let took = start.elapsed();
         worst.push((name, took));
-        // Timing is held in the release benchmark only, run alone; debug builds check behaviour.
-        assert!(
-            cfg!(debug_assertions) || took < budget,
-            "{name} took {took:?}"
-        );
     };
     // 10,000 packs: only the first page is loaded until the selection nears its end.
     let template = h.data["packs"]["items"][0].clone();
@@ -1623,9 +1637,7 @@ fn large_datasets_stay_windowed() {
             h.key(KeyCode::Char('J'));
         }
     });
-    for (name, took) in &worst {
-        println!("§96 {name}: {took:?}");
-    }
+    worst
 }
 
 /// Every rendered row fits the terminal: no line wider than the screen (§76.2 layout).
