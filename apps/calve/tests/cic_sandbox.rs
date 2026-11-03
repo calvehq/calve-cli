@@ -94,3 +94,97 @@ fn hard_deadline_kills_a_guest_that_evades_fuel_slicing() {
     );
     assert!(s.raw("describe", json!({})).is_err(), "session discarded");
 }
+
+fn reference(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("ref.wasm");
+    std::fs::write(&path, guest("ref-rust")).unwrap();
+    path
+}
+
+/// A stall while the child starts or compiles is the supervisor's own deadline: classified as
+/// such, the child killed, and no guest time charged.
+#[test]
+fn a_stalled_startup_is_its_own_deadline() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = reference(dir.path());
+    for stage in ["startup", "compile"] {
+        let cfg = HostConfig {
+            startup: Duration::from_millis(500),
+            stall: Some((stage, Duration::from_secs(5))),
+            ..HostConfig::default()
+        };
+        let started = Instant::now();
+        let e = Session::open(supervised(&path, &cfg), &host_hello(), &toy_metadata())
+            .map(|_| ())
+            .unwrap_err();
+        assert!(
+            e.to_string().contains(calve_app::sandbox::STARTUP_DEADLINE),
+            "{stage}: {e}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(4),
+            "{stage}: killed early"
+        );
+    }
+}
+
+/// A slow start within its budget costs the guest nothing: its deadline begins at ready.
+#[test]
+fn a_slow_compile_within_budget_leaves_the_guest_deadline_intact() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = reference(dir.path());
+    let cfg = HostConfig {
+        hard_deadline: Duration::from_secs(2),
+        stall: Some(("compile", Duration::from_secs(3))),
+        ..HostConfig::default()
+    };
+    let mut s = Session::open(supervised(&path, &cfg), &host_hello(), &toy_metadata()).unwrap();
+    assert!(s.raw("describe", json!({})).unwrap().is_ok());
+}
+
+/// The session's absolute bound holds however promptly each message is answered.
+#[test]
+fn the_session_bound_is_absolute() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = reference(dir.path());
+    let cfg = HostConfig {
+        session: Duration::from_millis(1500),
+        ..HostConfig::default()
+    };
+    let mut s = Session::open(supervised(&path, &cfg), &host_hello(), &toy_metadata()).unwrap();
+    let started = Instant::now();
+    let e = loop {
+        match s.raw("describe", json!({})) {
+            Ok(_) => std::thread::sleep(Duration::from_millis(200)),
+            Err(e) => break e,
+        }
+        assert!(started.elapsed() < Duration::from_secs(10), "never bounded");
+    };
+    assert!(
+        e.to_string().contains(calve_app::sandbox::SESSION_DEADLINE),
+        "{e}"
+    );
+}
+
+/// Dropping a session while the child is still starting ends the child.
+#[test]
+fn cancelling_during_startup_kills_the_child() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = reference(dir.path());
+    let cfg = HostConfig {
+        startup: Duration::from_millis(300),
+        stall: Some(("startup", Duration::from_secs(30))),
+        ..HostConfig::default()
+    };
+    let driver = supervised(&path, &cfg);
+    let pid = driver.child_id();
+    drop(driver);
+    std::thread::sleep(Duration::from_millis(200));
+    #[cfg(target_os = "linux")]
+    assert!(
+        std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .map_or(true, |s| s.split(' ').nth(2) == Some("Z")),
+        "child {pid} still running"
+    );
+    let _ = pid;
+}

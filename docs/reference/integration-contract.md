@@ -45,7 +45,7 @@ Every kind must be prefixed with the extension id. Harness and provider ids are 
 - Locators in every body follow ADR 0014; the validator is in the contract crate (`locator::validate`) and shared by the host and extensions.
 
 ## Limits (defaults)
-Guest memory 64 MiB; module 8 MiB; tables 10 000; request/response 4 MiB; chunk 2 048 tuples; `max_group` 64; fuel slice 1e7, per call 5e8; soft deadline 5 s; hard deadline 15 s (supervised child), plus 60 s on the first message of a session, which also covers starting the child and compiling the module.
+Guest memory 64 MiB; module 8 MiB; tables 10 000; request/response 4 MiB; chunk 2 048 tuples; `max_group` 64; fuel slice 1e7, per call 5e8; soft deadline 5 s; hard deadline 15 s per message (supervised child; it covers guest code only). Starting the child, reading and compiling the module have their own budget of 60 s, spent before any guest code runs: the child reports ready, and a miss is `CIC_STARTUP_DEADLINE`. A whole session is bounded by 600 s from spawn whatever the retries or progress, and a miss is `CIC_SESSION_DEADLINE`. The startup budget never extends the guest deadline.
 
 ## Conformance
 Golden transcripts must be byte-identical for every guest and host pair; the reference guests are cic-ref-rust and the independent `no_std` cic-ref-min.

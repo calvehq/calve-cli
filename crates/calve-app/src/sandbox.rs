@@ -33,6 +33,14 @@ pub struct HostConfig {
     pub fuel_per_call: u64,
     pub soft_deadline: Duration,
     pub hard_deadline: Duration,
+    /// Supervised child only: starting the process, reading and compiling the module, before
+    /// the child says it is ready. No guest code runs in it.
+    pub startup: Duration,
+    /// Supervised child only: the whole session, every message included, whatever progress.
+    pub session: Duration,
+    /// Debug builds: make the child stall at `startup` or `compile` (deadline tests).
+    #[doc(hidden)]
+    pub stall: Option<(&'static str, Duration)>,
 }
 
 impl Default for HostConfig {
@@ -48,6 +56,9 @@ impl Default for HostConfig {
             fuel_per_call: l.fuel_per_call,
             soft_deadline: Duration::from_millis(l.soft_deadline_ms),
             hard_deadline: Duration::from_millis(l.hard_deadline_ms),
+            startup: Duration::from_secs(60),
+            session: Duration::from_secs(600),
+            stall: None,
         }
     }
 }
@@ -393,15 +404,21 @@ fn hex(b: &[u8]) -> String {
 
 /// Supervised driver (§6.7): the guest runs in a child process (`<program> __cic-sandbox`) that
 /// the parent kills on the hard wall-clock deadline. The parent never runs guest code.
-/// How much longer the first reply may take: see `roundtrip_inner`.
-const STARTUP_ALLOWANCE: Duration = Duration::from_secs(60);
+/// What the child sends once it has read and compiled the module.
+const READY: &[u8] = b"ready";
+/// Classification prefixes of the supervisor's own deadlines (the guest's is `DEADLINE_EXCEEDED`).
+pub const STARTUP_DEADLINE: &str = "CIC_STARTUP_DEADLINE";
+pub const SESSION_DEADLINE: &str = "CIC_SESSION_DEADLINE";
 
 pub struct SandboxDriver {
     child: Child,
     stdin: ChildStdin,
     replies: Receiver<std::io::Result<(u8, Vec<u8>)>>,
     pub hard_deadline: Duration,
-    startup_allowance: Duration,
+    /// Every message of this session must be answered before this instant.
+    session_end: Instant,
+    /// A failure the child reported while starting, returned by the first message.
+    pending: Option<HostError>,
     /// Time from deadline expiry to the child being reaped (deadline tests).
     pub kill_latency: Option<Duration>,
     dead: bool,
@@ -431,6 +448,12 @@ impl SandboxDriver {
                 ]
                 .map(|v| v.to_string()),
             )
+            .arg(match cfg.stall {
+                Some((stage, d)) if cfg!(debug_assertions) => {
+                    format!("{stage}:{}", d.as_millis())
+                }
+                _ => "-".into(),
+            })
             .arg(
                 if crate::supervise::confinement_required(&Default::default()) {
                     "required"
@@ -466,18 +489,42 @@ impl SandboxDriver {
                 }
             }
         });
-        Ok(SandboxDriver {
+        let mut driver = SandboxDriver {
             child,
             stdin,
             replies,
             hard_deadline: cfg.hard_deadline,
-            startup_allowance: STARTUP_ALLOWANCE,
+            session_end: Instant::now() + cfg.session,
+            pending: None,
             kill_latency: None,
             dead: false,
-        })
+        };
+        // Startup has its own budget: the guest deadline starts only once the child is ready.
+        match driver.replies.recv_timeout(cfg.startup) {
+            Ok(Ok((frame::OK, b))) if b == READY => {}
+            Ok(Ok((_, code))) => {
+                driver.pending = Some(HostError::decode(&String::from_utf8_lossy(&code)));
+            }
+            Ok(Err(_)) => {
+                driver.pending = Some(HostError::Internal("sandbox died starting".into()));
+            }
+            Err(_) => {
+                driver.kill();
+                driver.dead = true;
+                driver.pending = Some(HostError::Internal(format!(
+                    "{STARTUP_DEADLINE}: the sandbox did not start within {:?}",
+                    cfg.startup
+                )));
+            }
+        }
+        Ok(driver)
     }
 
     fn roundtrip(&mut self, tag: u8, req: &[u8]) -> Result<Vec<u8>, HostError> {
+        if let Some(e) = self.pending.take() {
+            self.dead = true;
+            return Err(e);
+        }
         if self.dead {
             return Err(HostError::Internal(
                 "sandbox discarded after an error".into(),
@@ -491,11 +538,16 @@ impl SandboxDriver {
     fn roundtrip_inner(&mut self, tag: u8, req: &[u8]) -> Result<Vec<u8>, HostError> {
         frame::write(&mut self.stdin, tag, req)
             .map_err(|e| HostError::Internal(format!("sandbox gone: {e}")))?;
-        // The first reply also covers starting the child and compiling the module, which take as
-        // long as the host's disk does and run no guest code. Fuel and the soft deadline
-        // bound the guest in the child either way.
-        let startup = std::mem::take(&mut self.startup_allowance);
-        match self.replies.recv_timeout(self.hard_deadline + startup) {
+        // The guest's own deadline per message, and never past the session's absolute end.
+        let left = self.session_end.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            self.kill();
+            return Err(HostError::Internal(format!(
+                "{SESSION_DEADLINE}: the session ran past its absolute bound"
+            )));
+        }
+        let session_bound = left < self.hard_deadline;
+        match self.replies.recv_timeout(self.hard_deadline.min(left)) {
             Ok(Ok((frame::OK, b))) => Ok(b),
             Ok(Ok((_, code))) => Err(HostError::decode(&String::from_utf8_lossy(&code))),
             Ok(Err(e)) => Err(HostError::Internal(format!("sandbox died: {e}"))),
@@ -503,9 +555,20 @@ impl SandboxDriver {
                 let t = Instant::now();
                 self.kill();
                 self.kill_latency = Some(t.elapsed());
-                Err(HostError::DeadlineExceeded)
+                Err(if session_bound {
+                    HostError::Internal(format!(
+                        "{SESSION_DEADLINE}: the session ran past its absolute bound"
+                    ))
+                } else {
+                    HostError::DeadlineExceeded
+                })
             }
         }
+    }
+
+    /// The child's process id.
+    pub fn child_id(&self) -> u32 {
+        self.child.id()
     }
 
     fn kill(&mut self) {
@@ -577,12 +640,14 @@ pub fn serve_child(args: &[String]) -> i32 {
             mem,
             req,
             resp,
+            stall,
             _required,
         ] = args
         else {
             return Err(bad());
         };
         let n = |s: &String| s.parse::<u64>().map_err(|_| bad());
+        stall_at(stall, "startup");
         let bytes = std::fs::read(wasm).map_err(|e| HostError::Internal(format!("module: {e}")))?;
         if sha256_hex(&bytes) != *digest {
             return Err(abi_err("module digest differs from the installed package"));
@@ -612,10 +677,14 @@ pub fn serve_child(args: &[String]) -> i32 {
             HostError::Internal("CONTAINMENT_UNAVAILABLE: Landlock is not enforced here".into()),
         );
     }
+    stall_at(&args[8], "compile");
     let mut host = match CalveHost::new(&bytes, cfg) {
         Ok(h) => h,
         Err(e) => return fail(&mut input, &mut out, e),
     };
+    if frame::write(&mut out, frame::OK, READY).is_err() {
+        return 1;
+    }
     while let Ok((tag, req)) = frame::read(&mut input, cfg.max_request) {
         let r = if tag == frame::INIT {
             host.init(&req)
@@ -633,9 +702,22 @@ pub fn serve_child(args: &[String]) -> i32 {
     0
 }
 
-/// Reports `e` on the first request, so the parent sees a coded error rather than a hang.
-fn fail(input: &mut impl Read, out: &mut impl Write, e: HostError) -> i32 {
-    let _ = frame::read(input, 64 * 1024 * 1024);
+/// Debug builds: sleeps at `stage` when the parent asked for it, standing in for a slow disk.
+fn stall_at(arg: &str, stage: &str) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    if let Some(ms) = arg
+        .strip_prefix(stage)
+        .and_then(|r| r.strip_prefix(':'))
+        .and_then(|m| m.parse().ok())
+    {
+        std::thread::sleep(Duration::from_millis(ms));
+    }
+}
+
+/// Reports `e` at once, in place of the ready signal, so the parent sees a coded error.
+fn fail(_input: &mut impl Read, out: &mut impl Write, e: HostError) -> i32 {
     let _ = frame::write(out, frame::ERR, e.encode().as_bytes());
     1
 }

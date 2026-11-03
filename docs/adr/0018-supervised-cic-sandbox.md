@@ -22,5 +22,8 @@ wasmi interpreter bugs (tracked by cargo-deny advisories).
 ## M2 production implementation (2026-10-15)
 - `calve __cic-sandbox` serves every production CIC session (`domains::open_session`); Linux applies Landlock deny-all in the child. The production host is the one exercised by calve-extensions conformance.
 
+## Time budgets (M7 closeout, 2026-11-03)
+Four separate bounds: startup (spawn, read, compile: 60 s, no guest code runs; `CIC_STARTUP_DEADLINE`), guest execution per message (hard 15 s, unchanged), the whole session (600 s from spawn, absolute; `CIC_SESSION_DEADLINE`), and the caller's cancellation (dropping the driver kills the child). This replaces the earlier 60 s allowance on a session's first message, which also covered the guest's first call.
+
 ## Current status
 On Linux the child applies Landlock deny-all. Where confinement is required, a module does not run if the kernel enforces none; `doctor` reports `cic_landlock` and the policy. macOS and Windows have no such second wall: there the boundary is wasm alone, with the parent killing the child at the deadline. No Job Object is used for this child, whatever earlier text says.
