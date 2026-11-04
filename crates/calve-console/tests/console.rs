@@ -1504,8 +1504,15 @@ fn large_datasets_stay_windowed() {
         .collect();
     for (i, (name, _)) in rounds[0].iter().enumerate() {
         let all: Vec<_> = rounds.iter().map(|r| r[i].1).collect();
-        let best = *all.iter().min().unwrap();
-        println!("§96 {name}: best {best:?} of {all:?}");
+        let mut sorted = all.clone();
+        sorted.sort();
+        let (best, median, max) = (
+            sorted[0],
+            sorted[sorted.len() / 2],
+            sorted[sorted.len() - 1],
+        );
+        // Median and maximum are diagnostics only: three rounds say nothing about worst-case latency.
+        println!("§96 {name}: best {best:?} median {median:?} max {max:?} samples {all:?}");
         // Timing is held in the release benchmark only; debug builds check behaviour.
         assert!(
             cfg!(debug_assertions) || best < budget,
