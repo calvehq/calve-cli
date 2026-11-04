@@ -257,6 +257,73 @@ fn a_mutation_without_verified_evidence_is_conflicted_evidence_missing() {
     }
 }
 
+/// N71: a rename's source must still hold the expected bytes, and after the mutation the
+/// destination must be Calve's own inode with the expected digest. Either failing is a
+/// conflict that keeps every version and reverses nothing (no automatic swap-back).
+#[test]
+fn rename_source_preconditions_and_post_mutation_identity() {
+    let t = setup();
+    let a = t.root().join("a.txt");
+    // Post-mutation identity: a write lands on the path right after Calve's rename.
+    let run = t.run(
+        &[(
+            "CALVE_TEST_WRITE",
+            &format!("f1.after_mutate={}", a.display()),
+        )],
+        &["baseline", "materialize", &t.v1, "--apply"],
+    );
+    assert!(!run.success);
+    assert!(
+        run.stderr.contains("post_mutation_identity"),
+        "{}",
+        run.stderr
+    );
+    let id = t.ops().last().unwrap()["op"].as_str().unwrap().to_owned();
+    assert_eq!(t.ops().last().unwrap()["state"], "Conflicted");
+    assert_eq!(
+        fs::read_to_string(&a).unwrap(),
+        "one\nconcurrent\n",
+        "no swap-back"
+    );
+    let artifacts = t.root().join(".calve/conflicts").join(&id).join("f1");
+    assert_eq!(fs::read_to_string(artifacts.join("ours")).unwrap(), "one\n");
+    assert_eq!(
+        fs::read_to_string(artifacts.join("displaced")).unwrap(),
+        "two\n"
+    );
+    let resolved = t.ok(&["materialize", "resolve", &id, "--keep", "ours"]);
+    assert_eq!(resolved["state"], "Completed", "{resolved}");
+    assert_eq!(t.tree(), v1_tree());
+    assert_eq!(t.materialize(&t.v2)["state"], "Completed");
+
+    // Source precondition: the file changes after its intent is journaled and before it is
+    // read for the backup. Nothing is mutated: the writer's bytes stay where they are.
+    let run = t.run(
+        &[(
+            "CALVE_TEST_WRITE",
+            &format!("f1.after_intent={}", a.display()),
+        )],
+        &["baseline", "materialize", &t.v1, "--apply"],
+    );
+    assert!(!run.success);
+    assert!(
+        run.stderr.contains("changed_before_mutation"),
+        "{}",
+        run.stderr
+    );
+    let op = t.ops().last().unwrap().clone();
+    assert_eq!(op["state"], "Conflicted", "{op}");
+    assert_eq!(
+        fs::read_to_string(&a).unwrap(),
+        "two\nconcurrent\n",
+        "untouched"
+    );
+    let id = op["op"].as_str().unwrap();
+    let resolved = t.ok(&["materialize", "resolve", id, "--keep", "theirs"]);
+    assert_eq!(resolved["state"], "Completed", "{resolved}");
+    assert_eq!(fs::read_to_string(&a).unwrap(), "two\nconcurrent\n");
+}
+
 #[test]
 fn a_concurrent_writer_is_kept_and_nothing_is_reversed() {
     concurrent_writer(None);

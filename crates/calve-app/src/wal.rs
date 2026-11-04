@@ -496,6 +496,7 @@ impl Wal {
         };
         self.append("m.intent", json!({"mutation": m}))?;
         fault(&format!("materialize.{}.after_intent", m.step));
+        interleave(&format!("{}.after_intent", m.step), &dir, "");
         self.forward(&dir, &name, m, bytes, false)
     }
 
