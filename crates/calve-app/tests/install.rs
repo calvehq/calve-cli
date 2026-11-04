@@ -580,6 +580,64 @@ fn the_registered_manifest_must_be_exactly_the_installed_one() {
     }
 }
 
+/// N68: the reference schema is bound to the package by the native manifest's content hash.
+/// A package missing the document it declares, shipping a different one, or shipping one its
+/// manifest does not bind is refused and nothing is installed; without either it installs.
+#[test]
+fn the_reference_schema_is_bound_by_the_manifest_hash() {
+    let cases: [(&str, &str, Option<Vec<u8>>, Option<&str>); 4] = [
+        (
+            "calve-fixture-ext",
+            "missing",
+            None,
+            Some("ships no calve-refs.json"),
+        ),
+        (
+            "calve-fixture-ext",
+            "mismatched",
+            Some(
+                calve_testkit::TOY_REFS
+                    .replace("/digest\"", "/other\"")
+                    .into_bytes(),
+            ),
+            Some("does not match the manifest's calve.refs/1 hash"),
+        ),
+        (
+            "calve-fixture-ext-unbound",
+            "unbound",
+            Some(calve_testkit::TOY_REFS.as_bytes().to_vec()),
+            Some("is not bound by the manifest"),
+        ),
+        ("calve-fixture-ext-unbound", "neither", None, None),
+    ];
+    for (name, case, refs, refusal) in cases {
+        let m = machine();
+        let mut r = Repo::new();
+        let mut p = toy(None);
+        p.native = (name, native());
+        p.refs = refs;
+        r.add_package("targets", p);
+        r.publish();
+        catalog(&m, "main", &r);
+        let result = installer(&m).install(&req(true));
+        match refusal {
+            Some(text) => {
+                let e = result.expect_err(case);
+                assert_eq!(e.code, "PACKAGE_INVALID", "{case}: {e}");
+                assert!(e.message.contains(text), "{case}: {e}");
+                assert!(
+                    !m.paths.extension_dir.join("org.example.toy").exists(),
+                    "{case}: nothing installed"
+                );
+            }
+            None => {
+                result.unwrap_or_else(|e| panic!("{case}: {e}"));
+                assert!(m.paths.extension_dir.join("org.example.toy").is_dir());
+            }
+        }
+    }
+}
+
 /// Stress/regression coverage for the OPEN Windows install flake (M5: "Access is denied" at the
 /// staging→final rename in 3 of 7 parallel runs; holder not identified). Many threads install
 /// the same package into separate machines at once, round after round; every failure is

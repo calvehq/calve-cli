@@ -212,6 +212,51 @@ fn crash_at_every_boundary(prims: Option<&str>, extra: &[&str]) {
     }
 }
 
+/// N62: a mutation is done only with verified evidence of what it replaced. A crash after the
+/// replacement leaves the new bytes; if the backup of the old bytes is then missing or no longer
+/// matches, resume does not mark it done: it is `Conflicted(evidence_missing)`, the bytes stay
+/// as they are, and nothing is reversed.
+#[test]
+fn a_mutation_without_verified_evidence_is_conflicted_evidence_missing() {
+    let t = setup();
+    for damage in ["missing", "changed"] {
+        let run = t.run(
+            &[("CALVE_FAULT", "materialize.f1.after_mutate")],
+            &["baseline", "materialize", &t.v1, "--apply"],
+        );
+        assert!(!run.success, "{damage}: expected a crash");
+        let id = t.ops().last().unwrap()["op"].as_str().unwrap().to_owned();
+        let backup = t
+            .root()
+            .join(".calve/run/materialize")
+            .join(&id)
+            .join("f1.backup");
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "two\n", "{damage}");
+        match damage {
+            "missing" => fs::remove_file(&backup).unwrap(),
+            _ => fs::write(&backup, "not what was replaced\n").unwrap(),
+        }
+        let resumed = t.run(&[], &["materialize", "resume", &id]);
+        assert!(!resumed.success, "{damage}: done without evidence");
+        assert!(
+            resumed.stderr.contains("evidence_missing"),
+            "{damage}: {}",
+            resumed.stderr
+        );
+        let op = t.ops().last().unwrap().clone();
+        assert_eq!(op["state"], "Conflicted", "{damage}: {op}");
+        assert_eq!(
+            fs::read_to_string(t.root().join("a.txt")).unwrap(),
+            "one\n",
+            "{damage}: the new bytes stay; nothing is reversed"
+        );
+        let resolved = t.ok(&["materialize", "resolve", &id, "--keep", "ours"]);
+        assert_eq!(resolved["state"], "Completed", "{damage}: {resolved}");
+        assert_eq!(t.tree(), v1_tree(), "{damage}");
+        assert_eq!(t.materialize(&t.v2)["state"], "Completed", "{damage}");
+    }
+}
+
 #[test]
 fn a_concurrent_writer_is_kept_and_nothing_is_reversed() {
     concurrent_writer(None);

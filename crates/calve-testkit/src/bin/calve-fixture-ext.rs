@@ -119,11 +119,17 @@ impl Extension for Toy {
             composition_validators: vec![],
             // Scenario G's probe; nothing else calls the host.
             host_capabilities: vec![HostCapability::ProcessExecute],
-            schemas: [(
-                calve_integration_contract::refs::SCHEMA.to_owned(),
-                sha256(calve_testkit::TOY_REFS.as_bytes()),
-            )]
-            .into(),
+            // Installed under a name ending in `-unbound`, the fixture declares no reference
+            // schema (N68: a package that ships one anyway must be refused).
+            schemas: if unbound() {
+                Default::default()
+            } else {
+                [(
+                    calve_integration_contract::refs::SCHEMA.to_owned(),
+                    sha256(calve_testkit::TOY_REFS.as_bytes()),
+                )]
+                .into()
+            },
             execution_modes: vec!["subprocess".into()],
             entrypoint: Entrypoint {
                 command: "calve-fixture-ext".into(),
@@ -305,6 +311,17 @@ impl Extension for Toy {
             )),
         }
     }
+}
+
+fn unbound() -> bool {
+    std::env::args_os()
+        .next()
+        .map(std::path::PathBuf::from)
+        .and_then(|p| {
+            p.file_stem()
+                .map(|s| s.to_string_lossy().ends_with("-unbound"))
+        })
+        .unwrap_or(false)
 }
 
 fn main() -> std::process::ExitCode {
