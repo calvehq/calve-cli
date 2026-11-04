@@ -12,6 +12,8 @@ All notable changes to Calve are documented here.
   (`CIC_SESSION_DEADLINE`).
 - **Tests cannot reach real user state.** Debug builds run under cargo refuse a Calve root outside
   `CALVE_TEST_GUARD` and the temporary directory, and never read the real credential store.
+- **`daemon start` waits up to 30 s** for calved to become ready; a calved that exits is still
+  reported at once.
 - **The Windows daemon serves at most 64 connections**, like Unix; a connection that says no hello
   within 10 s is closed on both.
 
