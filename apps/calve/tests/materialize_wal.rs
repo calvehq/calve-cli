@@ -324,6 +324,52 @@ fn rename_source_preconditions_and_post_mutation_identity() {
     assert_eq!(fs::read_to_string(&a).unwrap(), "two\nconcurrent\n");
 }
 
+/// N42 retention: a finished materialization run (its backups are what rollback uses) is
+/// collected only past the 30-day retention; an unfinished one never is.
+#[test]
+fn finished_runs_are_kept_for_their_retention() {
+    let t = setup();
+    let backdate = |op: &str, days: u64| {
+        fs::File::options()
+            .write(true)
+            .open(
+                t.root()
+                    .join(".calve/run/materialize")
+                    .join(op)
+                    .join("journal"),
+            )
+            .unwrap()
+            .set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400),
+            )
+            .unwrap();
+    };
+    let gc = || t.ok(&["maintenance", "gc", "--grace-secs", "0", "--yes"]);
+    assert_eq!(t.materialize(&t.v1)["state"], "Completed");
+    let recent = t.ops().last().unwrap()["op"].as_str().unwrap().to_owned();
+    assert_eq!(t.materialize(&t.v2)["state"], "Completed");
+    let old = t.ops().last().unwrap()["op"].as_str().unwrap().to_owned();
+    backdate(&recent, 29);
+    backdate(&old, 31);
+    let interrupted = t.run(
+        &[("CALVE_FAULT", "materialize.f1.after_intent")],
+        &["baseline", "materialize", &t.v1, "--apply"],
+    );
+    assert!(!interrupted.success);
+    let unfinished = t.ops().last().unwrap()["op"].as_str().unwrap().to_owned();
+    backdate(&unfinished, 365);
+    let runs = t.root().join(".calve/run/materialize");
+    let done = gc();
+    assert!(!runs.join(&old).exists(), "past retention: {done}");
+    assert!(runs.join(&recent).exists(), "within retention: {done}");
+    assert!(
+        runs.join(&unfinished).exists(),
+        "unfinished is never collected: {done}"
+    );
+    let resumed = t.ok(&["materialize", "resume", &unfinished]);
+    assert_eq!(resumed["state"], "Completed", "{resumed}");
+}
+
 #[test]
 fn a_concurrent_writer_is_kept_and_nothing_is_reversed() {
     concurrent_writer(None);

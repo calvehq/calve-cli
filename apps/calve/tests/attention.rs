@@ -160,6 +160,17 @@ fn attention_status_and_gc() {
     // GC: the dry run names class, owner, count, bytes and reason and removes nothing.
     fs::create_dir_all(root.join(".calve/tmp")).unwrap();
     fs::write(root.join(".calve/tmp/leftover"), "x").unwrap();
+    // Log retention (14 days): a 15-day-old log is collectable, a fresh one is not.
+    let logs = root.join(".calve/logs");
+    fs::create_dir_all(&logs).unwrap();
+    fs::write(logs.join("old.output"), "old").unwrap();
+    fs::write(logs.join("fresh.output"), "fresh").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(logs.join("old.output"))
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(15 * 86_400))
+        .unwrap();
     let plan = ok(&["maintenance", "gc", "--dry-run", "--grace-secs", "0"]);
     let classes = plan["classes"].as_array().unwrap();
     let tmp = classes
@@ -188,9 +199,20 @@ fn attention_status_and_gc() {
             .any(|c| c["class"] == "resolved_conflict_artifacts"),
         "conflicts only on request"
     );
+    let log_class = classes.iter().find(|c| c["class"] == "logs").unwrap();
+    assert_eq!(log_class["count"], 1, "{plan}");
     assert!(root.join(".calve/tmp/leftover").exists());
+    assert!(
+        logs.join("old.output").exists(),
+        "the dry run removed nothing"
+    );
     let done = ok(&["maintenance", "gc", "--grace-secs", "0", "--yes"]);
     assert!(!root.join(".calve/tmp/leftover").exists(), "{done}");
+    assert!(!logs.join("old.output").exists(), "{done}");
+    assert!(
+        logs.join("fresh.output").exists(),
+        "within retention: {done}"
+    );
     // Accepted state is intact.
     ok(&["pack", "show", &id]);
     assert_eq!(ok(&["maintenance", "check"])["ok"], true);
