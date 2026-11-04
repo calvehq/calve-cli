@@ -139,7 +139,7 @@ impl Project {
                     return Err(unclassified(format!("refs document {h} fails its hash")));
                 }
                 used.insert(h.to_owned());
-                let parsed = refs::parse(&serde_json::from_slice(&bytes)?).map_err(unclassified)?;
+                let parsed = parse_refs(&serde_json::from_slice(&bytes)?).map_err(unclassified)?;
                 let Some(pointers) = parsed.get(ekind) else {
                     return Err(unclassified(format!("{ekind} is not declared in {h}")));
                 };
@@ -161,8 +161,97 @@ impl Project {
     }
 }
 
+/// `refs::parse` plus Calve's own rule: a `calve.refs/1` document has exactly the fields the
+/// schema defines. An unknown field could carry meaning this Calve ignores, so it fails closed.
+pub fn parse_refs(doc: &Value) -> std::result::Result<refs::Refs, String> {
+    let only = |v: &Value, allowed: &[&str], at: &str| -> std::result::Result<(), String> {
+        let o = v
+            .as_object()
+            .ok_or(format!("refs: {at} must be an object"))?;
+        match o.keys().find(|k| !allowed.contains(&k.as_str())) {
+            Some(k) => Err(format!("refs: unknown field `{k}` in {at}")),
+            None => Ok(()),
+        }
+    };
+    only(doc, &["schema", "kinds"], "the document")?;
+    let parsed = refs::parse(doc)?;
+    for (kind, list) in doc["kinds"].as_object().into_iter().flatten() {
+        for p in list.as_array().into_iter().flatten() {
+            only(p, &["pointer", "edge"], kind)?;
+        }
+    }
+    Ok(parsed)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::parse_refs;
+    use calve_integration_contract::refs::{self, MAX_DEPTH, MAX_MATCHES, MAX_POINTERS};
+    use serde_json::{Value, json};
+
+    fn doc(kinds: Value) -> Value {
+        json!({"schema": refs::SCHEMA, "kinds": kinds})
+    }
+
+    fn ptr(p: &str) -> Value {
+        json!({"pointer": p, "edge": "ObjectRef"})
+    }
+
+    /// N77: pointers are bounded in count, depth and matches; the version must be exactly
+    /// calve.refs/1; malformed and unknown fields fail closed.
+    #[test]
+    fn reference_pointers_are_bounded_versioned_and_strict() {
+        let toy: Value = serde_json::from_str(calve_testkit_refs()).unwrap();
+        assert!(parse_refs(&toy).is_ok());
+        let bad = |d: Value, why: &str| assert!(parse_refs(&d).is_err(), "{why}: {d}");
+        // Versions.
+        bad(
+            json!({"schema": "calve.refs/2", "kinds": {}}),
+            "a later version",
+        );
+        bad(json!({"kinds": {}}), "no version");
+        bad(
+            json!({"schema": 1, "kinds": {}}),
+            "a version that is not a string",
+        );
+        // Malformed and unknown fields.
+        bad(
+            json!({"schema": refs::SCHEMA, "kinds": {}, "extra": 1}),
+            "unknown top-level field",
+        );
+        bad(
+            doc(json!({"k": [{"pointer": "/a", "edge": "ObjectRef", "optional": true}]})),
+            "unknown entry field",
+        );
+        bad(doc(json!({"k": ["/a"]})), "an entry that is not an object");
+        bad(doc(json!([])), "kinds that are not an object");
+        bad(doc(json!({"k": {}})), "a list that is not an array");
+        bad(doc(json!({"k": [{"pointer": "/a"}]})), "no edge");
+        bad(doc(json!({"k": [{"edge": "ObjectRef"}]})), "no pointer");
+        bad(doc(json!({"k": [ptr("a")]})), "a relative pointer");
+        // Count and depth bounds, at and past the limit.
+        assert!(parse_refs(&doc(json!({"k": vec![ptr("/a"); MAX_POINTERS]}))).is_ok());
+        bad(
+            doc(json!({"k": vec![ptr("/a"); MAX_POINTERS + 1]})),
+            "too many pointers",
+        );
+        let deep = |n: usize| format!("/{}", vec!["a"; n].join("/"));
+        assert!(parse_refs(&doc(json!({"k": [ptr(&deep(MAX_DEPTH))]}))).is_ok());
+        bad(doc(json!({"k": [ptr(&deep(MAX_DEPTH + 1))]})), "too deep");
+        // Match bounds when resolving, and a pointer that resolves to nothing.
+        let many = |n: usize| json!({"xs": vec![json!({"d": "x"}); n]});
+        assert_eq!(
+            refs::resolve(&many(MAX_MATCHES), "/xs/*/d").unwrap().len(),
+            MAX_MATCHES
+        );
+        assert!(refs::resolve(&many(MAX_MATCHES + 1), "/xs/*/d").is_err());
+        assert!(refs::resolve(&many(1), "/xs/*/missing").is_err());
+    }
+
+    fn calve_testkit_refs() -> &'static str {
+        r#"{"kinds":{"org.example.toy.put":[{"edge":"ContentHash","pointer":"/digest"}]},"schema":"calve.refs/1"}"#
+    }
+
     #[test]
     fn every_object_kind_is_classified() {
         for k in openaevc::protocol::ObjectKind::ALL {

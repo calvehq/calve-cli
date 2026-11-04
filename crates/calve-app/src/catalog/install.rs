@@ -970,8 +970,7 @@ impl Installer {
                 }
                 let doc: Value = serde_json::from_slice(b)
                     .map_err(|e| err("PACKAGE_INVALID", format!("calve-refs.json: {e}")))?;
-                calve_integration_contract::refs::parse(&doc)
-                    .map_err(|e| err("PACKAGE_INVALID", e))?;
+                crate::closure::parse_refs(&doc).map_err(|e| err("PACKAGE_INVALID", e))?;
             }
             (Some(_), None) => {
                 return Err(err(
