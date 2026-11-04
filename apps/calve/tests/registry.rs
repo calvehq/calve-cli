@@ -179,3 +179,51 @@ fn the_binary_refuses_real_user_state_under_test() {
     );
     assert!(!outside.exists());
 }
+
+/// No other path leads out of the guard: a runtime directory inside the test root does not
+/// admit an outside data root, a symlink or `..` inside the root does not lead out of it, and
+/// an explicit daemon endpoint outside is refused too.
+#[cfg(unix)]
+#[test]
+fn the_guard_has_no_runtime_link_or_endpoint_escape() {
+    let temp = tempfile::tempdir().unwrap();
+    let allowed = temp.path().join("allowed");
+    std::fs::create_dir_all(&allowed).unwrap();
+    // Stands in for a real user's directory: outside every root the child is given.
+    let outside = tempfile::tempdir().unwrap();
+    let real = outside.path().join("share");
+    std::os::unix::fs::symlink(outside.path(), allowed.join("link")).unwrap();
+    let calve = |data: &Path, extra: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+            .args(extra)
+            .args(["config", "list", "--json"])
+            .env("CALVE_TEST_GUARD", &allowed)
+            .env("TMPDIR", temp.path().join("no-temp"))
+            .env("XDG_DATA_HOME", data)
+            .env("XDG_CONFIG_HOME", allowed.join("config"))
+            .env("XDG_RUNTIME_DIR", &allowed)
+            .env("HOME", &allowed)
+            .output()
+            .unwrap()
+    };
+    let refused = |out: std::process::Output| {
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(!out.status.success(), "{stderr}");
+        assert!(stderr.contains("test guard"), "{stderr}");
+    };
+    refused(calve(&real, &[]));
+    refused(calve(&allowed.join("link/share"), &[]));
+    refused(calve(&allowed.join("x/../../escape"), &[]));
+    let sock = real.join("daemon.sock");
+    refused(calve(
+        &allowed.join("share"),
+        &["--endpoint", sock.to_str().unwrap()],
+    ));
+    let ok = calve(&allowed.join("share"), &[]);
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+    assert!(!real.exists(), "nothing was created outside");
+}

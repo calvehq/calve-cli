@@ -129,6 +129,10 @@ impl Client {
 
     pub fn endpoint(&self) -> Result<PathBuf> {
         match &self.options.endpoint {
+            // A socket path is user state too (a Windows pipe name is not a path).
+            Some(endpoint) if cfg!(unix) => {
+                Ok(calve_app::registry::guard_test_root(endpoint.clone())?)
+            }
             Some(endpoint) => Ok(endpoint.clone()),
             None => default_endpoint(),
         }

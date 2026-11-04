@@ -91,10 +91,16 @@ fn guard_with(
     };
     let mut roots: Vec<PathBuf> = std::env::split_paths(&allowed).collect();
     roots.push(temp);
-    if roots
-        .iter()
-        .any(|r| !r.as_os_str().is_empty() && path.starts_with(r))
-    {
+    // Compared after resolving symlinks, so a link inside a test root cannot lead out of it;
+    // `..` is refused outright (it cannot be resolved below a missing directory).
+    let inside = !path
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+        && roots
+            .iter()
+            .filter(|r| !r.as_os_str().is_empty())
+            .any(|r| resolved(&path).starts_with(resolved(r)));
+    if inside {
         Ok(path)
     } else {
         Err(crate::coded(
@@ -104,6 +110,24 @@ fn guard_with(
                 path.display()
             ),
         ))
+    }
+}
+
+/// `path` with its deepest existing ancestor canonicalized (symlinks resolved).
+fn resolved(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut at = path;
+    loop {
+        if let Ok(real) = at.canonicalize() {
+            return rest.iter().rev().fold(real, |p, n| p.join(n));
+        }
+        match (at.parent(), at.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_owned());
+                at = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
     }
 }
 
@@ -633,6 +657,29 @@ mod guard_tests {
         assert!(
             guard_with(PathBuf::from("/home/u/x"), None, temp).is_ok(),
             "off without the guard"
+        );
+    }
+
+    /// Neither a symlink inside a test root nor `..` leads out of it.
+    #[cfg(unix)]
+    #[test]
+    fn the_test_guard_cannot_be_escaped_by_links_or_dot_dot() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let allowed = Some(root.path().as_os_str().to_owned());
+        let temp = root.path().join("no-temp");
+        std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
+        let ok = |p: PathBuf| guard_with(p, allowed.clone(), temp.clone()).is_ok();
+        assert!(ok(root.path().join("d/calve")));
+        assert!(
+            !ok(root.path().join("link/calve")),
+            "a link out of the root"
+        );
+        assert!(!ok(root.path().join("link")), "the link itself");
+        assert!(!ok(root.path().join("missing/../../x")), "dot-dot");
+        assert!(
+            !ok(root.path().join("d/../calve")),
+            "dot-dot even when it stays inside"
         );
     }
 }
