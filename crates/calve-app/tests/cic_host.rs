@@ -33,6 +33,16 @@ fn calve_slice(slice: u64) -> impl Fn(&[u8]) -> Box<dyn Driver> {
         ) as Box<dyn Driver>
     }
 }
+/// Classification tests: a debug-build relate call runs close to the 5 s soft deadline, so a
+/// slow moment would turn the verdict under test into DEADLINE_EXCEEDED. Deadlines have their
+/// own tests; these check what a response is classified as.
+fn calve_untimed(w: &[u8]) -> Box<dyn Driver> {
+    let cfg = HostConfig {
+        soft_deadline: std::time::Duration::from_secs(3600),
+        ..HostConfig::default()
+    };
+    Box::new(CalveHost::new(w, cfg).unwrap())
+}
 fn mini(w: &[u8]) -> Box<dyn Driver> {
     Box::new(MiniHost::new(w).unwrap())
 }
@@ -519,7 +529,13 @@ fn relate_adversarial_guests_discard_everything() {
         ("trap", "TRAPPED"),
     ] {
         let max_group = if fault == "overflow_members" { 1 } else { 64 };
-        let r = run_relate(&calve, "ref-rust", json!({"fault": fault}), max_group, 64);
+        let r = run_relate(
+            &calve_untimed,
+            "ref-rust",
+            json!({"fault": fault}),
+            max_group,
+            64,
+        );
         assert_eq!(
             r.err().map(|e| e.code().to_owned()).as_deref(),
             Some(want),

@@ -585,7 +585,14 @@ fn the_registered_manifest_must_be_exactly_the_installed_one() {
 /// manifest does not bind is refused and nothing is installed; without either it installs.
 #[test]
 fn the_reference_schema_is_bound_by_the_manifest_hash() {
-    let cases: [(&str, &str, Option<Vec<u8>>, Option<&str>); 4] = [
+    // (native name, case, refs document shipped, expected refusal)
+    type Case = (
+        &'static str,
+        &'static str,
+        Option<Vec<u8>>,
+        Option<&'static str>,
+    );
+    let cases: [Case; 4] = [
         (
             "calve-fixture-ext",
             "missing",
