@@ -789,3 +789,207 @@ fn bump_generation(t: &T, pack: &str) {
         let _ = project.client.session();
     });
 }
+
+/// N42 retention (gc's documented policy, `RETENTION` = 30 days): finished capture sessions
+/// (Done, Superseded, Compensated, Abandoned) and finished supersede sagas (Done) are removed
+/// past retention; resolved Inbox rows past retention are deleted. Unfinished operations are
+/// never collected and still resume afterwards; recent ones and unresolved rows stay; accepted
+/// history and every pack stay intact.
+#[test]
+fn retention_removes_only_finished_or_resolved_records_past_it() {
+    let mut t = T::new();
+    t.env
+        .vars
+        .push(("CALVE_EXECUTION_LEASE_MS".into(), "3600000".into()));
+    let backdate = |path: std::path::PathBuf, days: u64| {
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+            .set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400),
+            )
+            .unwrap();
+    };
+    let run = t.root().join(".calve/run");
+    let capture_crash = |t: &mut T, pack: &str, name: &str| {
+        fs::write(t.root().join(name), name).unwrap();
+        t.crash(
+            "capture.submit.1.1.after_send",
+            false,
+            &[
+                "pack",
+                "capture-tree",
+                "--accept-deletions",
+                pack,
+                "--generation",
+                "1",
+            ],
+        );
+        t.session_of(pack)["session"].as_str().unwrap().to_owned()
+    };
+
+    // Capture sessions: finished and old, finished and recent, unfinished and old.
+    let done_old = t.pack("done-old");
+    capture_two(&t, &done_old);
+    let s_done_old = t.session_of(&done_old)["session"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let recent = t.pack("recent");
+    let s_recent = capture_crash(&mut t, &recent, "r.toy");
+    // The Inbox records an item when it is read; resuming then resolves it.
+    t.ok(&["inbox", "list"]);
+    t.ok(&["capture", "resume", &s_recent]);
+    let open = t.pack("open");
+    let s_open = capture_crash(&mut t, &open, "o.toy");
+
+    // Supersede sagas: one finished, one interrupted.
+    let sup_done = t.pack("sup-done");
+    fs::write(t.root().join("s.toy"), "sss").unwrap();
+    t.ok(&[
+        "pack",
+        "capture-tree",
+        "--accept-deletions",
+        &sup_done,
+        "--generation",
+        "1",
+    ]);
+    t.ok(&["supersede", "start", &sup_done, "--keep", "1", "--yes"]);
+    let saga_done = saga_of(&t, &sup_done);
+    assert_eq!(saga_done["state"], "Done");
+    let sup_open = t.pack("sup-open");
+    fs::write(t.root().join("u.toy"), "uuu").unwrap();
+    t.ok(&[
+        "pack",
+        "capture-tree",
+        "--accept-deletions",
+        &sup_open,
+        "--generation",
+        "1",
+    ]);
+    t.crash(
+        "supersede.Verified",
+        false,
+        &["supersede", "start", &sup_open, "--keep", "1", "--yes"],
+    );
+    let saga_open = saga_of(&t, &sup_open);
+    assert_ne!(saga_open["state"], "Done");
+
+    // Inbox: the resolved recovery item of `recent`, backdated; `open`'s stays unresolved.
+    let items = t.ok(&["inbox", "list", "--all"]);
+    let key = |s: &str| format!("capture:{s}");
+    let has = |items: &Value, k: &str| {
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["source_key"] == k)
+    };
+    assert!(
+        has(&items, &key(&s_recent)) && has(&items, &key(&s_open)),
+        "{items}"
+    );
+    let db = rusqlite::Connection::open(t.root().join(".calve/product.sqlite3")).unwrap();
+    let old = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        - 31 * 86_400;
+    assert_eq!(
+        db.execute(
+            "UPDATE inbox_items SET resolved_at = ?1 WHERE source_key = ?2 AND resolved_at IS NOT NULL",
+            rusqlite::params![old as i64, key(&s_recent)],
+        )
+        .unwrap(),
+        1
+    );
+    drop(db);
+
+    backdate(run.join(format!("capture/{s_done_old}.journal")), 31);
+    backdate(run.join(format!("capture/{s_open}.journal")), 365);
+    backdate(
+        run.join(format!(
+            "supersede/{}.journal",
+            saga_done["saga"].as_str().unwrap()
+        )),
+        31,
+    );
+    backdate(
+        run.join(format!(
+            "supersede/{}.journal",
+            saga_open["saga"].as_str().unwrap()
+        )),
+        365,
+    );
+    let effects_before = (
+        t.effects(&done_old),
+        t.effects(saga_done["replacement"].as_str().unwrap()),
+    );
+    let plan = t.ok(&["maintenance", "gc", "--dry-run", "--grace-secs", "0"]);
+    let count = |class: &str| {
+        plan["classes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["class"] == class)
+            .unwrap_or_else(|| panic!("{class}: {plan}"))["count"]
+            .clone()
+    };
+    // Only the old finished session's files (journal and spool; chunks only for large files).
+    let capture_items = plan["classes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["class"] == "finished_capture_sessions")
+        .unwrap()["items"]
+        .clone();
+    assert!(
+        count("finished_capture_sessions").as_u64().unwrap() >= 1,
+        "{plan}"
+    );
+    assert!(
+        capture_items
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|i| i.to_string().contains(&s_done_old)),
+        "{plan}"
+    );
+    assert_eq!(count("finished_supersede_sagas"), 1, "{plan}");
+    assert_eq!(count("resolved_inbox_rows"), 1, "{plan}");
+    let done = t.ok(&["maintenance", "gc", "--grace-secs", "0", "--yes"]);
+
+    assert!(
+        !run.join(format!("capture/{s_done_old}.journal")).exists(),
+        "{done}"
+    );
+    assert!(
+        run.join(format!("capture/{s_recent}.journal")).exists(),
+        "recent: {done}"
+    );
+    assert!(
+        run.join(format!("capture/{s_open}.journal")).exists(),
+        "unfinished: {done}"
+    );
+    let sagas = |s: &Value| run.join(format!("supersede/{}.journal", s["saga"].as_str().unwrap()));
+    assert!(!sagas(&saga_done).exists(), "{done}");
+    assert!(sagas(&saga_open).exists(), "unfinished saga: {done}");
+    let items = t.ok(&["inbox", "list", "--all"]);
+    assert!(
+        !has(&items, &key(&s_recent)),
+        "resolved past retention: {items}"
+    );
+    assert!(has(&items, &key(&s_open)), "unresolved stays: {items}");
+
+    // Accepted history and every pack are intact; unfinished work resumes after the cleanup.
+    assert_eq!(t.ok(&["maintenance", "check"])["ok"], true);
+    assert_eq!(t.effects(&done_old), effects_before.0);
+    assert_eq!(t.ok(&["pack", "show", &sup_done])["state"], "ABANDONED");
+    let replacement = saga_done["replacement"].as_str().unwrap();
+    assert_eq!(t.effects(replacement), effects_before.1);
+    t.ok(&["capture", "resume", &s_open]);
+    assert_eq!(t.session_of(&open)["state"], "Done");
+    let resumed = t.ok(&["supersede", "resume", saga_open["saga"].as_str().unwrap()]);
+    assert_eq!(saga_of(&t, &sup_open)["state"], "Done", "{resumed}");
+}
