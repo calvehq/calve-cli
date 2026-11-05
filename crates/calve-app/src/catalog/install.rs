@@ -68,8 +68,10 @@ fn io(e: impl std::fmt::Display) -> InstallError {
 /// Total time a staged rename may wait for a transient holder (owner decision 2026-11-05).
 pub const RENAME_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
 
-/// Windows file-sharing refusals a holder causes: access denied (a handle without delete
-/// sharing under the directory), sharing and lock violations. Anything else fails at once.
+/// Errors a holder can cause, retried until the deadline: ERROR_ACCESS_DENIED (5), a generic
+/// access-denied that a handle without delete sharing under the directory also produces, so a
+/// real permission problem is retried too and fails at the deadline; ERROR_SHARING_VIOLATION
+/// (32); ERROR_LOCK_VIOLATION (33). Anything else fails at once.
 fn transient(e: &std::io::Error) -> bool {
     cfg!(windows) && matches!(e.raw_os_error(), Some(5 | 32 | 33))
 }

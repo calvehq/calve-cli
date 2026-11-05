@@ -956,3 +956,190 @@ fn two_processes_share_catalog_state_safely() {
     assert_eq!(fs::read_dir(packages).unwrap().count(), 1, "installed once");
     env.ok(&["extension", "catalog", "list"]);
 }
+
+/// L1 authority boundary: a verifier or evaluator name binds to an extension only through the
+/// kinds that extension declared in its signed, installed manifest. Through the real path
+/// (signed catalog → `extension enable` → OpenAEVC registration) and Calve's own OpenAEVC
+/// client, raw `RunVerification` / `RunEvaluation` with an undeclared, lookalike, empty,
+/// wrong-type or other-extension name are refused by OpenAEVC before any extension is invoked
+/// ("no registered extension provides …"), and OpenAEVC records no verification, evaluation,
+/// evidence, policy decision or completion event, the pack and its effects are unchanged. The
+/// declared names, as positive controls, run and add exactly one result each.
+#[test]
+fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
+    use openaevc::protocol::{Command, ObjectKind, PackId, Query};
+    use openaevc_sdk::OpenAevcClient;
+
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&root);
+    let ok = |a: &[&str]| env.ok(&[&["--project", p.as_str()][..], a].concat());
+    let pack = ok(&["pack", "create", "P"])["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fs::write(root.join("a.toy"), "aaa").unwrap();
+    ok(&[
+        "pack",
+        "capture-tree",
+        "--accept-deletions",
+        &pack,
+        "--generation",
+        "1",
+    ]);
+    let g = ok(&["pack", "show", &pack])["generation"].as_u64().unwrap();
+    ok(&["pack", "seal", &pack, "--generation", &g.to_string()]);
+    let pack_before = ok(&["pack", "show", &pack]);
+
+    calve_app::authority::use_data_root(&env.path().join("d/calve"));
+    let project = calve_app::Project::open(&root).unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let pack_id: PackId = pack.parse().unwrap();
+    let query = |q: Query| runtime.block_on(project.client.query(q)).unwrap();
+    // What OpenAEVC has recorded: result objects by kind, and the completion events.
+    let recorded = || {
+        let objects = |kind| {
+            query(Query::ListObjectDigests {
+                kind: Some(kind),
+                after: None,
+                limit: Some(1000),
+            })["objects"]
+                .clone()
+        };
+        let events = |kind: &str| {
+            query(Query::ListEvents {
+                after: Default::default(),
+                limit: None,
+                kinds: vec![kind.into()],
+            })
+            .as_array()
+            .unwrap()
+            .len()
+        };
+        json!({
+            "verifications": objects(ObjectKind::VerificationResult),
+            "evaluations": objects(ObjectKind::EvaluationResult),
+            "evidence": objects(ObjectKind::Evidence),
+            "decisions": objects(ObjectKind::PolicyDecision),
+            "verification.completed": events("verification.completed"),
+            "evaluation.completed": events("evaluation.completed"),
+            "qualification.evaluated": events("qualification.evaluated"),
+        })
+    };
+    let verify = |name: &str| {
+        runtime.block_on(project.client.command(Command::RunVerification {
+            pack: pack_id,
+            generation: g,
+            verifier: name.into(),
+            config: None,
+            evidence: vec![],
+        }))
+    };
+    let evaluate = |name: &str| {
+        runtime.block_on(project.client.command(Command::RunEvaluation {
+            pack: pack_id,
+            generation: g,
+            evaluator: name.into(),
+            config: None,
+            inputs: vec![],
+        }))
+    };
+    let before = recorded();
+
+    // Declared by the toy's signed manifest: verifiers .verify and .checks, evaluator .size.
+    let refused_names = [
+        "",
+        "org.example.toy.verifyx",
+        "org.example.toy.Verify",
+        "org.example.toy.verify ",
+        " org.example.toy.verify",
+        "org.example.toy",
+        "org.example.toy.undeclared",
+        "org.calve.software.snapshot",
+        "org.calve.software.change-size",
+    ];
+    let mut seen = vec![];
+    // An evaluator asked for as a verifier, and verifiers asked for as evaluators.
+    for name in refused_names
+        .iter()
+        .copied()
+        .chain(["org.example.toy.size"])
+    {
+        let e = verify(name).expect_err(name).to_string();
+        assert!(
+            e.contains(&format!("no registered extension provides verifier {name}")),
+            "verifier {name:?}: {e}"
+        );
+        seen.push(format!("verifier {name:?}: {e}"));
+    }
+    for name in refused_names
+        .iter()
+        .copied()
+        .chain(["org.example.toy.verify", "org.example.toy.checks"])
+    {
+        let e = evaluate(name).expect_err(name).to_string();
+        assert!(
+            e.contains(&format!(
+                "no registered extension provides evaluator {name}"
+            )),
+            "evaluator {name:?}: {e}"
+        );
+        seen.push(format!("evaluator {name:?}: {e}"));
+    }
+    eprintln!("refused before dispatch:\n{}", seen.join("\n"));
+    let after_refusals = recorded();
+    assert_eq!(after_refusals, before, "a refused name left a result");
+
+    // Positive controls: the declared names are dispatched and add exactly one result each.
+    let v = verify("org.example.toy.verify").expect("declared verifier");
+    let e = evaluate("org.example.toy.size").expect("declared evaluator");
+    let after = recorded();
+    let len = |r: &Value, k: &str| r[k].as_array().unwrap().len();
+    assert_eq!(
+        len(&after, "verifications"),
+        len(&before, "verifications") + 1,
+        "{after}"
+    );
+    assert_eq!(
+        len(&after, "evaluations"),
+        len(&before, "evaluations") + 1,
+        "{after}"
+    );
+    assert_eq!(
+        after["verification.completed"],
+        json!(before["verification.completed"].as_u64().unwrap() + 1)
+    );
+    assert_eq!(
+        after["evaluation.completed"],
+        json!(before["evaluation.completed"].as_u64().unwrap() + 1)
+    );
+    let digest = |r: &openaevc::protocol::CommandReceipt| json!(r.result.digest.unwrap());
+    assert!(
+        after["verifications"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["digest"] == digest(&v))
+    );
+    assert!(
+        after["evaluations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["digest"] == digest(&e))
+    );
+    eprintln!(
+        "recorded before: {before}\nafter refusals: {after_refusals}\nafter controls: {after}"
+    );
+    drop(project);
+    // The pack and its effects: unchanged by the refusals and by the controls alike.
+    let pack_after = ok(&["pack", "show", &pack]);
+    assert_eq!(
+        pack_after["candidate_effects"],
+        pack_before["candidate_effects"]
+    );
+    assert_eq!(pack_after["state"], pack_before["state"]);
+    assert_eq!(pack_after["generation"], pack_before["generation"]);
+}
