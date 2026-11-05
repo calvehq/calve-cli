@@ -12,6 +12,10 @@ All notable changes to Calve are documented here.
   (`CIC_SESSION_DEADLINE`).
 - **Tests cannot reach real user state.** Debug builds run under cargo refuse a Calve root outside
   `CALVE_TEST_GUARD` and the temporary directory, and never read the real credential store.
+- **Windows installs wait up to 15 s for a file holder.** A sharing violation on the final
+  rename (a Windows service inspecting the new files) is retried with backoff until a 15 s
+  deadline, rechecking the staged digests, the destination and the install journal before each
+  try; past it the install fails naming the holder and recovery removes the staging.
 - **`daemon start` waits up to 30 s** for calved to become ready; a calved that exits is still
   reported at once.
 - **The Windows daemon serves at most 64 connections**, like Unix; a connection that says no hello

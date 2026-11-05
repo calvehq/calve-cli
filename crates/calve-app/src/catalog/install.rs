@@ -65,18 +65,44 @@ fn io(e: impl std::fmt::Display) -> InstallError {
     err("IO_ERROR", e.to_string())
 }
 
+/// Total time a staged rename may wait for a transient holder (owner decision 2026-11-05).
+pub const RENAME_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Windows file-sharing refusals a holder causes: access denied (a handle without delete
+/// sharing under the directory), sharing and lock violations. Anything else fails at once.
+fn transient(e: &std::io::Error) -> bool {
+    cfg!(windows) && matches!(e.raw_os_error(), Some(5 | 32 | 33))
+}
+
 /// Windows services inspect a freshly written executable and hold it open briefly (seen: the
-/// telemetry service), which refuses the rename. A holder that lasts past 5 s still fails, named.
-fn rename_staged(from: &Path, to: &Path) -> std::io::Result<()> {
-    let mut retries = if cfg!(windows) { 50 } else { 0 };
+/// telemetry service), which refuses the rename. Retries a transient refusal with exponential
+/// backoff and jitter until `deadline` (monotonic), checking `still_valid` before every retry;
+/// a holder past the deadline fails, and the caller names it. A plain rename never replaces a
+/// directory, so an existing package is never overwritten.
+#[doc(hidden)]
+pub fn rename_staged(
+    from: &Path,
+    to: &Path,
+    deadline: std::time::Duration,
+    still_valid: &dyn Fn() -> Result<()>,
+) -> std::result::Result<(), std::result::Result<std::io::Error, InstallError>> {
+    let end = std::time::Instant::now() + deadline;
+    let mut backoff = std::time::Duration::from_millis(25);
     loop {
-        match fs::rename(from, to) {
-            Err(e) if retries > 0 && e.kind() == std::io::ErrorKind::PermissionDenied => {
-                retries -= 1;
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            result => return result,
+        let e = match fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+        let left = end.saturating_duration_since(std::time::Instant::now());
+        if !transient(&e) || left.is_zero() {
+            return Err(Ok(e));
         }
+        // Jitter in [backoff/2, backoff): competing installers do not retry in step.
+        let r = u32::from(uuid::Uuid::now_v7().as_bytes()[15]);
+        let wait = backoff / 2 + backoff / 2 * r / 256;
+        std::thread::sleep(wait.min(left));
+        backoff = (backoff * 2).min(std::time::Duration::from_secs(1));
+        still_valid().map_err(Err)?;
     }
 }
 
@@ -454,7 +480,11 @@ pub fn verify_installed(paths: &Paths, r: &PackageRecord) -> Result<()> {
             ),
         ));
     }
-    let dir = paths.extension_dir.join(&r.id).join(r.native_digest());
+    verify_dir(&paths.extension_dir.join(&r.id).join(r.native_digest()), r)
+}
+
+/// Every file of `r` in `dir` has its signed digest.
+fn verify_dir(dir: &Path, r: &PackageRecord) -> Result<()> {
     for (role, digest) in &r.digests {
         let name = match role.as_str() {
             "native" => r
@@ -1109,13 +1139,38 @@ impl Installer {
         } else {
             // Read-only only after the move: renaming a directory to a new parent updates its
             // `..` entry, which needs write permission on the directory itself.
-            rename_staged(&staging, &final_dir).map_err(|e| {
-                let base = io_at("rename staging to", &final_dir)(e);
-                err(
-                    base.code,
-                    format!("{}{}", base.message, holders_note(&staging)),
-                )
-            })?;
+            // Before each retry: the staged files still have their signed digests, nothing took
+            // the destination, and this install's journal still stands at I2.
+            let still_valid = || -> Result<()> {
+                verify_dir(&staging, &record)?;
+                if final_dir.exists() {
+                    return Err(err(
+                        "PACKAGE_TAMPERED",
+                        format!("{} appeared during the install", final_dir.display()),
+                    ));
+                }
+                let opened = Journal::read(jpath)
+                    .map_err(|e| err("IO_ERROR", format!("install journal: {e}")))?;
+                match opened.records.last().map(|r| r.kind.as_str()) {
+                    Some("I2.validated") => Ok(()),
+                    other => Err(err(
+                        "IO_ERROR",
+                        format!("install journal moved on during the rename ({other:?})"),
+                    )),
+                }
+            };
+            rename_staged(&staging, &final_dir, RENAME_DEADLINE, &still_valid).map_err(
+                |e| match e {
+                    Ok(e) => {
+                        let base = io_at("rename staging to", &final_dir)(e);
+                        err(
+                            base.code,
+                            format!("{}{}", base.message, holders_note(&staging)),
+                        )
+                    }
+                    Err(e) => e,
+                },
+            )?;
             set_read_only(&final_dir, true)?;
         }
         j.append(

@@ -645,6 +645,204 @@ fn the_reference_schema_is_bound_by_the_manifest_hash() {
     }
 }
 
+/// A-WIN: competing installers of one machine serialize on its install lock: every one
+/// succeeds, and one complete, verifying package results.
+#[test]
+fn competing_installers_on_one_machine_converge() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let records: Vec<_> = std::thread::scope(|s| {
+        let all: Vec<_> = (0..4)
+            .map(|_| s.spawn(|| installer(&m).install(&req(true))))
+            .collect();
+        all.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let first = records[0].as_ref().unwrap();
+    for r in &records {
+        assert_eq!(r.as_ref().unwrap().digests, first.digests);
+    }
+    verify_installed(&m.paths, first).unwrap();
+    let dirs: Vec<_> = fs::read_dir(m.paths.extension_dir.join("org.example.toy"))
+        .unwrap()
+        .collect();
+    assert_eq!(dirs.len(), 1, "one package directory");
+}
+
+/// A-WIN, deterministic Windows holders (owner decision 2026-11-05: 15 s bounded retry).
+#[cfg(windows)]
+mod holders {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::time::{Duration, Instant};
+
+    const SHARE_READ_WRITE: u32 = 0x1 | 0x2; // no FILE_SHARE_DELETE: the directory cannot move
+
+    fn hold(path: &std::path::Path) -> fs::File {
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(SHARE_READ_WRITE)
+            .open(path)
+            .unwrap()
+    }
+
+    fn staged(t: &tempfile::TempDir) -> (std::path::PathBuf, std::path::PathBuf) {
+        let from = t.path().join("staging");
+        fs::create_dir(&from).unwrap();
+        fs::write(from.join("f"), "x").unwrap();
+        (from, t.path().join("final"))
+    }
+
+    #[test]
+    fn a_short_lived_holder_is_waited_out() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let h = hold(&from.join("f"));
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(1500));
+            drop(h);
+        });
+        rename_staged(&from, &to, RENAME_DEADLINE, &|| Ok(())).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(1400));
+        assert_eq!(fs::read_to_string(to.join("f")).unwrap(), "x");
+    }
+
+    #[test]
+    fn a_persistent_holder_fails_at_the_deadline_and_leaves_the_staging() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let _h = hold(&from.join("f"));
+        let started = Instant::now();
+        let e = rename_staged(&from, &to, RENAME_DEADLINE, &|| Ok(()))
+            .unwrap_err()
+            .unwrap();
+        let took = started.elapsed();
+        assert!(matches!(e.raw_os_error(), Some(5 | 32 | 33)), "{e}");
+        assert!(took >= RENAME_DEADLINE, "{took:?}");
+        assert!(took < RENAME_DEADLINE + Duration::from_secs(3), "{took:?}");
+        assert!(from.join("f").is_file() && !to.exists());
+    }
+
+    /// Revalidation before every retry: a destination that appears stops the retry; nothing
+    /// is overwritten and the staging stays.
+    #[test]
+    fn a_destination_that_appears_stops_the_retry() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let _h = hold(&from.join("f"));
+        let other = to.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            fs::create_dir(&other).unwrap();
+            fs::write(other.join("theirs"), "y").unwrap();
+        });
+        let still_valid = || {
+            if to.exists() {
+                Err(InstallError {
+                    code: "PACKAGE_TAMPERED",
+                    message: "destination appeared".into(),
+                })
+            } else {
+                Ok(())
+            }
+        };
+        let started = Instant::now();
+        let e = rename_staged(&from, &to, RENAME_DEADLINE, &still_valid)
+            .unwrap_err()
+            .unwrap_err();
+        assert_eq!(e.code, "PACKAGE_TAMPERED");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(fs::read_to_string(to.join("theirs")).unwrap(), "y");
+        assert!(from.join("f").is_file());
+    }
+
+    /// Holds `calve-integration.json` in the installer's staging directory as soon as it is
+    /// written, for `release_after` (None: until the returned sender fires).
+    fn hold_staging(
+        m: &Machine,
+        release_after: Option<Duration>,
+    ) -> (std::thread::JoinHandle<()>, std::sync::mpsc::Sender<()>) {
+        let ext = m.paths.extension_dir.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let h = std::thread::spawn(move || {
+            let started = Instant::now();
+            let file = loop {
+                assert!(
+                    started.elapsed() < Duration::from_secs(120),
+                    "no staging appeared"
+                );
+                let found = fs::read_dir(&ext)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .find_map(|e| {
+                        let name = e.file_name().to_string_lossy().into_owned();
+                        let f = e.path().join("calve-integration.json");
+                        (name.starts_with(".staging-") && f.metadata().is_ok_and(|m| m.len() > 0))
+                            .then_some(f)
+                    });
+                if let Some(f) = found
+                    && let Ok(h) = fs::OpenOptions::new()
+                        .read(true)
+                        .share_mode(SHARE_READ_WRITE)
+                        .open(&f)
+                {
+                    break h;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            match release_after {
+                Some(d) => std::thread::sleep(d),
+                None => {
+                    let _ = rx.recv();
+                }
+            }
+            drop(file);
+        });
+        (h, tx)
+    }
+
+    #[test]
+    fn an_install_waits_out_a_short_lived_holder() {
+        let m = machine();
+        let r = repo_with_toy();
+        catalog(&m, "main", &r);
+        let (h, _tx) = hold_staging(&m, Some(Duration::from_secs(3)));
+        let rec = installer(&m).install(&req(true)).unwrap();
+        h.join().unwrap();
+        verify_installed(&m.paths, &rec).unwrap();
+    }
+
+    /// A holder past the deadline: the install fails cleanly, naming the holder; nothing is
+    /// installed; recovery after the holder lets go removes the staging; a rerun installs.
+    #[test]
+    fn a_persistent_holder_fails_cleanly_and_recovers() {
+        let m = machine();
+        let r = repo_with_toy();
+        catalog(&m, "main", &r);
+        let (h, tx) = hold_staging(&m, None);
+        let e = installer(&m).install(&req(true)).unwrap_err();
+        assert_eq!(e.code, "IO_ERROR", "{e}");
+        assert!(e.message.contains("rename staging"), "{e}");
+        assert!(e.message.contains("held open by"), "{e}");
+        let installed_dirs = fs::read_dir(m.paths.extension_dir.join("org.example.toy"))
+            .map(|d| d.count())
+            .unwrap_or(0);
+        assert_eq!(installed_dirs, 0, "nothing installed");
+        tx.send(()).unwrap();
+        h.join().unwrap();
+        installer(&m).recover().unwrap();
+        let staging_left = fs::read_dir(&m.paths.extension_dir)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(".staging-"));
+        assert!(!staging_left, "recovery removed the staging");
+        let rec = installer(&m).install(&req(true)).unwrap();
+        verify_installed(&m.paths, &rec).unwrap();
+    }
+}
+
 /// Stress/regression coverage for the OPEN Windows install flake (M5: "Access is denied" at the
 /// staging→final rename in 3 of 7 parallel runs; holder not identified). Many threads install
 /// the same package into separate machines at once, round after round; every failure is
