@@ -6,7 +6,7 @@
 |---|---|---|---|
 | A — Fresh installation and generic Project | `examples::scenario_a` | Pass (Linux) | Step 9 is OpenAEVC's policy evaluation (general-project declares no verifier or evaluator); step 14 restarts a real daemon. |
 | B — Software project without Git | `examples::scenario_b` | Pass (Linux) | First-party software and Rust extensions. Step 8 runs the harness in its own pack over the same working tree (an execution on the candidate would make it unpromotable, and Calve refuses it) and the candidate's checks through `pack check`. Step 11 copies the Project, relocates the registration to the copy, removes its working files and materializes. |
-| C — Pre-promotion reopen | `examples::scenario_c` | **Approved deviation** | Effect-bearing generations refuse the reopen and continue through an explicit replacement. See below. |
+| C — Pre-promotion reopen | `examples::scenario_c` | **Approved deviation** (pass-with-deviation) | Effect-bearing generations refuse the reopen and continue through an explicit replacement. See below. |
 | D — Independent Baselines | `examples::scenario_d` | Pass (Linux) | B0→B1 touches only file2/file3; shared files keep their inodes. |
 | E — Revision | `examples::scenario_e` | Pass (Linux) | |
 | F — Parallel agent work | `examples::scenario_f` | Pass (Linux) | Each worker finishes only after it has seen the other running, so the two really overlap. The console engine reads a real daemon for step 5. |
@@ -19,7 +19,7 @@
 | M — Unsafe Baseline materialization | `examples::scenario_m` | Pass (Linux) | |
 | N — Third-party extension | `extensions::scenario_n_third_party_extension` | Pass (Linux) | No Calve metadata and no Calve code: the extension's resources come from its signed manifest, and its evidence and resources are created, promoted and viewed generically. |
 | O — Console reconnect | `examples::scenario_o` | Pass (Linux) | The console engine against a real calved, without a terminal. |
-| P — Version incompatibility | `acceptance::scenario_p_version_incompatibility`, `acceptance::scenario_p_simulated_runtime_ranges`, `extensions::scenario_p_a_package_is_judged_on_its_protocol_range` | **Approved substitution** | Real packages; the runtime side is simulated. See below. |
+| P — Version incompatibility | `acceptance::scenario_p_version_incompatibility`, `acceptance::scenario_p_simulated_runtime_ranges`, `extensions::scenario_p_a_package_is_judged_on_its_protocol_range` | **Approved substitution** (pass-with-deviation) | Real packages; the runtime side is simulated. See below. |
 
 ## Scenario C: approved v0.1.0 deviation
 
@@ -31,7 +31,7 @@ The original text stands in the acceptance definition. The owner approved a narr
 
 **Tested:** the literal eight steps on one pack when generation 1 has no effects (`examples::scenario_c`); safe refusal then explicit replacement through promotion (`an_effect_bearing_pack_refuses_reopen_and_is_replaced_explicitly`); crashes, conflict, cancellation and lost attempts (`replacing_a_sealed_pack_converges_after_a_crash_at_every_step`, `a_conflict_while_replacing_a_sealed_pack_keeps_the_original`, `a_cancelled_or_lost_replay_keeps_a_sealed_original`).
 
-## Scenario P: conditionally approved substitution
+## Scenario P: approved substitution (pass-with-deviation)
 
 | Step | Expected | Actual |
 |---|---|---|
