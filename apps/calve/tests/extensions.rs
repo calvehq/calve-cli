@@ -961,7 +961,7 @@ fn two_processes_share_catalog_state_safely() {
 /// kinds that extension declared in its signed, installed manifest. Through the real path
 /// (signed catalog → `extension enable` → OpenAEVC registration) and Calve's own OpenAEVC
 /// client, raw `RunVerification` / `RunEvaluation` with an undeclared, lookalike, empty,
-/// wrong-type or other-extension name are refused by OpenAEVC before any extension is invoked
+/// wrong-type or other-extension (`org.example.other.*`, not installed) name are refused by OpenAEVC before any extension is invoked
 /// ("no registered extension provides …"), and OpenAEVC records no verification, evaluation,
 /// evidence, policy decision or completion event, the pack and its effects are unchanged. The
 /// declared names, as positive controls, run and add exactly one result each.
@@ -1028,23 +1028,28 @@ fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
             "qualification.evaluated": events("qualification.evaluated"),
         })
     };
+    // Errors as text: the SDK error type is large (clippy::result_large_err).
     let verify = |name: &str| {
-        runtime.block_on(project.client.command(Command::RunVerification {
-            pack: pack_id,
-            generation: g,
-            verifier: name.into(),
-            config: None,
-            evidence: vec![],
-        }))
+        runtime
+            .block_on(project.client.command(Command::RunVerification {
+                pack: pack_id,
+                generation: g,
+                verifier: name.into(),
+                config: None,
+                evidence: vec![],
+            }))
+            .map_err(|e| e.to_string())
     };
     let evaluate = |name: &str| {
-        runtime.block_on(project.client.command(Command::RunEvaluation {
-            pack: pack_id,
-            generation: g,
-            evaluator: name.into(),
-            config: None,
-            inputs: vec![],
-        }))
+        runtime
+            .block_on(project.client.command(Command::RunEvaluation {
+                pack: pack_id,
+                generation: g,
+                evaluator: name.into(),
+                config: None,
+                inputs: vec![],
+            }))
+            .map_err(|e| e.to_string())
     };
     let before = recorded();
 
@@ -1057,8 +1062,8 @@ fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
         " org.example.toy.verify",
         "org.example.toy",
         "org.example.toy.undeclared",
-        "org.calve.software.snapshot",
-        "org.calve.software.change-size",
+        "org.example.other.verify",
+        "org.example.other.size",
     ];
     let mut seen = vec![];
     // An evaluator asked for as a verifier, and verifiers asked for as evaluators.
@@ -1067,7 +1072,7 @@ fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
         .copied()
         .chain(["org.example.toy.size"])
     {
-        let e = verify(name).expect_err(name).to_string();
+        let e = verify(name).expect_err(name);
         assert!(
             e.contains(&format!("no registered extension provides verifier {name}")),
             "verifier {name:?}: {e}"
@@ -1079,7 +1084,7 @@ fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
         .copied()
         .chain(["org.example.toy.verify", "org.example.toy.checks"])
     {
-        let e = evaluate(name).expect_err(name).to_string();
+        let e = evaluate(name).expect_err(name);
         assert!(
             e.contains(&format!(
                 "no registered extension provides evaluator {name}"

@@ -147,18 +147,20 @@ fn a_slow_compile_within_budget_leaves_the_guest_deadline_intact() {
 fn the_session_bound_is_absolute() {
     let dir = tempfile::tempdir().unwrap();
     let path = reference(dir.path());
+    // Long enough that starting the child and opening the session fit on a loaded host (1.5 s
+    // did not, once: the open itself hit the bound); the loop must still run into it.
     let cfg = HostConfig {
-        session: Duration::from_millis(1500),
+        session: Duration::from_secs(6),
         ..HostConfig::default()
     };
-    let mut s = Session::open(supervised(&path, &cfg), &host_hello(), &toy_metadata()).unwrap();
     let started = Instant::now();
+    let mut s = Session::open(supervised(&path, &cfg), &host_hello(), &toy_metadata()).unwrap();
     let e = loop {
         match s.raw("describe", json!({})) {
             Ok(_) => std::thread::sleep(Duration::from_millis(200)),
             Err(e) => break e,
         }
-        assert!(started.elapsed() < Duration::from_secs(10), "never bounded");
+        assert!(started.elapsed() < Duration::from_secs(20), "never bounded");
     };
     assert!(
         e.to_string().contains(calve_app::sandbox::SESSION_DEADLINE),
