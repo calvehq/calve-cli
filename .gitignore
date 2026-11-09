@@ -24,3 +24,5 @@ target
 #.idea/
 tmp/
 assets/
+docs/audit/
+evidence/
