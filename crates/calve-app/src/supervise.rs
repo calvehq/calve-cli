@@ -242,6 +242,43 @@ mod unix {
         }
     }
 
+    /// Why a helper never connected: the timeout, or its exit status with the stage its exit
+    /// code names (see `helper`) and the start of what it wrote to stderr.
+    fn helper_failure(
+        timed_out: bool,
+        status: std::io::Result<std::process::ExitStatus>,
+        stderr: Option<std::process::ChildStderr>,
+    ) -> String {
+        use std::io::Read;
+        let mut text = String::new();
+        if let Some(e) = stderr {
+            let mut bytes = Vec::new();
+            let _ = e.take(2048).read_to_end(&mut bytes);
+            text = String::from_utf8_lossy(&bytes)
+                .chars()
+                .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
+                .collect::<String>()
+                .trim()
+                .replace('\n', " | ");
+        }
+        let what = if timed_out {
+            "it did not connect within 30 s".to_owned()
+        } else {
+            match status.as_ref().ok().and_then(|s| s.code()) {
+                Some(1) => "exit 1: its parent was gone".into(),
+                Some(2) => "exit 2: invalid arguments".into(),
+                Some(3) => "exit 3: signal handling unavailable".into(),
+                Some(4) => "exit 4: cannot open its result file or connect".into(),
+                _ => format!("{status:?}"),
+            }
+        };
+        if text.is_empty() {
+            what
+        } else {
+            format!("{what}; stderr: {text}")
+        }
+    }
+
     pub fn spawn(
         argv: &[String],
         env: &[(&str, &str)],
@@ -316,13 +353,18 @@ mod unix {
                 }
                 Ok((s, _)) => break s,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    if child.try_wait()?.is_some() || started.elapsed() > Duration::from_secs(30) {
+                    let exited = child.try_wait()?;
+                    if exited.is_some() || started.elapsed() > Duration::from_secs(30) {
                         kill_group(pgid);
-                        let _ = child.wait();
-                        let _ = journal.append("lost", json!({"reason": "helper did not connect"}));
+                        let status = child.wait();
+                        let detail = helper_failure(exited.is_none(), status, child.stderr.take());
+                        let _ = journal.append(
+                            "lost",
+                            json!({"reason": "helper did not connect", "detail": detail}),
+                        );
                         return Err(coded(
                             "CONTAINMENT_UNAVAILABLE",
-                            "the supervisor helper did not start",
+                            format!("the supervisor helper did not start: {detail}"),
                         ));
                     }
                     std::thread::sleep(Duration::from_millis(5));
@@ -516,17 +558,13 @@ mod unix {
     /// its own group.
     pub fn helper(args: &[String]) -> i32 {
         let [parent, dir, id, limits, confine, dashdash, argv @ ..] = args else {
+            eprintln!("calve helper: invalid arguments");
             return 2;
         };
-        // First of all: a user namespace needs a single thread, and entering one clears the
-        // parent-death signal set below.
-        #[cfg(target_os = "linux")]
-        let namespaced = enter_namespaces();
-        #[cfg(not(target_os = "linux"))]
-        let namespaced = false;
         let confine: Value = serde_json::from_str(confine).unwrap_or_default();
         let limited = limits != "-";
         if dashdash != "--" || argv.is_empty() {
+            eprintln!("calve helper: invalid arguments");
             return 2;
         }
         let me = rustix::process::getpid();
@@ -539,11 +577,42 @@ mod unix {
         {
             std::thread::sleep(Duration::from_millis(ms));
         }
+        let dir = PathBuf::from(dir);
+        // The result file and the socket come first, before anything that can fail half-way
+        // (a host that restricts user namespaces lets `unshare` succeed and then refuses the
+        // rest), so the helper can always report. Both are CLOEXEC and opened before Landlock.
+        let fallback = {
+            let mut o = std::fs::OpenOptions::new();
+            o.create(true).append(true);
+            std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+            o.open(dir.join(format!("{id}.result")))
+        };
+        let (mut fallback, mut conn) = match (
+            fallback,
+            UnixStream::connect(dir.join(format!("{id}.sock"))),
+        ) {
+            (Ok(f), Ok(c)) => (f, c),
+            (f, c) => {
+                eprintln!(
+                    "calve helper: result file: {}; supervisor socket: {}",
+                    f.map_or_else(|e| e.to_string(), |_| "ok".into()),
+                    c.map_or_else(|e| e.to_string(), |_| "ok".into())
+                );
+                return 4;
+            }
+        };
+        // A user namespace needs a single thread (none has started yet), and entering one
+        // clears the parent-death signal set below.
+        #[cfg(target_os = "linux")]
+        let namespaced = enter_namespaces();
+        #[cfg(not(target_os = "linux"))]
+        let namespaced = false;
         // 1. Parent death → SIGTERM (Linux). 2. Close the race: the parent may have died first.
         #[cfg(target_os = "linux")]
         let _ = rustix::process::set_parent_process_death_signal(Some(Signal::TERM));
         let ppid = rustix::process::getppid().map_or(0, |p| p.as_raw_nonzero().get());
         if parent.parse::<i32>().ok() != Some(ppid) {
+            eprintln!("calve helper: parent {parent} is gone (parent is now {ppid})");
             kill_group(pgid);
             return 1;
         }
@@ -560,22 +629,11 @@ mod unix {
                     }
                 });
             }
-            Err(_) => return 3,
+            Err(e) => {
+                eprintln!("calve helper: signal handling: {e}");
+                return 3;
+            }
         }
-        let dir = PathBuf::from(dir);
-        // The result file and the socket are opened before Landlock; both are CLOEXEC.
-        let fallback = {
-            let mut o = std::fs::OpenOptions::new();
-            o.create(true).append(true);
-            std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
-            o.open(dir.join(format!("{id}.result")))
-        };
-        let (Ok(mut fallback), Ok(mut conn)) = (
-            fallback,
-            UnixStream::connect(dir.join(format!("{id}.sock"))),
-        ) else {
-            return 4;
-        };
         // 4. Control state disappears from the worker's view: Landlock rules inherit, so they
         // cannot carve `.calve` out of the directory a worker works in, and they do not cover
         // connecting to the daemon's socket. Then Landlock: the worker can read system paths and
@@ -661,7 +719,14 @@ mod unix {
             rustix::process::getuid().as_raw(),
             rustix::process::getgid().as_raw(),
         );
-        unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS).is_ok()
+        let unshared = unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS).is_ok();
+        // Debug builds: stop right after `unshare`, as a host that restricts unprivileged user
+        // namespaces (Ubuntu 24.04's AppArmor default) does.
+        if cfg!(debug_assertions) && std::env::var("CALVE_TEST_NAMESPACE").as_deref() == Ok("half")
+        {
+            return false;
+        }
+        unshared
             && std::fs::write("/proc/self/setgroups", "deny").is_ok()
             && std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1")).is_ok()
             && std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1")).is_ok()

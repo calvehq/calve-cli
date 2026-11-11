@@ -5,15 +5,17 @@
 use std::fs;
 
 use calve_testkit::Env;
-use serde_json::Value;
 
+// Only Scenario G (Unix) drives a project through P.
+#[cfg(unix)]
 struct P<'a> {
     env: &'a Env,
     root: String,
 }
 
+#[cfg(unix)]
 impl P<'_> {
-    fn ok(&self, args: &[&str]) -> Value {
+    fn ok(&self, args: &[&str]) -> serde_json::Value {
         self.env
             .ok(&[&["--project", self.root.as_str()][..], args].concat())
     }

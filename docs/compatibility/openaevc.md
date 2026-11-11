@@ -28,5 +28,6 @@ Calve works within these and does not hide them.
 | `network.connect` is not a supported host capability | Extensions cannot be granted network access through the host. |
 | Objects imported by adopt-copy are inert history | They verify, and appear in no Baseline list. |
 | Writes to one Project are serialized | A concurrent writer gets the retryable `PROJECT_LOCKED`. |
+| Requires `rusqlite 0.37` with bundled SQLite older than 3.54 | Calve links the same SQLite (only one crate may link it). It is affected by RUSTSEC-2026-0459: opening a crafted database or WAL file can disclose uninitialized page-cache memory. Accepted by the owner while Calve stays on v0.1.0; `deny.toml` names the exception, to be removed with an OpenAEVC release on `rusqlite` 0.41 or later. |
 
 Previous pin: `main` at `288b804fc2b7d178de9dd2de20d13e615aed02c8` over SSH (the M1 rollback point).

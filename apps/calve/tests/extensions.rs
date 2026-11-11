@@ -460,6 +460,7 @@ fn t2_native_code_is_not_confined_residual() {
 }
 
 /// 64 hex characters unique to this test run.
+#[cfg(unix)]
 fn uuid_like(seed: &str) -> String {
     use std::hash::{BuildHasher, Hasher};
     let mut out = String::new();

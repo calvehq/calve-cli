@@ -528,3 +528,42 @@ fn provider_resource_limits_are_enforced_by_the_os() {
     let (ok, _root, _t) = isolated("provider_resource_limits_are_enforced_by_the_os", &[]);
     assert!(ok);
 }
+
+/// A host that restricts unprivileged user namespaces (Ubuntu 24.04's AppArmor default) lets
+/// `unshare` succeed and refuses the rest. The helper still reports: a worker that requires
+/// confinement is refused with the reason (fail-closed), and a best-effort one runs.
+#[test]
+fn a_half_formed_namespace_is_reported_not_a_dead_helper() {
+    use calve_app::config::{Confinement, ResourceLimits};
+    if inside() {
+        let w = work();
+        let mut half = env();
+        half.push(("CALVE_TEST_NAMESPACE", "half"));
+        let limits = |c| ResourceLimits {
+            confinement: Some(c),
+            ..Default::default()
+        };
+        let mut s =
+            Supervised::spawn_limited(&sh("exit 0"), &half, &w, &limits(Confinement::Required))
+                .expect("the helper reports instead of dying");
+        match s.wait().unwrap() {
+            Termination::Refused(reason) => {
+                assert!(reason.contains("namespaces: false"), "{reason}")
+            }
+            other => panic!("required confinement ran anyway: {other:?}"),
+        }
+        let mut s =
+            Supervised::spawn_limited(&sh("exit 0"), &half, &w, &limits(Confinement::BestEffort))
+                .unwrap();
+        assert_eq!(
+            s.wait().unwrap(),
+            Termination::Finished {
+                exit_code: Some(0),
+                signal: None
+            }
+        );
+        return;
+    }
+    let (ok, _, _t) = isolated("a_half_formed_namespace_is_reported_not_a_dead_helper", &[]);
+    assert!(ok);
+}

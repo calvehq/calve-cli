@@ -130,7 +130,13 @@ impl Client {
     pub fn endpoint(&self) -> Result<PathBuf> {
         match &self.options.endpoint {
             // A socket path is user state too (a Windows pipe name is not a path).
-            Some(endpoint) if cfg!(unix) => {
+            // The runtime directory derives from the guarded data root, so a socket there is this
+            // data root's own (it may lie in the host's /run/user).
+            Some(endpoint)
+                if cfg!(unix)
+                    && !calve_app::registry::runtime_dir()
+                        .is_ok_and(|r| endpoint.starts_with(r)) =>
+            {
                 Ok(calve_app::registry::guard_test_root(endpoint.clone())?)
             }
             Some(endpoint) => Ok(endpoint.clone()),

@@ -60,7 +60,9 @@ fn a_worker_cannot_reach_authority_or_the_daemon() {
         .join(&pid)
         .join("keys.toml");
     let daemon = env.ok(&["daemon", "start"])["pid"].as_u64().unwrap();
-    let socket = env.path().join("d/calve/daemon.sock");
+    // Where the daemon listens: the data root, or the host's runtime directory when it has one.
+    let socket =
+        std::path::PathBuf::from(env.ok(&["daemon", "status"])["endpoint"].as_str().unwrap());
     // Positive control: all of it exists and is reachable from outside the worker.
     assert!(keys.is_file() && socket.exists() && root.join(".calve/project.toml").is_file());
     let (k, s, r) = (keys.display(), socket.display(), root.display());

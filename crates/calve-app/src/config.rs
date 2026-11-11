@@ -307,12 +307,12 @@ fn user_config_root() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME is not set"))?;
-        return Ok(PathBuf::from(home).join("Library/Application Support/Calve"));
+        Ok(PathBuf::from(home).join("Library/Application Support/Calve"))
     }
     #[cfg(windows)]
     {
         let home = std::env::var_os("APPDATA").ok_or_else(|| invalid("APPDATA is not set"))?;
-        return Ok(PathBuf::from(home).join("Calve"));
+        Ok(PathBuf::from(home).join("Calve"))
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {

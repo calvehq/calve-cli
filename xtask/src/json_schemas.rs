@@ -179,6 +179,15 @@ pub fn merge(old: &Value, new: &Value) -> Value {
 }
 
 fn record(root: &Path, dir: &Path) -> Result {
+    // The extension tests read the `fixture_ext` example, which `cargo test --tests` never
+    // builds (a full `cargo test` does, which hid this on machines that had run one).
+    let built = std::process::Command::new(env!("CARGO"))
+        .current_dir(root)
+        .args(["build", "--locked", "-p", "calve", "--examples"])
+        .status()?;
+    if !built.success() {
+        return Err("building the calve examples failed".into());
+    }
     let mut cmd = std::process::Command::new(env!("CARGO"));
     cmd.current_dir(root).env("CALVE_JSON_RECORD", dir).args([
         "test",

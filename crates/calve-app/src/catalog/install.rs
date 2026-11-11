@@ -118,7 +118,7 @@ fn holders_note(dir: &Path) -> String {
             .map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect())
             .unwrap_or_default();
         let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
-        return match calve_win_sec::file_holders(&refs) {
+        match calve_win_sec::file_holders(&refs) {
             Ok(h) if h.is_empty() => "; no process holds a file in it open".into(),
             Ok(h) => format!(
                 "; held open by {}",
@@ -128,7 +128,7 @@ fn holders_note(dir: &Path) -> String {
                     .join(", ")
             ),
             Err(e) => format!("; holders unknown ({e})"),
-        };
+        }
     }
     #[cfg(not(windows))]
     {

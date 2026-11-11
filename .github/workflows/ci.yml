@@ -18,8 +18,19 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # The workspace links dozens of large test executables: full debuginfo ran the Linux runner
+      # out of disk. Line tables keep file:line backtraces; incremental state is useless in CI.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; worker confinement
+      # needs them, so this ephemeral runner allows them and the tests run confinement as
+      # required (fail-closed), not downgraded.
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       # OpenAEVC v0.1.0 is fetched from its public tag over HTTPS: no SSH key or secret (ADR 0003).
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
@@ -36,28 +47,32 @@ jobs:
       # Windows integration tests share named resources; one at a time (M4/M5 isolation notes).
       - run: cargo test --locked --workspace -- --test-threads 1
         if: runner.os == 'Windows'
+      - name: Disk before tests
+        if: runner.os == 'Linux'
+        run: df -h . && du -sh target
       - run: cargo test --locked --workspace
         if: runner.os != 'Windows'
-        env:
-          # Hosted runners restrict unprivileged user namespaces; confinement has its own tests.
-          CALVE_WORKER_CONFINEMENT: best-effort
+      - name: Disk after tests
+        if: always() && runner.os == 'Linux'
+        run: df -h . && du -sh target
 
   surface:
     # The JSON schemas and acceptance scenarios that need no first-party catalog, on the
-    # toolchain's reference platform. Workers need user namespaces; hosted runners restrict them.
+    # toolchain's reference platform, with worker confinement required (see the rust job).
     runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: 1.95.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo run --locked -p xtask -- json-schemas
-        env:
-          CALVE_WORKER_CONFINEMENT: best-effort
       - run: cargo run --locked -p xtask -- acceptance --scenario all --report acceptance.json
-        env:
-          CALVE_WORKER_CONFINEMENT: best-effort
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: acceptance
@@ -86,6 +101,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
+          # The pinned toolchain, installed explicitly (rust-toolchain.toml would otherwise make
+          # the container install it implicitly through an override).
+          rust-version: "1.95.0"
           command: check advisories bans licenses sources
 
   licenses:
