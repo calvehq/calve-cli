@@ -263,7 +263,7 @@ fn main() {
     if let Some(code) = calve_app::sandbox::hidden_mode() {
         std::process::exit(code);
     }
-    std::process::exit(real_main());
+    std::process::exit(calve_app::with_main_stack(real_main));
 }
 
 #[tokio::main]

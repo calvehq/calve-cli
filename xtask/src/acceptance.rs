@@ -127,10 +127,16 @@ fn fingerprint(root: &Path) -> Result<Value> {
 pub fn run(root: &Path, which: &str, report: Option<&Path>) -> Result {
     let selected: Vec<&Scenario> = SCENARIOS
         .iter()
-        .filter(|s| which == "all" || which.eq_ignore_ascii_case(&s.id.to_string()))
+        // `local`: the scenarios that need no first-party catalog (CI has none). `all` counts a
+        // scenario it cannot run as a failure.
+        .filter(|s| {
+            which == "all"
+                || (which == "local" && !s.catalog)
+                || which.eq_ignore_ascii_case(&s.id.to_string())
+        })
         .collect();
     if selected.is_empty() {
-        return Err(format!("no scenario {which}; use A..P or all").into());
+        return Err(format!("no scenario {which}; use A..P, all or local").into());
     }
     let mut results = Vec::new();
     let mut failed = false;
@@ -180,5 +186,12 @@ mod tests {
     fn every_scenario_is_mapped_once_in_order() {
         let ids: String = SCENARIOS.iter().map(|s| s.id).collect();
         assert_eq!(ids, "ABCDEFGHIJKLMNOP");
+        // `local` (CI) leaves out exactly the scenarios that need the first-party catalog.
+        let local: String = SCENARIOS
+            .iter()
+            .filter(|s| !s.catalog)
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(local, "CDEFGHIJKLMNOP");
     }
 }

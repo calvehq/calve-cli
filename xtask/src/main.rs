@@ -23,7 +23,7 @@ const USAGE: &str = "usage: cargo run --bin xtask -- check-architecture
        cargo run --bin xtask -- release-key --out <dir>
        cargo run --bin xtask -- attest --dist <dir> --key <release.key>
        cargo run --bin xtask -- verify-release --dist <dir> --pubkey <hex> [--smoke]
-       cargo run --bin xtask -- acceptance --scenario <A..P|all> [--report <out.json>]";
+       cargo run --bin xtask -- acceptance --scenario <A..P|all|local> [--report <out.json>]";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

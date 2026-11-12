@@ -1,6 +1,6 @@
 # Acceptance scenarios
 
-`cargo run -p xtask -- acceptance --scenario <A..P|all> [--report out.json]` runs scenarios from this checkout, one complete test each, and records an environment fingerprint (OS, kernel, toolchain, commit, Cargo.lock hash, OpenAEVC revision, `calve` binary digest). A and B need the first-party catalog in `CALVE_CATALOG_ADD` (arguments of `calve extension catalog add`, one per line); without it they are reported `not-run`, never passed. The report separates `pass` from `pass-with-deviation`: a scenario with a deviation below is not a full pass even when its test is green.
+`cargo run -p xtask -- acceptance --scenario <A..P|all|local> [--report out.json]` runs scenarios from this checkout, one complete test each, and records an environment fingerprint (OS, kernel, toolchain, commit, Cargo.lock hash, OpenAEVC revision, `calve` binary digest). A and B need the first-party catalog in `CALVE_CATALOG_ADD` (arguments of `calve extension catalog add`, one per line); without it they are reported `not-run`, never passed, and `all` fails. `local` runs only the scenarios that need no catalog (CI). The report separates `pass` from `pass-with-deviation`: a scenario with a deviation below is not a full pass even when its test is green.
 
 | Scenario | Test | Status | Notes |
 |---|---|---|---|

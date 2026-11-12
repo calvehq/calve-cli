@@ -490,6 +490,23 @@ pub(crate) fn project_runtime_key(state: &Path) -> Result<openaevc::protocol::Pu
     Ok(signing_key(&keys.runtime_seed)?.public_key())
 }
 
+/// Runs a binary's main on a thread with the stack Linux gives a main thread (8 MiB):
+/// Windows gives only 1 MiB, which a debug build's command futures overflow. Hidden helper
+/// modes stay on the real main thread; they need to be its only thread.
+pub fn with_main_stack<T: Send + 'static>(main: fn() -> T) -> T {
+    match std::thread::Builder::new()
+        .name("main".into())
+        .stack_size(8 << 20)
+        .spawn(main)
+        .expect("start the main thread")
+        .join()
+    {
+        Ok(v) => v,
+        // The panic was already reported on that thread; exit as Rust does after a panic.
+        Err(_) => std::process::exit(101),
+    }
+}
+
 pub(crate) fn write_private(path: &Path, content: &str) -> Result<()> {
     use std::io::Write;
     let mut options = fs::OpenOptions::new();
