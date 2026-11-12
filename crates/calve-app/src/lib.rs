@@ -33,6 +33,7 @@ pub mod manifests;
 pub mod materialize;
 pub mod observe;
 pub mod ops;
+pub mod paths;
 pub mod promotion;
 pub mod providers;
 pub mod recovery;

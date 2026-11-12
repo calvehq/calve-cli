@@ -2,6 +2,8 @@
 //! test runs. Each succeeds here, so `cargo xtask json-schemas` records its output and its v1
 //! schema is enforced.
 
+#[cfg(unix)] // only the Unix execution test starts calve itself
+use calve_testkit::Isolated;
 use std::fs;
 
 use calve_testkit::Env;
@@ -255,8 +257,7 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
     let pack = id(&run(&env, &["pack", "create", "Slow"]));
     env.ok(&["daemon", "start"]);
     let client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", env.path().join("d"))
-        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .isolated(env.path().join("d"), env.path().join("c"))
         .args(at(&[
             "--json",
             "--no-daemon-start",
@@ -316,8 +317,7 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
 
     // A relative path means the caller's directory, not the daemon's.
     let bundle = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", env.path().join("d"))
-        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .isolated(env.path().join("d"), env.path().join("c"))
         .current_dir(env.path())
         .args(at(&[
             "--json",

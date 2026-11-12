@@ -1,5 +1,6 @@
 //! Seal and promotion preflight, expected candidate, idempotent retry and result (P11).
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::process::Command;
 
@@ -42,8 +43,7 @@ fn promotion_preflight_expected_candidate_retry_and_result() {
     let other = format!("sha256:{}", "0".repeat(64));
     let stale = |json: bool| {
         let mut c = Command::new(env!("CARGO_BIN_EXE_calve"));
-        c.env("XDG_DATA_HOME", env.path().join("d"))
-            .env("XDG_CONFIG_HOME", env.path().join("c"))
+        c.isolated(env.path().join("d"), env.path().join("c"))
             .args(["--no-daemon-start", "--project", &p]);
         if json {
             c.arg("--json");

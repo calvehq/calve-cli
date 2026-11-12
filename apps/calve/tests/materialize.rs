@@ -1,3 +1,4 @@
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -6,8 +7,7 @@ use serde_json::Value;
 
 fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .args(["--json", "--no-daemon-start"])
         .args(args)
         .output()

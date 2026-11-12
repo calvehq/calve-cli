@@ -6,6 +6,7 @@
 //! have their own crash matrices.)
 #![cfg(unix)]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::PathBuf;
 
@@ -531,8 +532,7 @@ fn a_crash_around_a_projection_write_leaves_it_rebuildable() {
         env.ok(&["init", p]);
         env.ok(&["--project", p, "pack", "create", "one"]);
         let died = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-            .env("XDG_DATA_HOME", env.path().join("d"))
-            .env("XDG_CONFIG_HOME", env.path().join("c"))
+            .isolated(env.path().join("d"), env.path().join("c"))
             .env("CALVE_FAULT", point)
             .args([
                 "--json",
@@ -567,8 +567,7 @@ fn a_crash_while_a_daemon_opens_a_project_recovers() {
     env.ok(&["init", p]);
     let run = |fault: Option<&str>, args: &[&str]| {
         let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_calve"));
-        c.env("XDG_DATA_HOME", env.path().join("d"))
-            .env("XDG_CONFIG_HOME", env.path().join("c"));
+        c.isolated(env.path().join("d"), env.path().join("c"));
         if let Some(f) = fault {
             c.env("CALVE_FAULT", f);
         }

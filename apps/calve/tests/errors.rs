@@ -3,6 +3,7 @@
 //! status, typed detail) and the human line `calve: CODE: message` with the same exit status.
 #![cfg(unix)]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -41,8 +42,7 @@ impl T {
     }
     fn cmd(&self, json: bool, extra: &[(&str, &str)], a: &[&str]) -> std::process::Output {
         let mut c = Command::new(&self.env.calve);
-        c.env("XDG_DATA_HOME", self.env.path().join("d"))
-            .env("XDG_CONFIG_HOME", self.env.path().join("c"))
+        c.isolated(self.env.path().join("d"), self.env.path().join("c"))
             .envs(self.env.vars.iter().map(|(k, v)| (k, v)))
             .envs(extra.iter().copied())
             .arg("--no-daemon-start");
@@ -379,8 +379,7 @@ fn adopt_errors(t: &T, root: &Path) {
     fs::rename(&refs, &moved).unwrap();
     let c = copy.to_str().unwrap();
     let j = Command::new(&t.env.calve)
-        .env("XDG_DATA_HOME", t.env.path().join("d"))
-        .env("XDG_CONFIG_HOME", t.env.path().join("c"))
+        .isolated(t.env.path().join("d"), t.env.path().join("c"))
         .envs(t.env.vars.iter().map(|(k, v)| (k, v)))
         .args(["--json", "--no-daemon-start", "project", "adopt-copy", c])
         .output()
@@ -392,8 +391,7 @@ fn adopt_errors(t: &T, root: &Path) {
         Some(calve_api::errors::exit_code("CLOSURE_UNCLASSIFIED"))
     );
     let h = Command::new(&t.env.calve)
-        .env("XDG_DATA_HOME", t.env.path().join("d"))
-        .env("XDG_CONFIG_HOME", t.env.path().join("c"))
+        .isolated(t.env.path().join("d"), t.env.path().join("c"))
         .args(["--no-daemon-start", "project", "adopt-copy", c])
         .output()
         .unwrap();
@@ -428,8 +426,7 @@ fn the_lock_owner_and_the_actor_are_recorded() {
         .unwrap()
         .to_owned();
     let mut child = Command::new(&t.env.calve)
-        .env("XDG_DATA_HOME", t.env.path().join("d"))
-        .env("XDG_CONFIG_HOME", t.env.path().join("c"))
+        .isolated(t.env.path().join("d"), t.env.path().join("c"))
         .envs(t.env.vars.iter().map(|(k, v)| (k, v)))
         // A run holds the lock while it admits itself; this holds it there.
         .env("CALVE_TEST_PAUSE", "execution.admitted=30000")

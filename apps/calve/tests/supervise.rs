@@ -4,6 +4,7 @@
 //! residuals that are asserted rather than hidden.
 #![cfg(target_os = "linux")]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -31,8 +32,7 @@ fn isolated(name: &str, extra: &[(&str, &str)]) -> (bool, PathBuf, tempfile::Tem
     let status = Command::new(std::env::current_exe().unwrap())
         .args([name, "--exact", "--nocapture"])
         .env("CALVE_ISOLATED_TEST", "1")
-        .env("XDG_DATA_HOME", t.path().join("data"))
-        .env("XDG_CONFIG_HOME", t.path().join("config"))
+        .isolated(t.path().join("data"), t.path().join("config"))
         .env("XDG_RUNTIME_DIR", &run)
         .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .env("CALVE_KEEP_SPAWN_RECORDS", "1")

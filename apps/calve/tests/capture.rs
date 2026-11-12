@@ -1,3 +1,4 @@
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 
@@ -22,8 +23,7 @@ fn file_capture_is_an_openaevc_effect() {
             "--nocapture",
         ])
         .env("CALVE_ISOLATED_TEST", "1")
-        .env("XDG_DATA_HOME", data.path())
-        .env("XDG_CONFIG_HOME", data.path().join("config"))
+        .isolated(data.path(), data.path().join("config"))
         .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .status()
         .unwrap();

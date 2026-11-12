@@ -300,32 +300,7 @@ pub struct ConfigPaths {
 }
 
 pub fn default_config_root() -> Result<PathBuf> {
-    crate::registry::guard_test_root(user_config_root()?)
-}
-
-fn user_config_root() -> Result<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME is not set"))?;
-        Ok(PathBuf::from(home).join("Library/Application Support/Calve"))
-    }
-    #[cfg(windows)]
-    {
-        let home = std::env::var_os("APPDATA").ok_or_else(|| invalid("APPDATA is not set"))?;
-        Ok(PathBuf::from(home).join("Calve"))
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        if let Some(config) = std::env::var_os("XDG_CONFIG_HOME") {
-            let path = PathBuf::from(config);
-            if !path.is_absolute() {
-                return Err(invalid("XDG_CONFIG_HOME must be an absolute path"));
-            }
-            return Ok(path.join("calve"));
-        }
-        let home = std::env::var_os("HOME").ok_or_else(|| invalid("HOME is not set"))?;
-        Ok(PathBuf::from(home).join(".config/calve"))
-    }
+    crate::paths::config_root()
 }
 
 impl ConfigPaths {

@@ -2,6 +2,7 @@
 //! collides, and what a run leaves behind when the daemon dies under it.
 #![cfg(unix)]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -59,8 +60,7 @@ impl T {
     /// `execution start` as its own process; the worker outlives this call.
     fn start(&self, pack: &str, harness: &str) -> Child {
         Command::new(env!("CARGO_BIN_EXE_calve"))
-            .env("XDG_DATA_HOME", self.env.path().join("d"))
-            .env("XDG_CONFIG_HOME", self.env.path().join("c"))
+            .isolated(self.env.path().join("d"), self.env.path().join("c"))
             .envs(self.env.vars.iter().map(|(k, v)| (k, v)))
             .args(self.args(&["--json", "--no-daemon-start", "execution", "start", pack]))
             .args(["--harness", harness, "--generation", "1"])

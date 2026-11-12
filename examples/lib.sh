@@ -14,6 +14,11 @@ WORK="$(mktemp -d)"
 # example started is stopped first.
 trap '"$CALVE_BIN" daemon stop >/dev/null 2>&1 || true; chmod -R u+w "$WORK"; rm -rf "$WORK"' EXIT
 export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config"
+# Under the test suite (which sets CALVE_TEST_GUARD), the same roots on every platform: macOS and
+# Windows do not use the XDG variables, and the guard refuses their real Calve directories.
+if [ -n "${CALVE_TEST_GUARD:-}" ]; then
+  export CALVE_TEST_DATA_ROOT="$WORK/data/calve" CALVE_TEST_CONFIG_ROOT="$WORK/config/calve"
+fi
 PROJECT="$WORK/project"
 
 # calve <args...>: JSON output, never starts a background daemon.

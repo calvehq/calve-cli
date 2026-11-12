@@ -1,3 +1,4 @@
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -7,11 +8,7 @@ use serde_json::Value;
 
 fn run_cli(data_home: &Path, args: &[&str]) -> Value {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data_home)
-        .env(
-            "XDG_CONFIG_HOME",
-            data_home.parent().unwrap().join("config"),
-        )
+        .isolated(data_home, data_home.parent().unwrap().join("config"))
         .arg("--json")
         .args(args)
         .output()
@@ -791,8 +788,7 @@ fn cli_workflow() {
     let copy = temp.path().join("copy");
     copy_tree(&root_path, &copy);
     let blocked = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", &data_home)
-        .env("XDG_CONFIG_HOME", temp.path().join("config"))
+        .isolated(&data_home, temp.path().join("config"))
         .args([
             "--project",
             copy.to_str().unwrap(),
@@ -1126,8 +1122,7 @@ fn cli_operations_surface() {
         serde_json::json!([])
     );
     let refused = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", &data_home)
-        .env("XDG_CONFIG_HOME", data_home.join("config"))
+        .isolated(&data_home, data_home.join("config"))
         .args(["--project", root_str, "recover", "apply"])
         .output()
         .unwrap();

@@ -7,6 +7,7 @@
 //!
 //! The journal's lease-renewal events give the measured gaps.
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -20,8 +21,7 @@ const LEASE_MS: &str = "60000";
 
 fn calve(data: &Path, vars: &[(&str, &str)], args: &[&str]) -> (bool, Value, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .env("CALVE_EXECUTION_LEASE_MS", LEASE_MS)
         .env("CALVE_TEST_KEEPER_LOG", "1")
         .envs(vars.iter().copied())

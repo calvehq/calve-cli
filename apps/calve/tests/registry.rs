@@ -1,3 +1,5 @@
+#[cfg(unix)] // only the Unix guard tests start calve with isolated roots
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 
@@ -156,8 +158,7 @@ fn the_binary_refuses_real_user_state_under_test() {
     let calve = |data: &Path, config: &Path| {
         std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
             .args(["config", "list", "--json"])
-            .env("XDG_DATA_HOME", data)
-            .env("XDG_CONFIG_HOME", config)
+            .isolated(data, config)
             .env("HOME", inside)
             .env_remove("XDG_RUNTIME_DIR")
             .output()
@@ -177,7 +178,52 @@ fn the_binary_refuses_real_user_state_under_test() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // Linux: the native lookup (XDG, no override) is guarded the same way.
+    #[cfg(target_os = "linux")]
+    {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+            .args(["config", "list", "--json"])
+            .env("XDG_DATA_HOME", outside.join("share"))
+            .env("XDG_CONFIG_HOME", inside.join("config"))
+            .env("HOME", inside)
+            .env_remove("XDG_RUNTIME_DIR")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && stderr.contains("test guard"),
+            "{stderr}"
+        );
+    }
     assert!(!outside.exists());
+}
+
+/// The test-only root override fails closed: without the guard, or as a relative path, it is
+/// refused rather than ignored (release builds never read it).
+#[test]
+fn the_test_root_override_fails_closed() {
+    let temp = tempfile::tempdir().unwrap();
+    let calve = |data: &std::ffi::OsStr, guarded: bool| {
+        let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_calve"));
+        cmd.args(["config", "list", "--json"])
+            .env("CALVE_TEST_DATA_ROOT", data)
+            .env("CALVE_TEST_CONFIG_ROOT", temp.path().join("c/calve"));
+        if !guarded {
+            cmd.env_remove("CALVE_TEST_GUARD");
+        }
+        let out = cmd.output().unwrap();
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    let inside = temp.path().join("d/calve");
+    let (ok, stderr) = calve(inside.as_os_str(), false);
+    assert!(!ok && stderr.contains("needs CALVE_TEST_GUARD"), "{stderr}");
+    let (ok, stderr) = calve("relative/calve".as_ref(), true);
+    assert!(!ok && stderr.contains("absolute"), "{stderr}");
+    let (ok, stderr) = calve(inside.as_os_str(), true);
+    assert!(ok, "{stderr}");
 }
 
 /// No other path leads out of the guard: a runtime directory inside the test root does not
@@ -199,8 +245,7 @@ fn the_guard_has_no_runtime_link_or_endpoint_escape() {
             .args(["config", "list", "--json"])
             .env("CALVE_TEST_GUARD", &allowed)
             .env("TMPDIR", temp.path().join("no-temp"))
-            .env("XDG_DATA_HOME", data)
-            .env("XDG_CONFIG_HOME", allowed.join("config"))
+            .isolated(data, allowed.join("config"))
             .env("XDG_RUNTIME_DIR", &allowed)
             .env("HOME", &allowed)
             .output()

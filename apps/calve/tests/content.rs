@@ -1,6 +1,7 @@
 //! Durable chunked content (rev 10 §13, N13/N26): the inline boundary, chunk upload through the
 //! capture saga, byte-for-byte materialization, corruption and absence failing closed, and
 //! portable history reconstructed at a clean destination without the extension.
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 
@@ -21,8 +22,7 @@ fn chunked_content_is_durable_and_portable() {
             "--nocapture",
         ])
         .env("CALVE_ISOLATED_TEST", "1")
-        .env("XDG_DATA_HOME", data.path())
-        .env("XDG_CONFIG_HOME", data.path().join("config"))
+        .isolated(data.path(), data.path().join("config"))
         .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .status()
         .unwrap();

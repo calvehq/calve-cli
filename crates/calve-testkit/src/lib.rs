@@ -24,6 +24,33 @@ pub fn json_data(stdout: &[u8]) -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// Points a spawned `calve`, `calved` or re-executed test at isolated roots on every platform:
+/// data in `<data_home>/calve`, configuration in `<config_home>/calve`. They go through Calve's
+/// test-only overrides (`calve_app::paths`), which debug builds honour under `CALVE_TEST_GUARD`
+/// (set for every test by `.cargo/config.toml`); the XDG variables too, for code that reads them.
+pub fn isolate<'c>(cmd: &'c mut Command, data_home: &Path, config_home: &Path) -> &'c mut Command {
+    cmd.env("XDG_DATA_HOME", data_home)
+        .env("XDG_CONFIG_HOME", config_home)
+        .env("CALVE_TEST_DATA_ROOT", data_home.join("calve"))
+        .env("CALVE_TEST_CONFIG_ROOT", config_home.join("calve"))
+}
+
+/// [`isolate`] in a `Command` builder chain.
+pub trait Isolated {
+    fn isolated(&mut self, data_home: impl AsRef<Path>, config_home: impl AsRef<Path>)
+    -> &mut Self;
+}
+
+impl Isolated for Command {
+    fn isolated(
+        &mut self,
+        data_home: impl AsRef<Path>,
+        config_home: impl AsRef<Path>,
+    ) -> &mut Self {
+        isolate(self, data_home.as_ref(), config_home.as_ref())
+    }
+}
+
 /// A temporary machine: private data/config homes plus a scratch area for Projects.
 pub struct Env {
     pub temp: tempfile::TempDir,
@@ -118,9 +145,9 @@ impl Env {
 
     /// Runs `calve --json --no-daemon-start <args>` without asserting success.
     pub fn run(&self, args: &[&str]) -> Run {
-        let output = Command::new(&self.calve)
-            .env("XDG_DATA_HOME", self.path().join("d"))
-            .env("XDG_CONFIG_HOME", self.path().join("c"))
+        let mut command = Command::new(&self.calve);
+        isolate(&mut command, &self.path().join("d"), &self.path().join("c"));
+        let output = command
             .envs(self.vars.iter().map(|(k, v)| (k, v)))
             .args(["--json", "--no-daemon-start"])
             .args(args)

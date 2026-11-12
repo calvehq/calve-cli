@@ -4,6 +4,7 @@
 //! byte.
 #![cfg(target_os = "linux")]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -35,10 +36,14 @@ impl T {
             vars: self.env.vars.clone(),
         };
         // Same machine data and config as the fixture environment.
-        env.vars
-            .push(("XDG_DATA_HOME".into(), self.env.path().join("d").into()));
-        env.vars
-            .push(("XDG_CONFIG_HOME".into(), self.env.path().join("c").into()));
+        for (k, v) in [
+            ("XDG_DATA_HOME", self.env.path().join("d")),
+            ("XDG_CONFIG_HOME", self.env.path().join("c")),
+            ("CALVE_TEST_DATA_ROOT", self.env.path().join("d/calve")),
+            ("CALVE_TEST_CONFIG_ROOT", self.env.path().join("c/calve")),
+        ] {
+            env.vars.push((k.into(), v.into()));
+        }
         env.vars
             .extend(vars.iter().map(|(k, v)| ((*k).to_owned(), (*v).into())));
         env.run(&self.args(a))
@@ -530,8 +535,7 @@ fn concurrent_materializations_are_serialized() {
     let t = setup();
     let spawn = || {
         std::process::Command::new(&t.env.calve)
-            .env("XDG_DATA_HOME", t.env.path().join("d"))
-            .env("XDG_CONFIG_HOME", t.env.path().join("c"))
+            .isolated(t.env.path().join("d"), t.env.path().join("c"))
             .envs(t.env.vars.iter().map(|(k, v)| (k, v)))
             .args(["--json", "--no-daemon-start", "--project", &t.p])
             .args(["baseline", "materialize", &t.v1, "--apply"])

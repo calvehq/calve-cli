@@ -1,5 +1,6 @@
 #![cfg(unix)]
 
+use calve_testkit::Isolated;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -22,9 +23,8 @@ impl Drop for Daemon {
 
 fn cli(data: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data)
+        .isolated(data, data.join("config"))
         .env_remove("XDG_RUNTIME_DIR")
-        .env("XDG_CONFIG_HOME", data.join("config"))
         .args(args)
         .output()
         .unwrap()
@@ -37,8 +37,7 @@ fn daemon_ipc_and_project_writer() {
     let endpoint = data.join("calve/daemon.sock");
     let mut daemon = Daemon(
         Command::new(env!("CARGO_BIN_EXE_calved"))
-            .env("XDG_DATA_HOME", &data)
-            .env("XDG_CONFIG_HOME", data.join("config"))
+            .isolated(&data, data.join("config"))
             .env_remove("XDG_RUNTIME_DIR")
             .arg("--endpoint")
             .arg(&endpoint)
@@ -259,8 +258,7 @@ fn daemon_stop_uses_the_ipc_shutdown_frame() {
     let endpoint = data.join("calve/daemon.sock");
     let mut daemon = Daemon(
         Command::new(env!("CARGO_BIN_EXE_calved"))
-            .env("XDG_DATA_HOME", &data)
-            .env("XDG_CONFIG_HOME", data.join("config"))
+            .isolated(&data, data.join("config"))
             .env_remove("XDG_RUNTIME_DIR")
             .arg("--endpoint")
             .arg(&endpoint)

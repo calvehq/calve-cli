@@ -5,6 +5,7 @@
 //! bundle. The documented residual — a secret split across stdout and stderr — is asserted too.
 #![cfg(unix)]
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -13,8 +14,7 @@ const SECRET: &str = "Sup3r-S3cret/Token+Value=42";
 
 fn calve(data: &Path, args: &[&str]) -> (bool, serde_json::Value, String, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .env("CALVE_TEST_SECRET", SECRET)
         .args(["--json", "--no-daemon-start"])
         .args(args)
@@ -226,8 +226,7 @@ fn secrets_never_reach_any_sink() {
     .1;
     // Human output and errors go through the same redaction.
     let human = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .args([
             "--no-daemon-start",
             "--project",
@@ -287,8 +286,7 @@ fn captured_content_stays_in_content_sinks_only() {
     let pack = pack["id"].as_str().unwrap().to_owned();
     // An interrupted capture leaves its spool and journal; resume finishes it.
     let crash = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .env("CALVE_FAULT", "capture.submit.1.0.after_intent")
         .args([
             "--json",
@@ -329,8 +327,7 @@ fn captured_content_stays_in_content_sinks_only() {
     }
     fs::write(root.join("cred.txt"), "local edit\n").unwrap();
     let conflict = Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", data.join("d"))
-        .env("XDG_CONFIG_HOME", data.join("c"))
+        .isolated(data.join("d"), data.join("c"))
         .env(
             "CALVE_TEST_WRITE",
             format!("f1.after_backup={}", root.join("cred.txt").display()),

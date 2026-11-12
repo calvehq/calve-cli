@@ -4,6 +4,7 @@
 //! (capture with derived relations, classified scans, extension diff, checks, resources) on the
 //! fixture package `org.example.toy`.
 
+use calve_testkit::Isolated;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -714,8 +715,7 @@ fn scenario_l_crash_during_extension_install() {
     env.ok(&["extension", "catalog", "refresh", "example"]);
     // 1. Interrupted after download, before activation.
     let crashed = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", env.path().join("d"))
-        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .isolated(env.path().join("d"), env.path().join("c"))
         .env("CALVE_FAULT", "append.after_fsync")
         .args(["--json", "--no-daemon-start", "--project", &p])
         .args([
@@ -874,8 +874,7 @@ fn scenario_n_third_party_extension() {
     );
     // 4. The generic renderer shows it without any Calve-specific code.
     let human = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-        .env("XDG_DATA_HOME", env.path().join("d"))
-        .env("XDG_CONFIG_HOME", env.path().join("c"))
+        .isolated(env.path().join("d"), env.path().join("c"))
         .args([
             "--no-daemon-start",
             "--project",
@@ -912,8 +911,7 @@ fn two_processes_share_catalog_state_safely() {
     trust(&env, "example", &r);
     let spawn = |args: &[&str]| {
         std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
-            .env("XDG_DATA_HOME", env.path().join("d"))
-            .env("XDG_CONFIG_HOME", env.path().join("c"))
+            .isolated(env.path().join("d"), env.path().join("c"))
             .args(["--json", "--no-daemon-start"])
             .args(args)
             .stdout(std::process::Stdio::piped())

@@ -1,3 +1,4 @@
+use calve_testkit::Isolated;
 use std::fs;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -8,9 +9,8 @@ use serde_json::Value;
 fn calve_env(env: &Env, args: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_calve"));
     command
-        .env("XDG_DATA_HOME", env.path().join("d"))
+        .isolated(env.path().join("d"), env.path().join("c"))
         .env_remove("XDG_RUNTIME_DIR")
-        .env("XDG_CONFIG_HOME", env.path().join("c"))
         .env("CALVE_EXECUTION_LEASE_MS", "5000")
         .arg("--json")
         .args(args);
