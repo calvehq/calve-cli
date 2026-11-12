@@ -45,12 +45,12 @@ jobs:
       - run: cargo run --locked -p xtask -- cli-reference --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       # Windows integration tests share named resources; one at a time (M4/M5 isolation notes).
-      - run: cargo test --locked --workspace -- --test-threads 1
+      - run: cargo test --locked --workspace --no-fail-fast -- --test-threads 1
         if: runner.os == 'Windows'
       - name: Disk before tests
         if: runner.os == 'Linux'
         run: df -h . && du -sh target
-      - run: cargo test --locked --workspace
+      - run: cargo test --locked --workspace --no-fail-fast
         if: runner.os != 'Windows'
       - name: Disk after tests
         if: always() && runner.os == 'Linux'

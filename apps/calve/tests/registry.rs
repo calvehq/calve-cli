@@ -272,3 +272,20 @@ fn the_guard_has_no_runtime_link_or_endpoint_escape() {
     );
     assert!(!real.exists(), "nothing was created outside");
 }
+
+/// A registered Project is found by any spelling of its directory, not only the canonical one
+/// the registry stores: here a symlink; on macOS `/var` (→ `/private/var`) and on Windows an
+/// 8.3 short name take the same path.
+#[cfg(unix)]
+#[test]
+fn a_project_is_found_by_another_spelling_of_its_path() {
+    let mut env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_calve"));
+    let real = env.path().join("project");
+    env.ok(&["init", real.to_str().unwrap()]);
+    let link = env.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let by_real = env.ok(&["project", "identity", real.to_str().unwrap()]);
+    let by_link = env.ok(&["project", "identity", link.to_str().unwrap()]);
+    assert_eq!(by_link["project_id"], by_real["project_id"], "{by_link}");
+    let _ = &mut env;
+}

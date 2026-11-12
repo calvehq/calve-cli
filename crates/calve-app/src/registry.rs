@@ -318,9 +318,14 @@ impl Registry {
     }
 
     pub fn project(&self, identifier: &str) -> Result<ProjectEntry> {
+        // Registered paths are canonical; another spelling of the same directory (a symlink,
+        // macOS /var → /private/var, a Windows 8.3 short name) finds it too.
+        let canonical = fs::canonicalize(identifier)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| identifier.to_owned());
         self.db.query_row(
-            "SELECT project_id,namespace_id,path,name FROM projects WHERE project_id=?1 OR path=?1",
-            [identifier], |row| Ok(ProjectEntry {
+            "SELECT project_id,namespace_id,path,name FROM projects WHERE project_id=?1 OR path=?1 OR path=?2",
+            [identifier, canonical.as_str()], |row| Ok(ProjectEntry {
                 project_id: row.get(0)?, namespace_id: row.get(1)?,
                 path: PathBuf::from(row.get::<_,String>(2)?), name: row.get(3)?, pinned: false,
             }),

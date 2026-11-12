@@ -149,7 +149,8 @@ fn attention_status_and_gc() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|r| r["path"] == p.as_str())
+        // Registered paths are canonical (macOS temp dirs live under /private/var).
+        .find(|r| r["path"] == fs::canonicalize(&root).unwrap().to_str().unwrap())
         .cloned()
         .unwrap();
     assert!(

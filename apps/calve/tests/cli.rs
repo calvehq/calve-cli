@@ -475,7 +475,9 @@ fn cli_workflow() {
     let root_path = temp.path().join("project");
     let root = root_path.to_str().unwrap();
     let init = calve(&["init", root, "--name", "CLI fixture"]);
-    assert_eq!(init["root"], root);
+    // The root is reported canonical (macOS /private/var, a Windows long name), as registered.
+    let canonical = std::fs::canonicalize(&root_path).unwrap();
+    assert_eq!(init["root"], canonical.to_str().unwrap());
     let version = calve(&["version"]);
     assert_eq!(version["openaevc_tag"], "v0.1.0");
     assert_eq!(
