@@ -41,7 +41,7 @@ expect "Baselines unchanged by aliases" "$(snapshot)" "$frozen"
 
 # Materialize B0, then B1: only file2 (create) and file3 (delete) are touched.
 calve baseline materialize "$b0" --apply >/dev/null
-ino() { stat -c %i "$PROJECT/$1"; }
+ino() { ls -di "$PROJECT/$1" | awk '{print $1}'; } # portable (GNU and BSD stat differ)
 i0=$(ino file0.txt); i1=$(ino file1.txt)
 step=$(calve baseline materialize "$b1" --apply)
 expect "B1 plan touches only file2 and file3" \

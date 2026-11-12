@@ -77,6 +77,6 @@ PROJECT="$WORK/copy"
 rm -rf "$PROJECT/src" "$PROJECT/Cargo.toml"
 calve baseline materialize "$b1" --apply >/dev/null
 # 12. File state matches the expected composition, byte for byte.
-expect "12 src/lib.rs" "$(sha256sum < "$PROJECT/src/lib.rs")" "$(sha256sum < "$WORK/original/src/lib.rs")"
-expect "12 Cargo.toml" "$(sha256sum < "$PROJECT/Cargo.toml")" "$(sha256sum < "$WORK/original/Cargo.toml")"
+expect "12 src/lib.rs" "$(sha256 < "$PROJECT/src/lib.rs")" "$(sha256 < "$WORK/original/src/lib.rs")"
+expect "12 Cargo.toml" "$(sha256 < "$PROJECT/Cargo.toml")" "$(sha256 < "$WORK/original/Cargo.toml")"
 expect "12 the composed content" "$(cat "$PROJECT/src/lib.rs")" "pub fn greet() -> u32 { 2 }"

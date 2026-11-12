@@ -5,5 +5,9 @@ git-fetch-with-cli = true
 # developer's real one, which holds real Project authority.
 [env]
 XDG_DATA_HOME = { value = "target/test-xdg", relative = true }
+# The same on every platform (macOS and Windows do not use XDG): Calve's test-only roots, which
+# debug builds honour under CALVE_TEST_GUARD (see crates/calve-app/src/paths.rs).
+CALVE_TEST_DATA_ROOT = { value = "target/test-xdg/calve", relative = true }
+CALVE_TEST_CONFIG_ROOT = { value = "target/test-config/calve", relative = true }
 # Debug builds run under cargo refuse any Calve root outside these and the temp directory.
 CALVE_TEST_GUARD = { value = "target", relative = true }

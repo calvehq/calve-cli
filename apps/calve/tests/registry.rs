@@ -187,6 +187,9 @@ fn the_binary_refuses_real_user_state_under_test() {
             .env("XDG_CONFIG_HOME", inside.join("config"))
             .env("HOME", inside)
             .env_remove("XDG_RUNTIME_DIR")
+            // The native lookup, not the overrides every test process inherits.
+            .env_remove("CALVE_TEST_DATA_ROOT")
+            .env_remove("CALVE_TEST_CONFIG_ROOT")
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr);

@@ -10,6 +10,10 @@ set -euo pipefail
 
 CALVE_BIN="${CALVE:-calve}"
 WORK="$(mktemp -d)"
+# Git Bash on Windows: hand Windows programs C:/... paths, not /tmp/... ones.
+if command -v cygpath >/dev/null 2>&1; then WORK="$(cygpath -m "$WORK")"; fi
+# Windows often has `python` only (its `python3` may be the Store stub).
+if ! python3 -c '' >/dev/null 2>&1; then python3() { python "$@"; }; fi
 # Installed packages are read-only by design; make them writable again to clean up. A daemon an
 # example started is stopped first.
 trap '"$CALVE_BIN" daemon stop >/dev/null 2>&1 || true; chmod -R u+w "$WORK"; rm -rf "$WORK"' EXIT
@@ -53,12 +57,21 @@ generation() { calve pack show "$1" | get '["generation"]'; }
 
 FILES_EXT="${CALVE_FILES_EXT:-org.calve.software}"
 
+# kill_pid <pid>: kills a process Calve reported (a Windows PID under Git Bash, which `kill` alone
+# does not take).
+kill_pid() { if [ -n "${WINDIR:-}" ]; then taskkill //F //PID "$1" >/dev/null; else kill -9 "$1"; fi; }
+
+# sha256 < file: the SHA-256 of stdin (Linux sha256sum, macOS shasum).
+sha256() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi; }
+
 # enable <extension-id>: enables an extension in the Project, acknowledging that its native
 # component runs unconfined with your permissions.
 enable() { calve extension enable "$1" --acknowledge-native >/dev/null; }
 
 if [[ -n "${CALVE_CATALOG_ADD:-}" ]]; then
-  mapfile -t catalog_args <<<"$CALVE_CATALOG_ADD"
+  # One argument per line (macOS ships bash 3.2, which has no mapfile).
+  catalog_args=()
+  while IFS= read -r arg; do catalog_args+=("$arg"); done <<<"$CALVE_CATALOG_ADD"
   "$CALVE_BIN" --json --no-daemon-start "${catalog_args[@]}" >/dev/null
 fi
 "$CALVE_BIN" --json --no-daemon-start init "$PROJECT" --name example >/dev/null

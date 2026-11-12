@@ -236,6 +236,15 @@ mod unix {
         .collect()
     }
 
+    /// The supervisor socket of spawn `id` (32 hex): its last 16, the UUID's random bits. A
+    /// socket path must stay under 104 bytes on macOS (108 on Linux), and there the spawn
+    /// directory is the data root's (no XDG_RUNTIME_DIR). A clash fails the bind, loudly.
+    // shortcut: a data root deeper than ~80 bytes still overflows; move sockets to a short
+    // private directory if that is ever reported.
+    fn socket_name(id: &str) -> String {
+        format!("{}.sock", &id[id.len().saturating_sub(16)..])
+    }
+
     fn kill_group(pgid: i32) {
         if let Some(p) = Pid::from_raw(pgid) {
             let _ = kill_process_group(p, Signal::KILL);
@@ -293,7 +302,7 @@ mod unix {
         }
         let dir = spawn_dir()?;
         let id = uuid::Uuid::now_v7().simple().to_string();
-        let sock = dir.join(format!("{id}.sock"));
+        let sock = dir.join(socket_name(&id));
         let listener = UnixListener::bind(&sock).map_err(|e| {
             coded(
                 "CONTAINMENT_UNAVAILABLE",
@@ -587,20 +596,18 @@ mod unix {
             std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
             o.open(dir.join(format!("{id}.result")))
         };
-        let (mut fallback, mut conn) = match (
-            fallback,
-            UnixStream::connect(dir.join(format!("{id}.sock"))),
-        ) {
-            (Ok(f), Ok(c)) => (f, c),
-            (f, c) => {
-                eprintln!(
-                    "calve helper: result file: {}; supervisor socket: {}",
-                    f.map_or_else(|e| e.to_string(), |_| "ok".into()),
-                    c.map_or_else(|e| e.to_string(), |_| "ok".into())
-                );
-                return 4;
-            }
-        };
+        let (mut fallback, mut conn) =
+            match (fallback, UnixStream::connect(dir.join(socket_name(id)))) {
+                (Ok(f), Ok(c)) => (f, c),
+                (f, c) => {
+                    eprintln!(
+                        "calve helper: result file: {}; supervisor socket: {}",
+                        f.map_or_else(|e| e.to_string(), |_| "ok".into()),
+                        c.map_or_else(|e| e.to_string(), |_| "ok".into())
+                    );
+                    return 4;
+                }
+            };
         // A user namespace needs a single thread (none has started yet), and entering one
         // clears the parent-death signal set below.
         #[cfg(target_os = "linux")]

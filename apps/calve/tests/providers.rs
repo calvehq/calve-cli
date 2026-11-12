@@ -9,6 +9,9 @@ fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_calve"))
         .isolated(data.join("d"), data.join("c"))
         .env("CALVE_TEST_SECRET", "s3cret")
+        // Set for calve, never for its workers: proves their environment is cleared (HOME
+        // cannot, as the MSYS shell on Windows sets one when it is missing).
+        .env("CALVE_LEAK_PROBE", "leaked")
         .args(["--json", "--no-daemon-start"])
         .args(args)
         .output()
@@ -86,7 +89,7 @@ fn harness_executions_supervise_workers() {
 provider = "shell"
 mode = "change"
 paths = ["out"]
-command = ["-c", "mkdir -p out && echo \"home=$HOME token=$TOKEN\" > out/a.txt"]
+command = ["-c", "mkdir -p out && echo \"probe=$CALVE_LEAK_PROBE token=$TOKEN\" > out/a.txt"]
 
 [harnesses.flaky]
 provider = "shell"
@@ -185,7 +188,7 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
     // The environment is cleared; only referenced secrets reach the worker.
     assert_eq!(
         fs::read_to_string(root.join("out/a.txt")).unwrap(),
-        "home= token=s3cret\n"
+        "probe= token=s3cret\n"
     );
     let shown = ok(data, &["--project", p, "pack", "show", &first]);
     let generation = shown["generation"].to_string();
@@ -326,12 +329,18 @@ command = ["-c", "read ctx; echo '{\"type\":\"log\",\"text\":\"hi\"}'; echo '{\"
 fn keyring_secrets_resolve_at_launch() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path();
-    let store = data.join("store.sh");
-    fs::write(
-        &store,
+    // The credential store command, as the platform runs programs (Windows: a batch file).
+    #[cfg(windows)]
+    let (store, script) = (
+        data.join("store.cmd"),
+        "@echo off\r\nif \"%~1\"==\"api-token\" echo from-keyring\r\n",
+    );
+    #[cfg(not(windows))]
+    let (store, script) = (
+        data.join("store.sh"),
         "#!/bin/sh\n[ \"$1\" = api-token ] && echo from-keyring\n",
-    )
-    .unwrap();
+    );
+    fs::write(&store, script).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

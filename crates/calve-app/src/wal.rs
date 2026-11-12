@@ -50,11 +50,11 @@ pub(crate) trait Primitives {
     }
 }
 
-#[cfg(target_os = "linux")]
-struct Linux;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+struct Atomic;
 
-#[cfg(target_os = "linux")]
-impl Linux {
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Atomic {
     fn exchange(&self, dir: &Dir, a: &str, b: &str) -> io::Result<()> {
         Ok(rustix::fs::renameat_with(
             dir,
@@ -66,7 +66,7 @@ impl Linux {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn renameat2_noreplace(dir: &Dir, from: &str, to: &str) -> io::Result<()> {
     Ok(rustix::fs::renameat_with(
         dir,
@@ -77,10 +77,15 @@ fn renameat2_noreplace(dir: &Dir, from: &str, to: &str) -> io::Result<()> {
     )?)
 }
 
-#[cfg(target_os = "linux")]
-impl Primitives for Linux {
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl Primitives for Atomic {
     fn name(&self) -> &'static str {
-        "linux-renameat2"
+        // Linux `renameat2`; macOS `renameatx_np` (RENAME_SWAP / RENAME_EXCL), through rustix.
+        if cfg!(target_os = "macos") {
+            "macos-renameatx"
+        } else {
+            "linux-renameat2"
+        }
     }
     fn atomic(&self) -> bool {
         true
@@ -149,7 +154,6 @@ impl Primitives for Windows {
 
 /// A filesystem without no-replace rename (and the debug-build stand-in for one): creates go
 /// through a no-replace hard link; replace and delete are refused unless `--allow-unsafe-fs`.
-/// macOS (`renameatx_np` swap/excl) is not wired yet and uses this path (PENDING, no host).
 struct Fallback;
 
 impl Primitives for Fallback {
@@ -208,13 +212,13 @@ pub(crate) fn primitives(root: &Path) -> Box<dyn Primitives> {
         .is_ok()
     };
     #[cfg(target_os = "linux")]
-    {
-        if forced == Some("displace") && noreplace(&LinuxDisplace) {
-            return Box::new(LinuxDisplace);
-        }
-        if probe(&|dir, a, b| Linux.exchange(dir, a, b)).is_ok() {
-            return Box::new(Linux);
-        }
+    if forced == Some("displace") && noreplace(&LinuxDisplace) {
+        return Box::new(LinuxDisplace);
+    }
+    // Exchange works on this filesystem (APFS has it, HFS+ does not): atomic replacement.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if probe(&|dir, a, b| Atomic.exchange(dir, a, b)).is_ok() {
+        return Box::new(Atomic);
     }
     #[cfg(windows)]
     if noreplace(&Windows) {

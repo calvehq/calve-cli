@@ -13,10 +13,26 @@ use calve_testkit::ToyCatalog;
 /// (5 s) a debug build can miss when every script competes for the machine.
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// The scripts' shell. On Windows `bash` on PATH is the WSL launcher; the scripts run in Git for
+/// Windows' bash, found from `git --exec-path` (`<git>/mingw64/libexec/git-core`).
+fn bash() -> Command {
+    if cfg!(windows) {
+        let out = Command::new("git")
+            .arg("--exec-path")
+            .output()
+            .expect("git");
+        let exec = std::path::PathBuf::from(String::from_utf8(out.stdout).unwrap().trim());
+        let git = exec.ancestors().nth(3).expect("git installation root");
+        Command::new(git.join("bin").join("bash.exe"))
+    } else {
+        Command::new("bash")
+    }
+}
+
 fn run_example(name: &str) {
     let _one = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let toy = ToyCatalog::new();
-    let mut command = Command::new("bash");
+    let mut command = bash();
     if std::env::var_os("CALVE_CATALOG_ADD").is_none() {
         command
             .env("CALVE_CATALOG_ADD", toy.add_args().join("\n"))

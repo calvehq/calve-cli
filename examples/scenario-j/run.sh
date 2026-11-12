@@ -26,7 +26,7 @@ for _ in $(seq 1 150); do
   sleep 0.2
 done
 expect "an execution is active in the original" "$(echo "$state" | grep -c RUNNING)" "1"
-kill -9 "$daemon"
+kill_pid "$daemon"
 wait "$runner" 2>/dev/null || true
 # 1. Copy the Project directory.
 COPY="$WORK/copy"

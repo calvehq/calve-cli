@@ -21,7 +21,7 @@ for _ in $(seq 1 150); do
 done
 execution=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])[0])" "$e")
 # 2. Kill the daemon ungracefully.
-kill -9 "$pid"
+kill_pid "$pid"
 wait "$client" 2>/dev/null || true
 # 3. Restart.
 "$CALVE_BIN" --json daemon start >/dev/null
