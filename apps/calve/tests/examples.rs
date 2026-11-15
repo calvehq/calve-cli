@@ -42,16 +42,41 @@ fn run_example(name: &str) {
         .join("../../examples")
         .join(name)
         .join("run.sh");
-    let output = command
+    // Output goes to files and the wait is on the script itself, bounded: a process the script
+    // leaves behind cannot hold the run open, and a hang fails with what the script printed.
+    let logs = tempfile::tempdir().unwrap();
+    let (out, err) = (logs.path().join("stdout"), logs.path().join("stderr"));
+    let mut child = command
         .arg(&root)
         .env("CALVE", env!("CARGO_BIN_EXE_calve"))
-        .output()
+        .stdout(std::fs::File::create(&out).unwrap())
+        .stderr(std::fs::File::create(&err).unwrap())
+        .spawn()
         .expect("run example");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15 * 60);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    let read =
+        |p: &Path| String::from_utf8_lossy(&std::fs::read(p).unwrap_or_default()).into_owned();
     assert!(
-        output.status.success(),
-        "{name} failed\n{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        status.is_some_and(|s| s.success()),
+        "{name} {}\n{}\n{}",
+        if status.is_none() {
+            "did not finish in 15 minutes"
+        } else {
+            "failed"
+        },
+        read(&out),
+        read(&err)
     );
 }
 

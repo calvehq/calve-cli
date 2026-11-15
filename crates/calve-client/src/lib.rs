@@ -220,13 +220,19 @@ impl Client {
                 } else {
                     "calved"
                 });
-                let mut child = std::process::Command::new(exe)
+                let mut command = std::process::Command::new(exe);
+                command
                     .arg("--endpoint")
                     .arg(&endpoint)
                     .stdin(std::process::Stdio::null())
                     .stdout(log.try_clone()?)
-                    .stderr(log)
-                    .spawn()?;
+                    .stderr(log);
+                // Windows: the daemon must not inherit our stdio (it would hold a caller's pipe
+                // open for its whole life).
+                #[cfg(windows)]
+                let mut child = calve_win_sec::with_private_std_handles(|| command.spawn())?;
+                #[cfg(not(windows))]
+                let mut child = command.spawn()?;
                 // A cold start on a slow disk can take seconds; a calved that exits is reported
                 // at once, so the wait only bounds a live but silent daemon.
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);

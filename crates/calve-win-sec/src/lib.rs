@@ -919,6 +919,49 @@ mod handle_fs {
 #[cfg(windows)]
 pub use handle_fs::{flush_dir_handle, rename_by_handle};
 
+#[cfg(windows)]
+mod stdio {
+    #![allow(unsafe_code)]
+
+    /// Runs `spawn` with this process's standard handles marked non-inheritable, then restores
+    /// them. Windows children inherit every inheritable handle, so a daemon started from a pipe
+    /// would otherwise hold the caller's stdout open for as long as it lives.
+    pub fn with_private_std_handles<T>(spawn: impl FnOnce() -> T) -> T {
+        use windows_sys::Win32::Foundation::{
+            GetHandleInformation, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
+        };
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        };
+        let mut cleared = Vec::new();
+        for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            // SAFETY: GetStdHandle takes no pointers; the result is checked before use.
+            let h = unsafe { GetStdHandle(id) };
+            if h.is_null() || h == INVALID_HANDLE_VALUE {
+                continue;
+            }
+            let mut flags = 0u32;
+            // SAFETY: `h` is this process's standard handle; `flags` outlives the call.
+            if unsafe { GetHandleInformation(h, &mut flags) } != 0
+                && flags & HANDLE_FLAG_INHERIT != 0
+            {
+                // SAFETY: as above; only the inherit flag changes.
+                unsafe { SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0) };
+                cleared.push(h);
+            }
+        }
+        let out = spawn();
+        for h in cleared {
+            // SAFETY: restores the flag on the same standard handle.
+            unsafe { SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) };
+        }
+        out
+    }
+}
+
+#[cfg(windows)]
+pub use stdio::with_private_std_handles;
+
 /// Which processes hold files open (Restart Manager; no administrator rights needed): for
 /// diagnosing a refused rename or delete. Directory handles (e.g. a process's working
 /// directory) are not reported.

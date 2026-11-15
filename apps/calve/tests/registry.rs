@@ -78,7 +78,8 @@ async fn copied_identity_is_blocked_until_original_is_relocated() {
     fs::remove_dir_all(&copy).unwrap();
     fs::rename(&original, &copy).unwrap();
     let relocated = registry.relocate(&id, &copy).unwrap();
-    assert_eq!(relocated.path, copy);
+    // Registered paths are canonical (macOS temp dirs live under /private/var).
+    assert_eq!(relocated.path, fs::canonicalize(&copy).unwrap());
 }
 
 #[tokio::test]

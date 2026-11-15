@@ -210,8 +210,13 @@ impl Project {
             ),
             None => None,
         };
+        // Accepted history applies in promotion order (OpenAEVC's event sequence), not in the
+        // order packs were created: a pack created first and promoted second must win.
+        let order = self.promotion_order().await?;
+        let mut packs = self.list_packs().await?;
+        packs.sort_by_key(|s| s["id"].as_str().and_then(|id| order.get(id)).copied());
         let mut state: BTreeMap<(String, String), Value> = BTreeMap::new();
-        for summary in self.list_packs().await? {
+        for summary in packs {
             let Some(id) = summary["id"].as_str() else {
                 continue;
             };
@@ -245,6 +250,32 @@ impl Project {
             }
         }
         Ok(state.into_values().collect())
+    }
+
+    /// Each promoted pack's position in the event log (`changepack.promoted` sequence).
+    async fn promotion_order(&self) -> Result<BTreeMap<String, u64>> {
+        let mut order = BTreeMap::new();
+        let mut after = 0;
+        loop {
+            let page: Vec<openaevc::protocol::Event> = serde_json::from_value(
+                self.client
+                    .query(openaevc::protocol::Query::ListEvents {
+                        after,
+                        limit: Some(1000),
+                        kinds: vec!["changepack.promoted".into()],
+                    })
+                    .await?,
+            )?;
+            let Some(last) = page.last() else {
+                return Ok(order);
+            };
+            after = last.sequence;
+            for e in &page {
+                if let Some(pack) = e.body["pack"].as_str() {
+                    order.insert(pack.to_owned(), e.sequence);
+                }
+            }
+        }
     }
 
     pub async fn general_resource(&self, reference: &str) -> Result<Value> {

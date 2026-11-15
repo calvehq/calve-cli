@@ -14,7 +14,13 @@ echo '{"type":"propose","path":"CHANGELOG.md","content_base64":"Y2hhbmdlbG9nCg==
 echo '{"type":"done","status":"succeeded"}'
 AGENT
 chmod +x "$agent"
-calve provider add fake --kind stdio-agent --executable "$agent" >/dev/null
+# The agent is the provider's program. Windows cannot execute a script directly, so there sh
+# runs it; elsewhere it runs itself (a confined worker may execute and read its own program).
+if [ -n "${WINDIR:-}" ]; then
+  calve provider add fake --kind stdio-agent --executable sh --arg "$agent" >/dev/null
+else
+  calve provider add fake --kind stdio-agent --executable "$agent" >/dev/null
+fi
 expect "provider healthy" "$(calve provider test fake | get '["healthy"]')" "true"
 cfg=$(calve config edit-path --scope project | get '["path"]')
 printf 'format_version = 1\n[harnesses.changelog]\nprovider = "fake"\nmode = "change"\n' > "$cfg"

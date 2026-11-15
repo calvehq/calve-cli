@@ -355,3 +355,49 @@ fn check_plan_approval_is_bound_to_the_resolved_executable() {
     let third = digest_of(&env.fails(&check));
     assert!(third != first && third != second);
 }
+
+/// Accepted declared resources follow promotion order, not creation order: of two packs
+/// setting the same resource, the one promoted last wins even if it was created first.
+#[test]
+fn declared_resources_follow_promotion_order() {
+    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let root = env.path().join("project");
+    let p = root.to_str().unwrap().to_owned();
+    env.ok(&["init", &p]);
+    env.enable_toy(&root);
+    let staged = |text: &str| -> String {
+        let id = env.ok(&["--project", &p, "pack", "create", text])["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let value = format!(r#"note:plan={{"text":"{text}"}}"#);
+        env.ok(&[
+            "--project",
+            &p,
+            "resource",
+            "set",
+            &id,
+            "--generation",
+            "1",
+            "--set",
+            &value,
+        ]);
+        id
+    };
+    let finish = |id: &str| {
+        let g = env.ok(&["--project", &p, "pack", "show", id])["generation"].to_string();
+        for step in ["seal", "qualify", "promote"] {
+            env.ok(&["--project", &p, "pack", step, id, "--generation", &g]);
+        }
+    };
+    let created_first = staged("created first");
+    let created_second = staged("created second");
+    finish(&created_second);
+    finish(&created_first);
+    assert_eq!(
+        env.ok(&["--project", &p, "resource", "show", "note:plan"])["value"]["text"],
+        "created first",
+        "the pack promoted last wins"
+    );
+    let _ = &mut env;
+}
