@@ -1209,6 +1209,13 @@ mod tests {
         create_private_dir(&dir).unwrap();
         std::fs::write(dir.join("f"), b"x").unwrap();
         let sid = user_sid().unwrap();
+        // SDDL text names the built-in Administrator (RID 500, which CI runners use) by its
+        // alias `LA`; the descriptor holds the same SID either way.
+        let sid = if sid.ends_with("-500") {
+            "LA".to_owned()
+        } else {
+            sid
+        };
         let own = security_sddl(&dir).unwrap();
         assert_eq!(
             own,

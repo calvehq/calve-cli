@@ -22,6 +22,9 @@ export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config"
 # Windows do not use the XDG variables, and the guard refuses their real Calve directories.
 if [ -n "${CALVE_TEST_GUARD:-}" ]; then
   export CALVE_TEST_DATA_ROOT="$WORK/data/calve" CALVE_TEST_CONFIG_ROOT="$WORK/config/calve"
+  # Windows clients accept only the calved.exe they expect; the console tests run from cargo's
+  # deps directory, so they are told which one (the calved beside this calve).
+  if [ -n "${WINDIR:-}" ]; then export CALVE_TEST_DAEMON_EXE="${CALVE_BIN%calve.exe}calved.exe"; fi
 fi
 PROJECT="$WORK/project"
 

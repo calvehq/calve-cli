@@ -133,7 +133,14 @@ async fn connect(endpoint: &Path) -> Result<tokio::net::windows::named_pipe::Nam
             Err(e) => return Err(e.into()),
         }
     };
-    let daemon = std::env::current_exe()?.with_file_name("calved.exe");
+    // The daemon beside this executable. Debug test runs (under CALVE_TEST_GUARD) may name it,
+    // for test binaries that do not sit beside calved.exe; the pipe owner is verified either way.
+    let daemon = match std::env::var_os("CALVE_TEST_DAEMON_EXE") {
+        Some(exe) if cfg!(debug_assertions) && std::env::var_os("CALVE_TEST_GUARD").is_some() => {
+            std::path::PathBuf::from(exe)
+        }
+        _ => std::env::current_exe()?.with_file_name("calved.exe"),
+    };
     calve_win_sec::verify_pipe_server(&client, &daemon).map_err(|e| {
         Error::Message(format!(
             "DAEMON_INCOMPATIBLE: refusing the daemon pipe: {e}"

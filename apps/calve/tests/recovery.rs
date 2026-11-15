@@ -58,7 +58,8 @@ fn crash_during_execution_is_reported_lost() {
         .as_str()
         .unwrap()
         .to_owned();
-    daemon_ok(&env, &["daemon", "start"]);
+    // The daemon's pid, as `daemon start` reports it on every platform.
+    let pid = daemon_ok(&env, &["daemon", "start"])["pid"].to_string();
     let mut run = calve_env(
         &env,
         &[
@@ -95,14 +96,13 @@ fn crash_during_execution_is_reported_lost() {
         );
         std::thread::sleep(Duration::from_millis(200));
     };
-    let pid = fs::read_to_string(env.path().join("d/calve/daemon.pid")).unwrap();
-    assert!(
-        Command::new("kill")
-            .args(["-KILL", pid.trim()])
-            .status()
-            .unwrap()
-            .success()
-    );
+    // Killed outright, as a crash would.
+    let killed = if cfg!(windows) {
+        Command::new("taskkill").args(["/F", "/PID", &pid]).status()
+    } else {
+        Command::new("kill").args(["-KILL", &pid]).status()
+    };
+    assert!(killed.unwrap().success());
     let _ = run.wait();
     // Restart and let the lease lapse; OpenAEVC expires it on the next namespace access.
     daemon_ok(&env, &["daemon", "start"]);
