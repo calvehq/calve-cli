@@ -955,6 +955,31 @@ mod tests {
         }
     }
 
+    /// Regression (macOS fell back to non-atomic primitives): each platform's temp filesystem
+    /// (ext4/tmpfs, APFS, NTFS) gets its atomic primitive, and it really swaps and refuses.
+    #[test]
+    fn each_platform_gets_its_atomic_rename_primitives() {
+        let t = tempfile::tempdir().unwrap();
+        let p = primitives(t.path());
+        let expected = if cfg!(target_os = "macos") {
+            "macos-renameatx"
+        } else if cfg!(windows) {
+            "windows-handle-rename"
+        } else {
+            "linux-renameat2"
+        };
+        assert_eq!(p.name(), expected);
+        assert!(p.atomic());
+        let dir = Dir::open_ambient_dir(t.path(), cap_std::ambient_authority()).unwrap();
+        dir.write("a", b"new").unwrap();
+        dir.write("b", b"old").unwrap();
+        let err = p.rename_noreplace(&dir, "a", "b").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        let displaced = p.replace(&dir, "a", "b", "spare").unwrap();
+        assert_eq!(dir.read("b").unwrap(), b"new");
+        assert_eq!(dir.read(displaced).unwrap(), b"old");
+    }
+
     #[test]
     fn create_replace_delete_and_reverse_byte_for_byte() {
         let t = tempfile::tempdir().unwrap();

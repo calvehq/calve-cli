@@ -293,3 +293,49 @@ fn a_project_is_found_by_another_spelling_of_its_path() {
     assert_eq!(by_link["project_id"], by_real["project_id"], "{by_link}");
     let _ = &mut env;
 }
+
+/// Windows: a junction and the 8.3 short name of the Project directory find the same Project,
+/// and responses show the plain drive path, never the internal `\\?\` form.
+#[cfg(windows)]
+#[test]
+fn a_project_is_found_by_another_spelling_of_its_path() {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    let env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_calve"));
+    let real = env.path().join("project-with-a-long-name");
+    let init = env.ok(&["init", real.to_str().unwrap()]);
+    let root = init["root"].as_str().unwrap();
+    assert!(!root.starts_with(r"\\?\"), "{root}");
+    assert_eq!(
+        Path::new(root).canonicalize().unwrap(),
+        real.canonicalize().unwrap()
+    );
+    let link = env.path().join("link");
+    let junction = Command::new("cmd")
+        .arg("/c")
+        .arg("mklink")
+        .arg("/J")
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .unwrap();
+    assert!(junction.status.success(), "{junction:?}");
+    // `%~sI`: the 8.3 spelling Windows itself gives (CI's temp dir is under `RUNNER~1`).
+    let short = Command::new("cmd")
+        .raw_arg(format!(
+            r#"/c for %I in ("{}") do @echo %~sI"#,
+            real.display()
+        ))
+        .output()
+        .unwrap();
+    let short = String::from_utf8(short.stdout).unwrap().trim().to_owned();
+    assert!(
+        short.contains('~'),
+        "8.3 names are disabled on this volume: {short}"
+    );
+    let by_real = env.ok(&["project", "identity", real.to_str().unwrap()]);
+    for other in [link.to_str().unwrap(), short.as_str()] {
+        let by_other = env.ok(&["project", "identity", other]);
+        assert_eq!(by_other["project_id"], by_real["project_id"], "{other}");
+    }
+}

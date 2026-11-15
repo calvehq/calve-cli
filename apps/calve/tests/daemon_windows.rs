@@ -147,3 +147,33 @@ fn a_daemon_from_another_image_path_is_refused() {
     assert!(stderr.contains("refusing the daemon pipe"), "{stderr}");
     eprintln!("refusal: {stderr}");
 }
+
+/// Regression: `calved` inherited the caller's standard handles, so `daemon start` with a piped
+/// stdout (a script, CI, `Command::output`) waited for the daemon to exit.
+#[test]
+fn daemon_start_with_piped_output_returns_while_the_daemon_runs() {
+    let temp = tempfile::tempdir().unwrap();
+    let pipe = unique_pipe();
+    let start = Command::new(bin("calve.exe"))
+        .env("LOCALAPPDATA", temp.path())
+        .args(["--endpoint", &pipe, "--json", "daemon", "start"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    thread::spawn(move || tx.send(start.wait_with_output()));
+    let out = rx.recv_timeout(Duration::from_secs(60));
+    let status = cli(temp.path(), &pipe, &["daemon", "status"]);
+    cli(temp.path(), &pipe, &["daemon", "stop"]);
+    let out = out
+        .expect("daemon start held its output pipe open until the daemon exited")
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(data(&out)["running"], true);
+    assert_eq!(data(&status)["running"], true, "the daemon outlives start");
+}

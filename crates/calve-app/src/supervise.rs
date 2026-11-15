@@ -40,6 +40,10 @@ fn hidden_paths(env: &[(&str, &str)], cwd: &Path) -> Vec<PathBuf> {
         crate::config::default_config_root().ok(),
         crate::registry::runtime_dir().ok(),
         runtime,
+        #[cfg(unix)]
+        crate::paths::socket_dir()
+            .ok()
+            .and_then(|d| d.parent().map(Path::to_path_buf)),
     ]
     .into_iter()
     .flatten()
@@ -236,13 +240,35 @@ mod unix {
         .collect()
     }
 
-    /// The supervisor socket of spawn `id` (32 hex): its last 16, the UUID's random bits. A
-    /// socket path must stay under 104 bytes on macOS (108 on Linux), and there the spawn
-    /// directory is the data root's (no XDG_RUNTIME_DIR). A clash fails the bind, loudly.
-    // shortcut: a data root deeper than ~80 bytes still overflows; move sockets to a short
-    // private directory if that is ever reported.
+    /// The supervisor socket of spawn `id` (32 hex): its last 16, the UUID's random bits, in
+    /// [`crate::paths::socket_dir`]. A clash fails the bind, loudly.
     fn socket_name(id: &str) -> String {
         format!("{}.sock", &id[id.len().saturating_sub(16)..])
+    }
+
+    /// Removes a supervisor socket when the spawn that bound it ends, however it ends.
+    struct Unlink(PathBuf);
+
+    impl Drop for Unlink {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    /// A helper connects within 30 s, so a socket older than 10 minutes is a leftover of a
+    /// supervisor that died before cleaning up.
+    fn sweep_stale_sockets(dir: &Path) {
+        let stale = |e: &std::fs::DirEntry| {
+            e.path().extension().is_some_and(|x| x == "sock")
+                && e.metadata()
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|t| t.elapsed().is_ok_and(|age| age > Duration::from_secs(600)))
+        };
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if stale(&e) {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
     }
 
     fn kill_group(pgid: i32) {
@@ -302,13 +328,17 @@ mod unix {
         }
         let dir = spawn_dir()?;
         let id = uuid::Uuid::now_v7().simple().to_string();
-        let sock = dir.join(socket_name(&id));
+        let sockets = crate::paths::socket_dir()?;
+        sweep_stale_sockets(&sockets);
+        let sock = sockets.join(socket_name(&id));
         let listener = UnixListener::bind(&sock).map_err(|e| {
             coded(
                 "CONTAINMENT_UNAVAILABLE",
                 format!("supervisor socket {}: {e}", sock.display()),
             )
         })?;
+        // Removed on every way out of here; the helper needs it only to connect.
+        let _unlink = Unlink(sock.clone());
         listener.set_nonblocking(true)?;
         let exe = crate::sandbox::sandbox_program()
             .map_err(|e| coded("CONTAINMENT_UNAVAILABLE", format!("{e:?}")))?;
@@ -317,6 +347,7 @@ mod unix {
             .arg(std::process::id().to_string())
             .arg(&dir)
             .arg(&id)
+            .arg(&sock)
             .arg(limit_arg(limits))
             .arg(
                 json!({"required": confinement_required(limits), "hide": hidden_paths(env, cwd)})
@@ -566,7 +597,7 @@ mod unix {
     /// The helper. Returns its exit code only on set-up failure; otherwise it ends by killing
     /// its own group.
     pub fn helper(args: &[String]) -> i32 {
-        let [parent, dir, id, limits, confine, dashdash, argv @ ..] = args else {
+        let [parent, dir, id, sock, limits, confine, dashdash, argv @ ..] = args else {
             eprintln!("calve helper: invalid arguments");
             return 2;
         };
@@ -596,18 +627,17 @@ mod unix {
             std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
             o.open(dir.join(format!("{id}.result")))
         };
-        let (mut fallback, mut conn) =
-            match (fallback, UnixStream::connect(dir.join(socket_name(id)))) {
-                (Ok(f), Ok(c)) => (f, c),
-                (f, c) => {
-                    eprintln!(
-                        "calve helper: result file: {}; supervisor socket: {}",
-                        f.map_or_else(|e| e.to_string(), |_| "ok".into()),
-                        c.map_or_else(|e| e.to_string(), |_| "ok".into())
-                    );
-                    return 4;
-                }
-            };
+        let (mut fallback, mut conn) = match (fallback, UnixStream::connect(sock)) {
+            (Ok(f), Ok(c)) => (f, c),
+            (f, c) => {
+                eprintln!(
+                    "calve helper: result file: {}; supervisor socket: {}",
+                    f.map_or_else(|e| e.to_string(), |_| "ok".into()),
+                    c.map_or_else(|e| e.to_string(), |_| "ok".into())
+                );
+                return 4;
+            }
+        };
         // A user namespace needs a single thread (none has started yet), and entering one
         // clears the parent-death signal set below.
         #[cfg(target_os = "linux")]

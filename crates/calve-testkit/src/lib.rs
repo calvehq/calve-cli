@@ -102,9 +102,17 @@ pub struct Run {
 impl Env {
     /// `calve` is the binary under test, normally `env!("CARGO_BIN_EXE_calve")`.
     pub fn new(calve: &str) -> Self {
+        // Cross-built Windows tests carry Linux paths in `CARGO_BIN_EXE_*`; a native run points
+        // `CALVE_WIN_BIN` at the directory holding the executables (as `daemon_windows` does).
+        let calve = match std::env::var_os("CALVE_WIN_BIN") {
+            Some(dir) if cfg!(windows) => {
+                PathBuf::from(dir).join(Path::new(calve).file_name().expect("binary name"))
+            }
+            _ => PathBuf::from(calve),
+        };
         Self {
             temp: tempfile::tempdir().expect("temp dir"),
-            calve: PathBuf::from(calve),
+            calve,
             catalog: None,
             vars: vec![],
         }

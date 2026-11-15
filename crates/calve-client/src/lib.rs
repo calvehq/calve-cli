@@ -147,6 +147,24 @@ impl Client {
     /// Sends one request. Supervised work (executions) starts `calved` first so the worker
     /// outlives this process, unless the caller opted out (PLAN §11.4).
     pub async fn send(&self, request: Request) -> Result<(Response, Backend)> {
+        let (mut response, backend) = self.send_raw(request).await?;
+        // The presentation boundary of the CLI and the console: Windows verbatim paths stay
+        // inside Calve, people see readable ones.
+        if cfg!(windows) {
+            match &mut response.outcome {
+                Outcome::Ok { value } => calve_app::paths::present(value),
+                Outcome::Error { error } => {
+                    error.message = calve_app::paths::present_text(&error.message);
+                    if let Some(detail) = &mut error.detail {
+                        calve_app::paths::present(detail);
+                    }
+                }
+            }
+        }
+        Ok((response, backend))
+    }
+
+    async fn send_raw(&self, request: Request) -> Result<(Response, Backend)> {
         if self.options.direct {
             return Ok((calve_app::app::execute(request).await, Backend::Embedded));
         }

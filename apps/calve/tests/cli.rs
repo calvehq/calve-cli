@@ -475,9 +475,11 @@ fn cli_workflow() {
     let root_path = temp.path().join("project");
     let root = root_path.to_str().unwrap();
     let init = calve(&["init", root, "--name", "CLI fixture"]);
-    // The root is reported canonical (macOS /private/var, a Windows long name), as registered.
+    // The root is reported canonical (macOS /private/var, a Windows long name), as registered,
+    // and shown readably (no Windows `\\?\` prefix where it names the same directory).
     let canonical = std::fs::canonicalize(&root_path).unwrap();
-    assert_eq!(init["root"], canonical.to_str().unwrap());
+    let shown = calve_app::paths::readable(canonical.to_str().unwrap()).into_owned();
+    assert_eq!(init["root"], shown);
     let version = calve(&["version"]);
     assert_eq!(version["openaevc_tag"], "v0.1.0");
     assert_eq!(

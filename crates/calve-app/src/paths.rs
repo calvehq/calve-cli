@@ -125,6 +125,129 @@ fn resolved(path: &Path) -> PathBuf {
     }
 }
 
+/// A path as people read it. Windows canonical paths are verbatim (`\\?\C:\x`,
+/// `\\?\UNC\server\share\x`); Calve keeps them so internally, and shows `C:\x` or
+/// `\\server\share\x` instead when that names the same file: under 260 characters, no device
+/// name (`CON`, `NUL`, `COM1`…) and no component ending in a dot or a space, all of which only
+/// the verbatim form preserves. Anything else, and every non-verbatim string, is unchanged.
+pub fn readable(path: &str) -> std::borrow::Cow<'_, str> {
+    let simpler = if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\")
+        && rest.as_bytes().get(1) == Some(&b':')
+        && rest.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+    {
+        rest.to_owned()
+    } else {
+        return path.into();
+    };
+    let device = |c: &str| {
+        let stem = c
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .trim_end()
+            .to_ascii_uppercase();
+        matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || (stem.len() == 4
+                && (stem.starts_with("COM") || stem.starts_with("LPT"))
+                && stem.as_bytes()[3].is_ascii_digit())
+    };
+    let safe = simpler.len() < 260
+        && !simpler.contains('/')
+        && simpler
+            .split('\\')
+            .skip_while(|c| c.is_empty() || c.ends_with(':'))
+            .all(|c| !device(c) && !c.ends_with('.') && !c.ends_with(' '));
+    if safe { simpler.into() } else { path.into() }
+}
+
+/// Makes every path in a response readable ([`readable`]): whole path values, and verbatim
+/// prefixes inside messages (text for people, never parsed).
+pub fn present(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(s) => {
+            if let std::borrow::Cow::Owned(simpler) = readable(s) {
+                *s = simpler;
+            } else if s.contains(r"\\?\") {
+                *s = present_text(s);
+            }
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(present),
+        serde_json::Value::Object(fields) => fields.values_mut().for_each(present),
+        _ => {}
+    }
+}
+
+/// Message text: verbatim prefixes dropped where a drive or UNC path follows.
+pub fn present_text(text: &str) -> String {
+    let unc = text.replace(r"\\?\UNC\", r"\\");
+    let mut out = String::with_capacity(unc.len());
+    let mut rest = unc.as_str();
+    while let Some(i) = rest.find(r"\\?\") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 4..];
+        let drive = after.as_bytes().get(1) == Some(&b':')
+            && after
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic);
+        if !drive {
+            out.push_str(r"\\?\");
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Where supervisor sockets are bound: a short, private, per-user directory, so a socket path
+/// stays under the platform limit (104 bytes on macOS, 108 on Linux) however deep the data root
+/// is. `$XDG_RUNTIME_DIR` where there is one, else `/tmp`; then `calve-<uid>/<data root key>/`,
+/// each created owner-only and refused (fail closed) unless it is a real directory of this user
+/// that nobody else can enter, so a directory planted in a shared `/tmp` is never used.
+#[cfg(unix)]
+pub fn socket_dir() -> Result<PathBuf> {
+    let base = match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+        Some(run) if run.is_absolute() && run.is_dir() => run,
+        _ => PathBuf::from("/tmp"),
+    };
+    let uid = rustix::process::getuid().as_raw();
+    let user = private_dir(&base.join(format!("calve-{uid}")), uid)?;
+    let key = crate::journal::sha256_hex(data_root()?.to_string_lossy().as_bytes());
+    private_dir(&user.join(&key[..12]), uid)
+}
+
+#[cfg(unix)]
+fn private_dir(path: &Path, uid: u32) -> Result<PathBuf> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    let unusable = |why: String| {
+        crate::coded(
+            "CONTAINMENT_UNAVAILABLE",
+            format!("supervisor socket directory {}: {why}", path.display()),
+        )
+    };
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(unusable(e.to_string())),
+    }
+    let m = std::fs::symlink_metadata(path).map_err(|e| unusable(e.to_string()))?;
+    if m.file_type().is_symlink() || !m.is_dir() {
+        return Err(unusable("not a directory".into()));
+    }
+    if m.uid() != uid {
+        return Err(unusable(format!("owned by uid {}, not {uid}", m.uid())));
+    }
+    if m.mode() & 0o077 != 0 {
+        return Err(unusable(format!(
+            "mode {:o} lets others in",
+            m.mode() & 0o777
+        )));
+    }
+    Ok(path.to_path_buf())
+}
+
 /// The platform's own data directory for Calve (never a test override).
 pub fn native_data_root() -> Result<PathBuf> {
     #[cfg(target_os = "macos")]
@@ -280,6 +403,96 @@ mod guard_tests {
         assert_eq!(
             super::native_config_root().unwrap(),
             known("ApplicationData").join("Calve")
+        );
+    }
+
+    /// The socket directory is used only when it is a real, owner-only directory of this user.
+    #[cfg(unix)]
+    #[test]
+    fn a_socket_directory_must_be_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let uid = rustix::process::getuid().as_raw();
+        let fresh = t.path().join("fresh");
+        super::private_dir(&fresh, uid).unwrap();
+        let mode = std::fs::metadata(&fresh).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+        super::private_dir(&fresh, uid).expect("an existing private directory is reused");
+        let open = t.path().join("open");
+        std::fs::create_dir(&open).unwrap();
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            super::private_dir(&open, uid).is_err(),
+            "group/other access"
+        );
+        let link = t.path().join("link");
+        std::os::unix::fs::symlink(&fresh, &link).unwrap();
+        assert!(
+            super::private_dir(&link, uid).is_err(),
+            "a symlink, even to a good directory"
+        );
+        let file = t.path().join("file");
+        std::fs::write(&file, "").unwrap();
+        assert!(super::private_dir(&file, uid).is_err(), "not a directory");
+        assert!(
+            super::private_dir(&fresh, uid + 1).is_err(),
+            "another user's"
+        );
+    }
+
+    /// Readable Windows paths: drive and UNC forms lose the verbatim prefix only where the
+    /// result names the same file; long, device-named and dot/space-ended paths keep it.
+    #[test]
+    fn verbatim_paths_are_shown_readably_only_when_equivalent() {
+        use super::readable;
+        assert_eq!(readable(r"\\?\C:\Users\me\proj"), r"C:\Users\me\proj");
+        assert_eq!(
+            readable(r"\\?\UNC\server\share\proj"),
+            r"\\server\share\proj"
+        );
+        let long = format!(r"\\?\C:\{}", "a\\".repeat(140));
+        assert_eq!(
+            readable(&long),
+            long,
+            "260 characters or more: verbatim only"
+        );
+        for kept in [
+            r"\\?\C:\proj\CON",
+            r"\\?\C:\proj\nul.txt",
+            r"\\?\C:\proj\COM1",
+            r"\\?\C:\proj\name.",
+            r"\\?\C:\proj\name ",
+            r"\\?\Volume{0b1c2d3e}\proj",
+            r"\\?\GLOBALROOT\Device\x",
+        ] {
+            assert_eq!(readable(kept), kept);
+        }
+        for unchanged in [
+            r"C:\already",
+            r"\\server\share",
+            "/home/u/proj",
+            "plain text",
+        ] {
+            assert_eq!(readable(unchanged), unchanged);
+        }
+        // COM10 and LPT is not a device name.
+        assert_eq!(readable(r"\\?\C:\COM10\LPT"), r"C:\COM10\LPT");
+    }
+
+    #[test]
+    fn responses_show_readable_paths_everywhere() {
+        let mut v = serde_json::json!({
+            "root": r"\\?\C:\Users\me\proj",
+            "items": [r"\\?\UNC\srv\share\p", 7, null],
+            "message": r"unknown registered project \\?\C:\a\b; also \\?\UNC\s\x and \\?\Volume{1}\y",
+        });
+        super::present(&mut v);
+        assert_eq!(v["root"], r"C:\Users\me\proj");
+        assert_eq!(v["items"][0], r"\\srv\share\p");
+        assert_eq!(v["items"][1], 7);
+        assert_eq!(
+            v["message"],
+            r"unknown registered project C:\a\b; also \\s\x and \\?\Volume{1}\y"
         );
     }
 }
