@@ -203,17 +203,21 @@ pub fn present_text(text: &str) -> String {
 
 /// Where supervisor sockets are bound: a short, private, per-user directory, so a socket path
 /// stays under the platform limit (104 bytes on macOS, 108 on Linux) however deep the data root
-/// is. `$XDG_RUNTIME_DIR` where there is one, else `/tmp`; then `calve-<uid>/<data root key>/`,
-/// each created owner-only and refused (fail closed) unless it is a real directory of this user
-/// that nobody else can enter, so a directory planted in a shared `/tmp` is never used.
+/// is. `$XDG_RUNTIME_DIR` where there is one and a socket path under it fits, else `/tmp`; then
+/// `calve-<uid>/<data root key>/`, each created owner-only and refused (fail closed) unless it
+/// is a real directory of this user that nobody else can enter, so a directory planted in a
+/// shared `/tmp` is never used.
 #[cfg(unix)]
 pub fn socket_dir() -> Result<PathBuf> {
-    let base = match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
-        Some(run) if run.is_absolute() && run.is_dir() => run,
-        _ => PathBuf::from("/tmp"),
-    };
     let uid = rustix::process::getuid().as_raw();
-    let user = private_dir(&base.join(format!("calve-{uid}")), uid)?;
+    let user_dir = |base: &Path| base.join(format!("calve-{uid}"));
+    // `<user>/<12 hex>/<16 hex>.sock` must fit macOS's 104-byte `sun_path`, NUL included.
+    let fits = |user: &Path| user.as_os_str().len() + 1 + 12 + 1 + 21 < 104;
+    let user = match std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+        Some(run) if run.is_absolute() && run.is_dir() && fits(&user_dir(&run)) => user_dir(&run),
+        _ => user_dir(Path::new("/tmp")),
+    };
+    let user = private_dir(&user, uid)?;
     let key = crate::journal::sha256_hex(data_root()?.to_string_lossy().as_bytes());
     private_dir(&user.join(&key[..12]), uid)
 }

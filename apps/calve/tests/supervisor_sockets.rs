@@ -11,9 +11,20 @@ use std::time::{Duration, SystemTime};
 use calve_app::supervise::{Supervised, Termination};
 use calve_testkit::Isolated;
 
-/// Runs `name` in a child of this test binary with a data root `depth` bytes deep, and with a
-/// runtime directory of its own unless `runtime` is false (as on macOS, where there is none).
-fn isolated(name: &str, depth: usize, runtime: bool) -> bool {
+/// Where the child's `XDG_RUNTIME_DIR` points.
+#[derive(Clone, Copy)]
+enum Runtime {
+    /// None, as on macOS.
+    Unset,
+    /// A directory of its own (on macOS under the long `$TMPDIR`, so it may not fit).
+    Own,
+    /// One too deep for any socket path: Calve must fall back to `/tmp`.
+    TooDeep,
+}
+
+/// Runs `name` in a child of this test binary with a data root `depth` bytes deep and the given
+/// runtime directory.
+fn isolated(name: &str, depth: usize, runtime: Runtime) -> bool {
     let t = tempfile::tempdir().unwrap();
     let mut data = t.path().join("data");
     while data.as_os_str().len() < depth {
@@ -25,12 +36,19 @@ fn isolated(name: &str, depth: usize, runtime: bool) -> bool {
         .isolated(&data, t.path().join("config"))
         .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
         .env("WORK", t.path());
-    if runtime {
-        let run = t.path().join("run");
-        std::fs::create_dir(&run).unwrap();
-        cmd.env("XDG_RUNTIME_DIR", &run);
-    } else {
-        cmd.env_remove("XDG_RUNTIME_DIR");
+    match runtime {
+        Runtime::Unset => {
+            cmd.env_remove("XDG_RUNTIME_DIR");
+        }
+        Runtime::Own | Runtime::TooDeep => {
+            let mut run = t.path().join("run");
+            if matches!(runtime, Runtime::TooDeep) {
+                run.push("x".repeat(110));
+                cmd.env("EXPECT_TMP", "1");
+            }
+            std::fs::create_dir_all(&run).unwrap();
+            cmd.env("XDG_RUNTIME_DIR", &run);
+        }
     }
     cmd.status().unwrap().success()
 }
@@ -73,19 +91,19 @@ fn a_worker_starts_under_a_deep_data_root() {
         let dir = calve_app::paths::socket_dir().unwrap();
         // The longest socket path: the directory and a 16-hex name with ".sock".
         assert!(dir.as_os_str().len() + 1 + 21 < 104, "{}", dir.display());
+        if std::env::var_os("EXPECT_TMP").is_some() {
+            assert!(dir.starts_with("/tmp"), "{}", dir.display());
+        }
         run_ok("exit 0");
         return;
     }
-    assert!(isolated(
-        "a_worker_starts_under_a_deep_data_root",
-        300,
-        true
-    ));
-    assert!(isolated(
-        "a_worker_starts_under_a_deep_data_root",
-        300,
-        false
-    ));
+    for runtime in [Runtime::Own, Runtime::Unset, Runtime::TooDeep] {
+        assert!(isolated(
+            "a_worker_starts_under_a_deep_data_root",
+            300,
+            runtime
+        ));
+    }
 }
 
 #[test]
@@ -103,7 +121,7 @@ fn concurrent_spawns_get_their_own_sockets_and_leave_none() {
     assert!(isolated(
         "concurrent_spawns_get_their_own_sockets_and_leave_none",
         0,
-        true
+        Runtime::Own
     ));
 }
 
@@ -134,6 +152,6 @@ fn sockets_a_dead_supervisor_left_are_swept() {
     assert!(isolated(
         "sockets_a_dead_supervisor_left_are_swept",
         0,
-        true
+        Runtime::Own
     ));
 }
