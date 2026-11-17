@@ -349,7 +349,7 @@ name = "calve-app"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
- "base64 0.22.1",
+ "base64 0.23.1",
  "calve-api",
  "calve-integration-contract",
  "calve-testkit",
@@ -403,7 +403,7 @@ dependencies = [
 name = "calve-console"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "calve-api",
  "calve-client",
  "clap",
@@ -3754,7 +3754,7 @@ dependencies = [
 name = "xtask"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "calve-api",
  "calve-app",
  "clap",
