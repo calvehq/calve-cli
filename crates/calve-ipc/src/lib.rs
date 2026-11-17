@@ -135,11 +135,15 @@ async fn connect(endpoint: &Path) -> Result<tokio::net::windows::named_pipe::Nam
     };
     // The daemon beside this executable. Debug test runs (under CALVE_TEST_GUARD) may name it,
     // for test binaries that do not sit beside calved.exe; the pipe owner is verified either way.
-    let daemon = match std::env::var_os("CALVE_TEST_DAEMON_EXE") {
-        Some(exe) if cfg!(debug_assertions) && std::env::var_os("CALVE_TEST_GUARD").is_some() => {
-            std::path::PathBuf::from(exe)
-        }
-        _ => std::env::current_exe()?.with_file_name("calved.exe"),
+    // Compiled out of release builds: xtask dist refuses a binary that names a test hook.
+    #[cfg(debug_assertions)]
+    let test_daemon = std::env::var_os("CALVE_TEST_GUARD")
+        .and_then(|_| std::env::var_os("CALVE_TEST_DAEMON_EXE"));
+    #[cfg(not(debug_assertions))]
+    let test_daemon: Option<std::ffi::OsString> = None;
+    let daemon = match test_daemon {
+        Some(exe) => std::path::PathBuf::from(exe),
+        None => std::env::current_exe()?.with_file_name("calved.exe"),
     };
     calve_win_sec::verify_pipe_server(&client, &daemon).map_err(|e| {
         Error::Message(format!(
