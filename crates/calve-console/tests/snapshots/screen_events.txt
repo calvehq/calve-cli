@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Events   ● healthy                                                                      v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Events ───────────────────────────────────────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││Time      Actor          Event                                            Object          █││execution.finished                         │
+│  Overview        5 ││00:35:20Z pri_…lnzq6eeeu execution.finished                               exe_…2sfes5ou4  █││calve:38                                   │
+│  Intents           ││00:35:20Z pri_…lnzq6eeeu execution.failed                                 exe_…2sfes5ou4  █││                                           │
+│  Work              ││00:35:20Z pri_…lnzq6eeeu observation.appended                             exe_…2sfes5ou4  █││Time        1m ago · 2026-10-29 00:35:20   │
+│  Change Graph      ││00:35:20Z pri_…lnzq6eeeu execution.heartbeat                              exe_…2sfes5ou4  █││UTC                                        │
+│  ChangePacks       ││00:35:14Z pri_…lnzq6eeeu execution.heartbeat                              exe_…2sfes5ou4  █││Actor       pri_agqykfh2bj3htd7lklnzq6eeeu │
+│  Baselines         ││00:35:14Z pri_…lnzq6eeeu execution.running                                exe_…2sfes5ou4  █││Source      calve                          │
+│  Resources         ││00:35:14Z pri_…lnzq6eeeu execution.starting                               exe_…2sfes5ou4  █││                                           │
+│  Evidence          ││00:35:14Z pri_…lnzq6eeeu execution.admitted                               exe_…2sfes5ou4  █││Objects                                    │
+│› Events            ││00:35:14Z pri_…lnzq6eeeu object.imported                                  sha256:…4b9ec4  █││  → exe_agqykfiyxv5qrdbj22sfes5ou4         │
+│  Authority         ││00:35:14Z pri_…lnzq6eeeu workunit.added                                   cpk_…bo4xbjbpu  █││Detail      FAILED                         │
+│                    ││00:35:14Z pri_…lnzq6eeeu provider.registered                              org.cal….shell  █││                                           │
+│ SYSTEM             ││00:35:14Z pri_…lnzq6eeeu pack.created                                     cpk_…bo4xbjbpu  █││Raw                                        │
+│  Projects          ││00:35:14Z pri_…lnzq6eeeu changepack.created                               cpk_…bo4xbjbpu  █││{                                          │
+│  Inbox           2 ││00:35:14Z pri_…lnzq6eeeu changepack.quarantined                           cpk_…wnokrbreu  █││  "actor":                                 │
+│  Providers         ││00:35:14Z pri_…lnzq6eeeu pack.created                                     cpk_…wnokrbreu  █││"pri_agqykfh2bj3htd7lklnzq6eeeu",          │
+│  Doctor            ││00:35:14Z pri_…lnzq6eeeu changepack.created                               cpk_…wnokrbreu  │││  "body": null,                            │
+│  Extensions        ││00:35:14Z pri_…lnzq6eeeu file.captured                                    rules.txt       │││  "detail": "FAILED",                      │
+│  Settings          ││00:35:14Z pri_…lnzq6eeeu execution.succeeded                              exe_…ppisqlhvy  │││  "id": "calve:38",                        │
+│                    ││00:35:14Z pri_…lnzq6eeeu observation.appended                             exe_…ppisqlhvy  │││  "kind": "execution.finished",            │
+│                    ││00:35:14Z pri_…lnzq6eeeu observation.appended                             exe_…ppisqlhvy  │││  "namespace_id":                          │
+│                    ││00:35:14Z pri_…lnzq6eeeu effect.applied                                   exe_…ppisqlhvy  │││"ns_agqykfh2bj4trjpcrp54g2z47i",           │
+│                    ││00:35:14Z pri_…lnzq6eeeu execution.heartbeat                              exe_…ppisqlhvy  │││  "project_id":                            │
+│                    ││00:35:14Z pri_…lnzq6eeeu execution.running                                exe_…ppisqlhvy  │││"prj_01a18514-fa0c-7738-8217-144cfdf6d9b6",│
+│                    ││00:35:14Z pri_…lnzq6eeeu execution.starting                               exe_…ppisqlhvy  │││  "source": "calve",                       │
+│                    ││00:35:14Z pri_…lnzq6eeeu execution.admitted                               exe_…ppisqlhvy  │││  "source_event_id": "38",                 │
+│                    ││00:35:14Z pri_…lnzq6eeeu workunit.added                                   cpk_…npkrzexje  │││  "source_sequence": 38,                   │
+│                    ││00:35:14Z pri_…lnzq6eeeu provider.registered                              org.cal….local  │││  "subject":                               │
+│                    ││00:35:13Z pri_…lnzq6eeeu pack.created                                     cpk_…npkrzexje  │││"exe_agqykfiyxv5qrdbj22sfes5ou4",          │
+│                    ││00:35:13Z pri_…lnzq6eeeu changepack.created                               cpk_…npkrzexje  │││  "subjects": [                            │
+│                    ││00:35:13Z pri_…lnzq6eeeu task.pack.linked                                 tsk_…43ccc188f  │││    "exe_agqykfiyxv5qrdbj22sfes5ou4"       │
+│                    ││00:35:13Z pri_…lnzq6eeeu review.recorded                                  cpk_…k4tzmcxqu  │││  ],                                       │
+│                    ││00:35:13Z pri_…lnzq6eeeu evidence.registered                              cpk_…k4tzmcxqu  │││  "summary": "execution.finished           │
+│                    ││00:35:13Z pri_…lnzq6eeeu changepack.sealed                                cpk_…k4tzmcxqu  │││exe_agqykfiyxv5qrdbj22sfes5ou4",           │
+│                    ││00:35:13Z pri_…lnzq6eeeu file.captured                                    crates/…mon.rs  │││  "timestamp":                             │
+│                    ││00:35:13Z pri_…lnzq6eeeu execution.succeeded                              exe_…e2rgymoiu  │││"2026-10-29T00:35:20.857117004Z"           │
+│                    ││00:35:13Z pri_…lnzq6eeeu observation.appended                             exe_…e2rgymoiu  │││}                                          │
+│                    ││00:35:13Z pri_…lnzq6eeeu observation.appended                             exe_…e2rgymoiu  │││                                           │
+│                    ││00:35:13Z pri_…lnzq6eeeu effect.applied                                   exe_…e2rgymoiu  │││Actions                                    │
+│                    ││00:35:13Z pri_…lnzq6eeeu execution.heartbeat                              exe_…e2rgymoiu  │││  Open object                              │
+│                    ││00:35:13Z pri_…lnzq6eeeu execution.running                                exe_…e2rgymo1/100││  a all actions                            │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ paused · f follow  ↑↓ navigate  / filter actor: type: object: after:  f live  ^P commands  : command  ? help

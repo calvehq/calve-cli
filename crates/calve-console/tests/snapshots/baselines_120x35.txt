@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  Baselines   ● healthy                           v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Baselines ───────────────────────────────────────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ID               Label                 Packs  State               ││Baseline                    │
+│  Overview        5 ││bsl_…xbszifs2i   staging               1      ✓ VALID     active  ││bsl_…rnhbjixbszifs2i        │
+│  Intents           ││                                                                  ││staging                     │
+│  Work              ││                                                                  ││                            │
+│  Change Graph      ││                                                                  ││Validation  ✓ VALID         │
+│  ChangePacks       ││                                                                  ││Members     1               │
+│› Baselines       1 ││                                                                  ││Heads       1               │
+│  Resources         ││                                                                  ││Active      yes             │
+│  Evidence          ││                                                                  ││                            │
+│  Events            ││                                                                  ││Actions                     │
+│  Authority         ││                                                                  ││  Activate                  │
+│                    ││                                                                  ││  Validate                  │
+│ SYSTEM             ││                                                                  ││  Plan materialization      │
+│  Projects          ││                                                                  ││  Set alias                 │
+│  Inbox           2 ││                                                                  ││  Graph                     │
+│  Providers         ││                                                                  ││  Compare with…             │
+│  Doctor            ││                                                                  ││  a all actions             │
+│  Extensions        ││                                                                  ││                            │
+│  Settings          ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││                            │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help

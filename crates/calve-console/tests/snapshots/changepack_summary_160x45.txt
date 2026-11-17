@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfiycb375huv2wnokrbreu   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfiycb375huv2wnokrbreu ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
+│  Overview        5 ││                                                                                           ││cpk_…ycb375huv2wnokrbreu                   │
+│  Intents           ││cpk_…b375huv2wnokrbreu · Experimental transport   ! QUARANTINED                            ││Experimental transport                     │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││Changes                                                                                    ││State       ! QUARANTINED                  │
+│› ChangePacks     6 ││  0 files   +0 -0                                                                          ││Risk        not evaluated                  │
+│  Baselines         ││                                                                                           ││Generation  1                              │
+│  Resources         ││! Quarantined: security review pending                                                     ││Created     1m ago · 2026-10-29 00:35:14   │
+│  Evidence          ││                                                                                           ││UTC by pri_…d7lklnzq6eeeu                  │
+│  Events            ││                                                                                           ││Changed     0 files  +0 -0                 │
+│  Authority         ││                                                                                           ││Evidence    0                              │
+│                    ││                                                                                           ││                                           │
+│ SYSTEM             ││                                                                                           ││! Promote: pack is quarantined             │
+│  Projects          ││                                                                                           ││x explain                                  │
+│  Inbox           2 ││                                                                                           ││                                           │
+│  Providers         ││                                                                                           ││Actions                                    │
+│  Doctor            ││                                                                                           ││  Release quarantine                       │
+│  Extensions        ││                                                                                           ││  a all actions                            │
+│  Settings          ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                           ┌──────────────┐│
+│                    ││                                                                                           ││                           │ ○ Refreshing ││
+│                    ││                                                                                           ││                           └──────────────┘│
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

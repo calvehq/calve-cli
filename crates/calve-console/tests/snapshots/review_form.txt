@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ───────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events ›││ Summary  Relations         │
+│  Overview        5 ││                                                                  ││Eligibility  Raw  [ ]       │
+│  Intents           ││Review      ◆ WAITING                                             ││cpk_…hmr5jvoqyrbvmvpg3ea    │
+│  Work              ││Required    yes, by pack policy                                   ││Add remote conformance      │
+│  Change Graph      ││ ┌ Review ──────────────────────────────────────────────────────────────┐r                      │
+│› ChangePacks       ││D│Decision                                                              │                       │
+│  Baselines         ││N│  (•) Approve                                                         │       ◆ SEALED        │
+│  Resources         ││ │  ( ) Reject                                                          │       ✓ ALLOW         │
+│  Evidence          ││E│  ( ) Comment                                                         │ation  2               │
+│  Events            ││✓│                                                                      │ed     1m ago ·        │
+│  Authority         ││✓│Comment                                                               │10-29 00:35:10 UTC by  │
+│                    ││×│>                                                                     │d7lklnzq6eeeu          │
+│ SYSTEM             ││ │                                                                      │ed     2 files  +7 -2  │
+│  Projects          ││r│Evidence on this candidate                                            │s      1/1             │
+│  Inbox           2 ││ │  none                                                                │nce    0               │
+│  Providers         ││ │Policy still needs: approved review                                   │w      ◆ WAITING       │
+│  Doctor            ││ │                                                                      │                       │
+│  Extensions        ││ │Binds to generation 2 of cpk_…jvoqyrbvmvpg3ea                         │t                      │
+│  Settings          ││ │tab field  ↑↓/space choose  ctrl+enter submit  esc cancel             │conformance            │
+│                    ││ └──────────────────────────────────────────────────────────────────────┘                       │
+│                    ││                                                                  ││! Promote: missing: approved│
+│                    ││                                                                  ││review                      │
+│                    ││                                                                  ││x explain                   │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Actions                     │
+│                    ││                                                                  ││  Run snapshot verification │
+│                    ││                                                                  ││  Run language checks       │
+│                    ││                                                                  ││  Evaluate change size      │
+│                    ││                                                                  ││  Approve                   │
+│                    ││                                                                  ││  Reject                    │
+│                    ││                                                                  ││  Refresh qualification     │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ r review  x explain  a actions  tab tabs  ^P commands  : command  ? help

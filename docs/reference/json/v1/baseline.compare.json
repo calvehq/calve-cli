@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv baseline compare --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "left": {
+        "type": "string"
+      },
+      "left_graph_digest": {
+        "type": "string"
+      },
+      "left_heads": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "left_missing_objects": {
+        "type": "array",
+        "items": {}
+      },
+      "only_left_edges": {
+        "type": "array",
+        "items": {}
+      },
+      "only_left_members": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "only_right_edges": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "relation": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "kind",
+            "to"
+          ]
+        }
+      },
+      "only_right_members": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "right": {
+        "type": "string"
+      },
+      "right_graph_digest": {
+        "type": "string"
+      },
+      "right_heads": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "right_missing_objects": {
+        "type": "array",
+        "items": {}
+      },
+      "shared_edges": {
+        "type": "array",
+        "items": {}
+      },
+      "shared_members": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "resources": {
+        "type": "object",
+        "properties": {
+          "different": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "left": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "right": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "left",
+                "path",
+                "right"
+              ]
+            }
+          },
+          "only_left": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest",
+                "path"
+              ]
+            }
+          },
+          "only_right": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "digest": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "digest",
+                "path"
+              ]
+            }
+          },
+          "same": {
+            "type": "integer"
+          },
+          "unordered_overlaps": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              },
+              "right": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "left",
+              "right"
+            ]
+          }
+        },
+        "required": [
+          "different",
+          "only_left",
+          "only_right",
+          "same",
+          "unordered_overlaps"
+        ]
+      },
+      "revisions": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "array",
+            "items": {}
+          },
+          "right": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "relation": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "target_present": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "relation",
+                "revision",
+                "target",
+                "target_present"
+              ]
+            }
+          }
+        },
+        "required": [
+          "left",
+          "right"
+        ]
+      }
+    },
+    "required": [
+      "left",
+      "left_graph_digest",
+      "left_heads",
+      "left_missing_objects",
+      "only_left_edges",
+      "only_left_members",
+      "only_right_edges",
+      "only_right_members",
+      "right",
+      "right_graph_digest",
+      "right_heads",
+      "right_missing_objects",
+      "shared_edges",
+      "shared_members"
+    ]
+  }
+}

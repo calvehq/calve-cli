@@ -1,0 +1,73 @@
+[workspace]
+resolver = "3"
+members = ["apps/calve", "crates/*", "xtask"]
+default-members = ["apps/calve", "crates/*"]
+exclude = ["crates/calve-testkit/guests"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "Apache-2.0"
+repository = "https://github.com/calvehq/calve-cli"
+
+[workspace.dependencies]
+calve-api = { path = "crates/calve-api" }
+calve-app = { path = "crates/calve-app" }
+calve-client = { path = "crates/calve-client" }
+calve-console = { path = "crates/calve-console" }
+calve-ipc = { path = "crates/calve-ipc" }
+calve-testkit = { path = "crates/calve-testkit" }
+calve-win-sec = { path = "crates/calve-win-sec" }
+openaevc = { git = "https://github.com/calvehq/openaevc.git", tag = "v0.1.0", version = "=0.1.0", default-features = false }
+openaevc-sdk = { git = "https://github.com/calvehq/openaevc.git", tag = "v0.1.0", version = "=0.1.0", default-features = false }
+calve-integration-contract = { path = "crates/calve-integration-contract" }
+base64 = "0.22"
+aho-corasick = "1.1"
+zeroize = "1.8"
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
+ed25519-dalek = "2"
+flate2 = "1"
+getrandom = "0.2"
+ratatui = "0.30"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+schemars = "1.2"
+serde_json = "1"
+similar = "2"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time"] }
+toml = "0.8"
+unicode-width = "0.2"
+uuid = { version = "1", features = ["v7", "serde"] }
+wasmi = "=2.0.0"
+wasmi_core = "=2.0.0"
+wasmparser = "0.261"
+wat = "1.262"
+sha2 = "0.10"
+landlock = "0.4"
+nix = { version = "0.31", default-features = false, features = ["sched", "mount"] }
+cap-std = "3.4"
+cap-fs-ext = "3.4"
+rustix = { version = "1", features = ["fs", "process", "net"] }
+signal-hook = "0.3"
+proptest = "1.11"
+# TUF verifier (ADR 0007, G1-TUF): exact pin; any bump reruns conformance x3 + regression tests.
+sigstore-tuf = { version = "=0.15.0", default-features = false, features = ["aws-lc-rs"] }
+ureq = "3.4"
+futures-executor = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+jiff = "0.2"
+aws-lc-rs = "1.18"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# Hashing dominates extension install and handshake time; keep it fast in dev and test builds.
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.curve25519-dalek]
+opt-level = 3

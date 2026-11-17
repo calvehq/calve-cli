@@ -1,0 +1,30 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy
+┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ─────────────────┐┌ Inspector ─────────────────────────┐
+│ Summary  Diff  Verify  Risk  Evidence  Review  Receipts ›  ││Verification summary                │
+│                                                            ││                                    │
+│Check                       Status           Output         ││✓ All checks passed                 │
+│Verify                      ✓ PASS           no findings    ││1 / 1 checks                        │
+│                                                            ││Last run    1m ago · 2026-10-29     │
+│                                                            ││00:35:12 UTC                        │
+│                                                            ││                                    │
+│                                                            ││Verify                              │
+│                                                            ││Status      ✓ PASS                  │
+│                                                            ││enter details                       │
+│                                                            ││                                    │
+│                                                            ││Actions                             │
+│                                                            ││  Run snapshot verification         │
+│                                                            ││  Run language checks               │
+│                                                            ││  Evaluate change size              │
+│                                                            ││  Approve                           │
+│                                                            ││  Reject                            │
+│                                                            ││  Refresh qualification             │
+│                                                            ││  a all actions                     │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+│                                                            ││                                    │
+└────────────────────────────────────────────────────────────┘└────────────────────────────────────┘
+ ↑↓ select  enter details  r rerun  e evidence  ^P commands  : command  ? help

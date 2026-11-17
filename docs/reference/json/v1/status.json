@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv status --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Status",
+    "description": "`clv status` (§17.5): a derived read model, never a second authority.",
+    "type": "object",
+    "properties": {
+      "project": {
+        "description": "Project identity (`project_id`, `namespace_id`, …) and `name`."
+      },
+      "active_baseline": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ActiveBaseline"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "packs": {
+        "$ref": "#/$defs/StatusPacks"
+      },
+      "tasks": {
+        "$ref": "#/$defs/StatusTasks"
+      },
+      "active_executions": {
+        "description": "OpenAEVC executions that are PENDING, ADMITTED, STARTING or RUNNING.",
+        "type": "array",
+        "items": true
+      },
+      "uncaptured_changes": {
+        "description": "A count, or `{\"error\"}` when no file domain is enabled."
+      },
+      "blockers": {
+        "$ref": "#/$defs/StatusBlockers"
+      },
+      "recovery": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/AttentionRef"
+        }
+      },
+      "attention_items": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      },
+      "extension_problems": {
+        "type": "array",
+        "items": true
+      },
+      "provider_problems": {
+        "type": "array",
+        "items": true
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "project",
+      "packs",
+      "tasks",
+      "active_executions",
+      "uncaptured_changes",
+      "blockers",
+      "recovery",
+      "attention_items",
+      "extension_problems",
+      "provider_problems"
+    ],
+    "$defs": {
+      "ActiveBaseline": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "aliases"
+        ]
+      },
+      "StatusPacks": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "description": "Exact counts.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "sealed": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "qualified": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "items": {
+            "description": "By lowercase state (`open`, `sealed`, `qualified`): the most recently updated packs,\nat most `items_limit` per state (`pack list --after/--limit` pages through all of them).",
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StatusPack"
+              }
+            }
+          },
+          "items_limit": {
+            "description": "The per-state bound on `items`.",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "open",
+          "sealed",
+          "qualified",
+          "items",
+          "items_limit"
+        ]
+      },
+      "StatusPack": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "superseding": {
+            "description": "A pending supersession of this pack (§12)."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "generation"
+        ]
+      },
+      "StatusTasks": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "blocked": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "attention": {
+            "description": "Blocked or inconsistent tasks, as `task list` shows them.",
+            "type": "array",
+            "items": true
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "total",
+          "blocked",
+          "attention"
+        ]
+      },
+      "StatusBlockers": {
+        "type": "object",
+        "properties": {
+          "verification": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AttentionRef"
+            }
+          },
+          "review": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AttentionRef"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "verification",
+          "review"
+        ]
+      },
+      "AttentionRef": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "pack": {
+            "description": "The pack or operation the item is about.",
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "pack",
+          "summary",
+          "source_key"
+        ]
+      }
+    }
+  }
+}

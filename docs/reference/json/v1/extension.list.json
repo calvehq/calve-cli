@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv extension list --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "granted_host_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "manifest": {
+          "type": "string"
+        },
+        "unsupported_host_capabilities": {
+          "type": "array",
+          "items": {}
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active",
+        "granted_host_capabilities",
+        "id",
+        "manifest",
+        "unsupported_host_capabilities",
+        "version"
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv recover apply --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "applied": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "reason"
+          ]
+        }
+      },
+      "owner": {
+        "type": "string"
+      },
+      "reconciled": {
+        "type": "object",
+        "properties": {
+          "active_items": {
+            "type": "integer"
+          },
+          "at": {
+            "type": "integer"
+          },
+          "baselines_reindexed": {
+            "type": "integer"
+          },
+          "rebuilt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "active_items",
+          "at",
+          "baselines_reindexed",
+          "rebuilt"
+        ]
+      },
+      "restored": {
+        "type": "object",
+        "properties": {
+          "previous_kept_as": {
+            "type": "string"
+          },
+          "restored": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_kept_as",
+          "restored"
+        ]
+      },
+      "lost": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "rebuilt": {
+        "type": "object",
+        "properties": {
+          "active_items": {
+            "type": "integer"
+          },
+          "at": {
+            "type": "integer"
+          },
+          "baselines_reindexed": {
+            "type": "integer"
+          },
+          "rebuilt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "active_items",
+          "at",
+          "baselines_reindexed",
+          "rebuilt"
+        ]
+      }
+    },
+    "required": []
+  }
+}

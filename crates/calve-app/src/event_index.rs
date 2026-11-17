@@ -1,0 +1,364 @@
+//! Index over the OpenAEVC protocol journal (M6, PLAN §55): which events have which kind,
+//! time, actor and severity, and which IDs they reference. Maintained incrementally from its own
+//! checkpoint, so readers never rescan the journal; it only narrows the candidates. Every
+//! caller fetches the candidate events from OpenAEVC and applies its original predicate to
+//! them, so results are exactly what a full scan returns (the journal stays the authority).
+//!
+//! `event_refs` holds each event's subjects and every ID-shaped string value in its body
+//! (`exe_…`, `cpk_…`, `ns_…`, `sha256:…` digests): a lookup by an ID-shaped reference
+//! therefore finds every event whose subjects or body contain it. A reference that is not ID-shaped is never looked up here;
+//! its callers fall back to the full scan.
+use std::collections::BTreeSet;
+
+use futures_util::{StreamExt as _, TryStreamExt as _};
+use openaevc::protocol::{Event, Query};
+use openaevc_sdk::OpenAevcClient as _;
+use rusqlite::{OptionalExtension, params};
+use serde_json::Value;
+
+use crate::{Project, Result, invalid};
+
+pub(crate) const SCHEMA: &str = "
+    CREATE TABLE IF NOT EXISTS event_index (
+      seq INTEGER PRIMARY KEY, kind TEXT NOT NULL, ts_ns INTEGER NOT NULL,
+      actor TEXT, severity TEXT
+    );
+    CREATE INDEX IF NOT EXISTS event_index_kind ON event_index(kind, seq);
+    CREATE INDEX IF NOT EXISTS event_index_kind_time ON event_index(kind, ts_ns, seq);
+    CREATE INDEX IF NOT EXISTS event_index_time ON event_index(ts_ns);
+    CREATE INDEX IF NOT EXISTS event_index_actor ON event_index(actor, seq);
+    CREATE TABLE IF NOT EXISTS event_refs (
+      ref TEXT NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(ref, seq)
+    ) WITHOUT ROWID;";
+
+/// The index's checkpoint; a new name rebuilds the index when what it records changes.
+pub(crate) const CHECKPOINT: &str = "events.v2";
+
+/// An OpenAEVC-style ID (a 2–4 letter lowercase prefix, `_`, then 20–40 `[a-z0-9]`) or a
+/// `sha256:` content digest.
+pub(crate) fn id_shaped(s: &str) -> bool {
+    if let Some(hex) = s.strip_prefix("sha256:") {
+        return hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    }
+    let Some((prefix, rest)) = s.split_once('_') else {
+        return false;
+    };
+    (2..=4).contains(&prefix.len())
+        && prefix.bytes().all(|b| b.is_ascii_lowercase())
+        && (20..=40).contains(&rest.len())
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+}
+
+fn collect_refs(value: &Value, out: &mut BTreeSet<String>) {
+    match value {
+        Value::String(s) if id_shaped(s) => {
+            out.insert(s.clone());
+        }
+        Value::Array(items) => items.iter().for_each(|v| collect_refs(v, out)),
+        Value::Object(fields) => fields.values().for_each(|v| collect_refs(v, out)),
+        _ => {}
+    }
+}
+
+/// Necessary conditions of an activity filter, as SQL over `event_index` (and `event_refs`).
+#[derive(Default)]
+pub(crate) struct Candidates<'a> {
+    pub kind: Option<&'a str>,
+    pub kind_prefix: Option<&'a str>,
+    pub actor: Option<&'a str>,
+    pub severity: Option<&'a str>,
+    pub since_ns: Option<i128>,
+    pub until_ns: Option<i128>,
+    /// Every one must be referenced (ID-shaped references only).
+    pub refs: Vec<&'a str>,
+}
+
+impl Project {
+    /// Brings the index up to date with the journal (only events after its checkpoint).
+    pub(crate) async fn refresh_event_index(&self) -> Result<()> {
+        let checkpoint: Option<u64> = self
+            .db
+            .query_row(
+                "SELECT sequence FROM projection_checkpoints WHERE name=?1",
+                [CHECKPOINT],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if checkpoint.is_none() {
+            // First build under this checkpoint: rows of an older index version are dropped.
+            self.db.execute_batch(
+                "DELETE FROM event_index; DELETE FROM event_refs;
+                 DELETE FROM projection_checkpoints WHERE name='events';",
+            )?;
+        }
+        let checkpoint = checkpoint.unwrap_or(0);
+        // Collected first and written after the scan: no transaction stays open across an await
+        // (the daemon's requests share this connection on one thread).
+        struct Row {
+            seq: u64,
+            kind: String,
+            ts: i64,
+            actor: Option<String>,
+            severity: Option<String>,
+            refs: BTreeSet<String>,
+        }
+        let mut rows: Vec<Row> = Vec::new();
+        self.scan_protocol_events(checkpoint, |event| {
+            let mut refs: BTreeSet<String> = event.subjects.iter().cloned().collect();
+            collect_refs(&event.body, &mut refs);
+            rows.push(Row {
+                seq: event.sequence,
+                ts: i64::try_from(event.timestamp.unix_nanos()).unwrap_or(i64::MAX),
+                actor: event.actor.map(|a| a.to_string()),
+                severity: event.body["severity"].as_str().map(str::to_owned),
+                kind: event.kind,
+                refs,
+            });
+            Ok(())
+        })
+        .await?;
+        let Some(head) = rows.last().map(|r| r.seq) else {
+            return Ok(());
+        };
+        let tx = self.db.unchecked_transaction()?;
+        for r in rows {
+            tx.execute(
+                "INSERT OR REPLACE INTO event_index VALUES (?1,?2,?3,?4,?5)",
+                params![r.seq, r.kind, r.ts, r.actor, r.severity],
+            )?;
+            for x in r.refs {
+                tx.execute(
+                    "INSERT OR IGNORE INTO event_refs VALUES (?1,?2)",
+                    params![x, r.seq],
+                )?;
+            }
+        }
+        tx.execute(
+            "INSERT INTO projection_checkpoints VALUES (?1,?2)
+             ON CONFLICT(name) DO UPDATE SET sequence=excluded.sequence",
+            params![CHECKPOINT, head],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The events with these sequence numbers, in sequence order (consecutive runs fetched in
+    /// one query each).
+    pub(crate) async fn events_by_seq(&self, mut seqs: Vec<u64>) -> Result<Vec<Event>> {
+        seqs.sort_unstable();
+        seqs.dedup();
+        let wanted: BTreeSet<u64> = seqs.iter().copied().collect();
+        // Consecutive runs, one query each; runs read concurrently, results in sequence order.
+        let mut runs: Vec<(u64, u64)> = Vec::new();
+        let mut i = 0;
+        while i < seqs.len() {
+            let start = seqs[i];
+            let mut end = start;
+            while i + 1 < seqs.len() && seqs[i + 1] == end + 1 && end + 1 - start < 1000 {
+                i += 1;
+                end += 1;
+            }
+            i += 1;
+            runs.push((start, end));
+        }
+        let pages: Vec<Value> = futures_util::stream::iter(runs)
+            .map(|(start, end)| {
+                self.client.query(Query::ListEvents {
+                    after: start - 1,
+                    limit: Some(u32::try_from(end - start + 1).unwrap_or(1000)),
+                    kinds: vec![],
+                })
+            })
+            .buffered(crate::READ_BATCH)
+            .try_collect()
+            .await?;
+        let mut out = Vec::with_capacity(seqs.len());
+        for page in pages {
+            let page: Vec<Event> = serde_json::from_value(page)?;
+            out.extend(page.into_iter().filter(|e| wanted.contains(&e.sequence)));
+        }
+        if out.len() != wanted.len() {
+            return Err(invalid("OpenAEVC journal is missing indexed events"));
+        }
+        Ok(out)
+    }
+
+    /// Every event whose subjects or body contain `id`, in sequence order, or `None` when `id`
+    /// is not ID-shaped (callers then scan the journal).
+    pub(crate) async fn events_referencing(&self, id: &str) -> Result<Option<Vec<Event>>> {
+        if !id_shaped(id) {
+            return Ok(None);
+        }
+        self.refresh_event_index().await?;
+        let seqs: Vec<u64> = {
+            let mut q = self
+                .db
+                .prepare("SELECT seq FROM event_refs WHERE ref=?1 ORDER BY seq")?;
+            q.query_map([id], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        Ok(Some(self.events_by_seq(seqs).await?))
+    }
+
+    /// Events of this kind that reference `id`, in sequence order (an indexed lookup).
+    pub(crate) async fn events_of_kind_referencing(
+        &self,
+        kind: &str,
+        id: &str,
+    ) -> Result<Vec<Event>> {
+        self.refresh_event_index().await?;
+        let seqs: Vec<u64> = {
+            let mut q = self.db.prepare(
+                "SELECT e.seq FROM event_refs r JOIN event_index e ON e.seq=r.seq
+                 WHERE r.ref=?1 AND e.kind=?2 ORDER BY e.seq",
+            )?;
+            q.query_map([id, kind], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        self.events_by_seq(seqs).await
+    }
+
+    /// Every event of exactly this kind, in sequence order.
+    pub(crate) async fn events_of_kind(&self, kind: &str) -> Result<Vec<Event>> {
+        self.refresh_event_index().await?;
+        let seqs: Vec<u64> = {
+            let mut q = self
+                .db
+                .prepare("SELECT seq FROM event_index WHERE kind=?1 ORDER BY seq")?;
+            q.query_map([kind], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        self.events_by_seq(seqs).await
+    }
+
+    /// Candidate events for an activity filter in (timestamp, sequence) descending order —
+    /// the order activity rows are ranked in, so a caller can stop exactly — in pages of
+    /// `page`. `before` (the last event's timestamp and sequence) continues after a page.
+    pub(crate) async fn candidate_events(
+        &self,
+        c: &Candidates<'_>,
+        before: Option<(i64, u64)>,
+        page: u32,
+    ) -> Result<Vec<Event>> {
+        // A reference pins the candidates: start from its rows, not from every event in time
+        // order, so the cost follows that object's events and not the journal (M7).
+        let mut args: Vec<rusqlite::types::Value> = Vec::new();
+        let mut sql = match c.refs.first() {
+            Some(first) => {
+                args.push((*first).to_owned().into());
+                String::from(
+                    "SELECT e.seq FROM event_refs r0 CROSS JOIN event_index e ON e.seq = r0.seq
+                     WHERE r0.ref = ?1",
+                )
+            }
+            None => String::from("SELECT e.seq FROM event_index e WHERE 1=1"),
+        };
+        if let Some((ts, seq)) = before {
+            args.push(ts.into());
+            args.push((seq as i64).into());
+            let (t, s) = (args.len() - 1, args.len());
+            sql.push_str(&format!(
+                " AND (e.ts_ns < ?{t} OR (e.ts_ns = ?{t} AND e.seq < ?{s}))"
+            ));
+        }
+        let mut push = |cond: &str, v: rusqlite::types::Value, sql: &mut String| {
+            args.push(v);
+            sql.push_str(&format!(
+                " AND {}",
+                cond.replace('?', &format!("?{}", args.len()))
+            ));
+        };
+        if let Some(k) = c.kind {
+            push("e.kind = ?", k.to_owned().into(), &mut sql);
+        }
+        if let Some(p) = c.kind_prefix {
+            // `kind.split('.').next() == p`: the kind itself or `p.` followed by anything.
+            push(
+                "(e.kind = ? OR substr(e.kind, 1, length(?) + 1) = ? || '.')",
+                p.to_owned().into(),
+                &mut sql,
+            );
+        }
+        if let Some(a) = c.actor {
+            push("e.actor = ?", a.to_owned().into(), &mut sql);
+        }
+        if let Some(s) = c.severity {
+            push("e.severity = ?", s.to_owned().into(), &mut sql);
+        }
+        if let Some(t) = c.since_ns {
+            push(
+                "e.ts_ns >= ?",
+                (i64::try_from(t).unwrap_or(i64::MIN)).into(),
+                &mut sql,
+            );
+        }
+        if let Some(t) = c.until_ns {
+            push(
+                "e.ts_ns <= ?",
+                (i64::try_from(t).unwrap_or(i64::MAX)).into(),
+                &mut sql,
+            );
+        }
+        for r in c.refs.iter().skip(1) {
+            push(
+                "EXISTS (SELECT 1 FROM event_refs x WHERE x.ref = ? AND x.seq = e.seq)",
+                (*r).to_owned().into(),
+                &mut sql,
+            );
+        }
+        args.push(i64::from(page).into());
+        sql.push_str(&format!(
+            " ORDER BY e.ts_ns DESC, e.seq DESC LIMIT ?{}",
+            args.len()
+        ));
+        let seqs: Vec<u64> = {
+            let mut q = self.db.prepare(&sql)?;
+            q.query_map(rusqlite::params_from_iter(args.iter()), |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        let mut events = self.events_by_seq(seqs).await?;
+        events.sort_by(|a, b| {
+            b.timestamp
+                .unix_nanos()
+                .cmp(&a.timestamp.unix_nanos())
+                .then(b.sequence.cmp(&a.sequence))
+        });
+        Ok(events)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn id_shape() {
+        assert!(id_shaped("exe_agqxvuw4mb3cxmvpsfwtsgoqbe"));
+        assert!(id_shaped("ns_agqxvuwlrzz4xmf3nn4szev7am"));
+        assert!(!id_shaped("EXE_agqxvuw4mb3cxmvpsfwtsgoqbe"));
+        assert!(!id_shaped("exe_short"));
+        assert!(!id_shaped("a_agqxvuw4mb3cxmvpsfwtsgoqbe"));
+        assert!(!id_shaped("exe_agqx-uw4mb3cxmvpsfwtsgoqbe"));
+        assert!(id_shaped(&format!("sha256:{}", "ab".repeat(32))));
+        assert!(!id_shaped(&format!("sha256:{}", "AB".repeat(32))));
+        assert!(!id_shaped("sha256:abc"));
+    }
+
+    #[test]
+    fn refs_cover_every_string_value() {
+        let mut out = BTreeSet::new();
+        let body = serde_json::json!({"a": "exe_agqxvuw4mb3cxmvpsfwtsgoqbe",
+            "b": [{"c": "cpk_agqxvuw4mb3cxmvpsfwtsgoqbe"}], "exe_agqxvuw4mb3cxmvpsfwtsgoqbf": 1,
+            "d": "not an id"});
+        collect_refs(&body, &mut out);
+        assert_eq!(
+            out.into_iter().collect::<Vec<_>>(),
+            [
+                "cpk_agqxvuw4mb3cxmvpsfwtsgoqbe",
+                "exe_agqxvuw4mb3cxmvpsfwtsgoqbe"
+            ]
+        );
+    }
+}

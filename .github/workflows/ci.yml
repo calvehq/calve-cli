@@ -1,0 +1,133 @@
+name: CI
+
+# Regular CI runs for every pull request and for pushes to master only: not for feature-branch
+# pushes, tags (release.yml owns those) or schedules. `pull_request` (never `pull_request_target`)
+# runs fork PRs with a read-only token and no secrets.
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Actions are pinned to commits (tag in the comment).
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # The workspace links dozens of large test executables: full debuginfo ran the Linux runner
+      # out of disk. Line tables keep file:line backtraces; incremental state is useless in CI.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; worker confinement
+      # needs them, so this ephemeral runner allows them and the tests run confinement as
+      # required (fail-closed), not downgraded.
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # OpenAEVC v0.1.0 is fetched from its public tag over HTTPS: no SSH key or secret (ADR 0003).
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo fmt --all --check
+        if: runner.os == 'Linux'
+      - run: cargo run --locked -p xtask -- check-architecture
+      - run: cargo test --locked -p xtask
+      - run: cargo run --locked -p xtask -- check-isolation
+      - run: cargo run --locked -p xtask -- cli-reference --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      # Windows integration tests share named resources; one at a time (M4/M5 isolation notes).
+      - run: cargo test --locked --workspace --no-fail-fast -- --test-threads 1
+        if: runner.os == 'Windows'
+      - name: Disk before tests
+        if: runner.os == 'Linux'
+        run: df -h . && du -sh target
+      - run: cargo test --locked --workspace --no-fail-fast
+        if: runner.os != 'Windows'
+      - name: Disk after tests
+        if: always() && runner.os == 'Linux'
+        run: df -h . && du -sh target
+
+  surface:
+    # The JSON schemas and acceptance scenarios that need no first-party catalog, on the
+    # toolchain's reference platform, with worker confinement required (see the rust job).
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo run --locked -p xtask -- json-schemas
+      # A and B need the first-party catalog, which CI does not build; the release chain runs `all`.
+      - run: cargo run --locked -p xtask -- acceptance --scenario local --report acceptance.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: acceptance
+          path: acceptance.json
+
+  reproducible:
+    # Two builds at different paths must give identical archives.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: a
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: b-longer-path
+      - run: |
+          rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
+          for side in a b-longer-path; do
+            (cd "$side" && SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" cargo run --locked -q -p xtask -- dist)
+          done
+          diff <(cd a/target/dist && sha256sum * | sort) <(cd b-longer-path/target/dist && sha256sum * | sort)
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          # The pinned toolchain, installed explicitly (rust-toolchain.toml would otherwise make
+          # the container install it implicitly through an override).
+          rust-version: "1.95.0"
+          command: check advisories bans licenses sources
+
+  licenses:
+    # The release gate itself: every shipped dependency, per release target.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: |
+          for t in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-apple-darwin \
+                   aarch64-apple-darwin x86_64-pc-windows-msvc; do
+            cargo run --locked -q -p xtask -- licenses --target "$t"
+          done
+
+  links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: --no-progress --exclude-path target "./**/*.md"
+          fail: true

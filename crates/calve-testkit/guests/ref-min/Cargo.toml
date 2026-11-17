@@ -1,0 +1,9 @@
+[package]
+name = "cic-ref-min"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "cic-ref-min: independent CIC guest, no_std, zero dependencies (own JSON scanner, own SHA-256)."
+
+[lib]
+crate-type = ["cdylib"]

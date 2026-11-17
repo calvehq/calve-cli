@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv harness show --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "builtin": {
+        "type": "boolean"
+      },
+      "description": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "mode": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "definition": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mode": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "mode",
+          "provider"
+        ]
+      }
+    },
+    "required": [
+      "builtin",
+      "id"
+    ]
+  }
+}

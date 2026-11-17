@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea   ● healthy                                   v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ ChangePack cpk_agqykfihmr5jvoqyrbvmvpg3ea ────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Diff  Verify  Risk  Evidence  Review  Receipts  Events  Raw                      ││ Summary  Relations  Eligibility  Raw  [ ] │
+│  Overview        5 ││                                                                                           ││cpk_…hmr5jvoqyrbvmvpg3ea                   │
+│  Intents           ││cpk_…r5jvoqyrbvmvpg3ea · Add remote conformance runner   ◆ SEALED                          ││Add remote conformance runner              │
+│  Work              ││                                                                                           ││                                           │
+│  Change Graph      ││Intent                                                                                     ││State       ◆ SEALED                       │
+│› ChangePacks       ││  HTTP conformance                                                                         ││Risk        ✓ ALLOW                        │
+│  Baselines         ││  Validate OpenAEVC conformance over a remote HTTP transport.                              ││Generation  2                              │
+│  Resources         ││                     ┌ Actions · cpk_…jvoqyrbvmvpg3ea ──────────────────────────────────────┐Created     1m ago · 2026-10-29 00:35:10   │
+│  Evidence          ││Changes              │Actions                                                               │UTC by pri_…d7lklnzq6eeeu                  │
+│  Events            ││  2 files   +7 -2    │  Run snapshot verification       key v                               │Changed     2 files  +7 -2                 │
+│  Authority         ││                     │  Run language checks             key c                               │Checks      1/1                            │
+│                    ││Verification         │  Evaluate change size            key e                               │Evidence    0                              │
+│ SYSTEM             ││  ✓ Verify           │  Approve                         key r                               │Review      ◆ WAITING                      │
+│  Projects          ││                     │  Reject                          key R                               │                                           │
+│  Inbox           2 ││Risk                 │  Refresh qualification           key q                               │Intent                                     │
+│  Providers         ││✓ Change size  ALLOW │  Reopen (new generation)         key o                               │HTTP conformance                           │
+│  Doctor            ││                     │  Abandon                         key A                               │                                           │
+│  Extensions        ││                     │  Quarantine                      key Q                               │! Promote: missing: approved review        │
+│  Settings          ││                     │Unavailable                                                           │x explain                                  │
+│                    ││                     │  Promote                         missing: approved review            │                                           │
+│                    ││                     │                                                                      │Actions                                    │
+│                    ││                     │↑↓ select  enter run  type to filter  esc close                       │  Run snapshot verification                │
+│                    ││                     └──────────────────────────────────────────────────────────────────────┘  Run language checks                      │
+│                    ││                                                                                           ││  Evaluate change size                     │
+│                    ││                                                                                           ││  Approve                                  │
+│                    ││                                                                                           ││  Reject                                   │
+│                    ││                                                                                           ││  Refresh qualification                    │
+│                    ││                                                                                           ││  a all actions                            │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ tab tabs  a actions  x explain  esc back  ^P commands  : command  ? help

@@ -1,0 +1,25 @@
+[package]
+name = "calve-testkit"
+description = "Test helpers shared by Calve integration tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+openaevc.workspace = true
+aws-lc-rs.workspace = true
+jiff.workspace = true
+sha2.workspace = true
+calve-integration-contract.workspace = true
+serde.workspace = true
+wasmi.workspace = true
+wasmi_core.workspace = true
+wasmparser.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true

@@ -1,0 +1,315 @@
+//! Helpers shared by Calve's integration tests: isolated data directories and a CLI runner.
+#![forbid(unsafe_code)]
+
+pub mod cic;
+pub mod mini_host;
+pub mod tuf;
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use serde_json::Value;
+
+/// The `calve.refs/1` document of the toy fixture extension (its SHA-256 is the native
+/// manifest's `schemas["calve.refs/1"]`; the fixture package ships it as `calve-refs.json`).
+pub const TOY_REFS: &str = r#"{"kinds":{"org.example.toy.delete":[{"edge":"ContentHash","pointer":"/previous_digest"}],"org.example.toy.note.remove":[],"org.example.toy.note.set":[],"org.example.toy.put":[{"edge":"ContentHash","pointer":"/digest"}],"org.example.toy.put-chunked":[{"edge":"ContentHash","pointer":"/digest"},{"edge":"ObjectRef","pointer":"/chunks/*/blob_digest"},{"edge":"ContentHash","pointer":"/chunks/*/digest"}]},"schema":"calve.refs/1"}"#;
+
+/// The `data` of a `--json` success envelope (`{"api_version","command","data"}`) on `stdout`;
+/// `Null` when stdout is not one.
+pub fn json_data(stdout: &[u8]) -> Value {
+    serde_json::from_slice::<Value>(stdout)
+        .ok()
+        .and_then(|v| v.get("data").cloned())
+        .unwrap_or(Value::Null)
+}
+
+/// Points a spawned `clv`, `calved` or re-executed test at isolated roots on every platform:
+/// data in `<data_home>/calve`, configuration in `<config_home>/calve`. They go through Calve's
+/// test-only overrides (`calve_app::paths`), which debug builds honour under `CALVE_TEST_GUARD`
+/// (set for every test by `.cargo/config.toml`); the XDG variables too, for code that reads them.
+pub fn isolate<'c>(cmd: &'c mut Command, data_home: &Path, config_home: &Path) -> &'c mut Command {
+    cmd.env("XDG_DATA_HOME", data_home)
+        .env("XDG_CONFIG_HOME", config_home)
+        .env("CALVE_TEST_DATA_ROOT", data_home.join("calve"))
+        .env("CALVE_TEST_CONFIG_ROOT", config_home.join("calve"))
+}
+
+/// [`isolate`] in a `Command` builder chain.
+pub trait Isolated {
+    fn isolated(&mut self, data_home: impl AsRef<Path>, config_home: impl AsRef<Path>)
+    -> &mut Self;
+}
+
+impl Isolated for Command {
+    fn isolated(
+        &mut self,
+        data_home: impl AsRef<Path>,
+        config_home: impl AsRef<Path>,
+    ) -> &mut Self {
+        isolate(self, data_home.as_ref(), config_home.as_ref())
+    }
+}
+
+/// A temporary machine: private data/config homes plus a scratch area for Projects.
+pub struct Env {
+    pub temp: tempfile::TempDir,
+    pub calve: PathBuf,
+    /// The signed fixture catalog trusted by [`Env::trust_fixture`].
+    pub catalog: Option<tuf::Repo>,
+    /// Extra environment for every `clv` run (e.g. a test `PATH`).
+    pub vars: Vec<(String, std::ffi::OsString)>,
+}
+
+/// Makes every entry under `root` writable so a temp dir holding installed packages (read-only
+/// by design, at immutable digest paths) can be removed; otherwise each test leaks them.
+pub fn make_writable(root: &Path) {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for path in entries.flatten().map(|e| e.path()) {
+            let Ok(md) = std::fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if md.is_symlink() {
+                continue;
+            }
+            let mut perm = md.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
+            perm.set_readonly(false);
+            let _ = std::fs::set_permissions(&path, perm);
+            if md.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+}
+
+impl Drop for Env {
+    fn drop(&mut self) {
+        make_writable(self.temp.path());
+    }
+}
+
+pub struct Run {
+    pub success: bool,
+    pub value: Value,
+    pub stderr: String,
+}
+
+impl Env {
+    /// `calve` is the path of the binary under test, normally `env!("CARGO_BIN_EXE_clv")`.
+    pub fn new(calve: &str) -> Self {
+        // Cross-built Windows tests carry Linux paths in `CARGO_BIN_EXE_*`; a native run points
+        // `CALVE_WIN_BIN` at the directory holding the executables (as `daemon_windows` does).
+        let calve = match std::env::var_os("CALVE_WIN_BIN") {
+            Some(dir) if cfg!(windows) => {
+                PathBuf::from(dir).join(Path::new(calve).file_name().expect("binary name"))
+            }
+            _ => PathBuf::from(calve),
+        };
+        Self {
+            temp: tempfile::tempdir().expect("temp dir"),
+            calve,
+            catalog: None,
+            vars: vec![],
+        }
+    }
+
+    /// Publishes the fixture catalog (package `org.example.toy`: `calve-fixture-ext` + the
+    /// fixture CIC guest + its signed metadata, listed in `index.json`) and trusts it as `test`
+    /// through the real CLI (root pinned by SHA-256).
+    pub fn trust_fixture(&mut self) -> Value {
+        let cat = ToyCatalog::new();
+        let out = self.ok(&cat
+            .add_args()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>());
+        self.catalog = Some(cat.repo);
+        out
+    }
+
+    /// Trusts the fixture catalog (once) and enables `org.example.toy` in `project`.
+    pub fn enable_toy(&mut self, project: &Path) -> Value {
+        if self.catalog.is_none() {
+            self.trust_fixture();
+        }
+        self.ok(&[
+            "--project",
+            project.to_str().expect("utf-8"),
+            "extension",
+            "enable",
+            "org.example.toy",
+            "--acknowledge-native",
+        ])
+    }
+
+    pub fn path(&self) -> &Path {
+        self.temp.path()
+    }
+
+    /// Runs `clv --json --no-daemon-start <args>` without asserting success.
+    pub fn run(&self, args: &[&str]) -> Run {
+        let mut command = Command::new(&self.calve);
+        isolate(&mut command, &self.path().join("d"), &self.path().join("c"));
+        let output = command
+            .envs(self.vars.iter().map(|(k, v)| (k, v)))
+            .args(["--json", "--no-daemon-start"])
+            .args(args)
+            .output()
+            .expect("run clv");
+        Run {
+            success: output.status.success(),
+            value: json_data(&output.stdout),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    }
+
+    /// Runs and asserts success, returning the JSON output.
+    pub fn ok(&self, args: &[&str]) -> Value {
+        let run = self.run(args);
+        assert!(run.success, "{args:?}: {}", run.stderr);
+        run.value
+    }
+
+    /// Runs and asserts failure, returning stderr.
+    pub fn fails(&self, args: &[&str]) -> String {
+        let run = self.run(args);
+        assert!(
+            !run.success,
+            "{args:?} unexpectedly succeeded: {}",
+            run.value
+        );
+        run.stderr
+    }
+}
+
+pub fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir(to).expect("create copy root");
+    for item in fs::read_dir(from).expect("read source") {
+        let item = item.expect("dir entry");
+        let target = to.join(item.file_name());
+        if item.file_type().expect("file type").is_dir() {
+            copy_tree(&item.path(), &target);
+        } else {
+            fs::copy(item.path(), &target).expect("copy file");
+        }
+    }
+}
+
+/// Path of the fixture native extension (`calve-fixture-ext`), built on first use with the
+/// test's own profile. `CALVE_FIXTURE_EXT` overrides it (cross-compiled runs on another OS).
+pub fn fixture_ext() -> PathBuf {
+    if let Some(p) = std::env::var_os("CALVE_FIXTURE_EXT") {
+        return PathBuf::from(p);
+    }
+    static BUILT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let release = !cfg!(debug_assertions);
+            let mut cmd = Command::new(env!("CARGO"));
+            cmd.current_dir(&root).args([
+                "build",
+                "--quiet",
+                "-p",
+                "calve-testkit",
+                "--bin",
+                "calve-fixture-ext",
+            ]);
+            if release {
+                cmd.arg("--release");
+            }
+            assert!(
+                cmd.status().expect("cargo").success(),
+                "building calve-fixture-ext"
+            );
+            let target = std::env::var_os("CARGO_TARGET_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| root.join("target"));
+            target
+                .join(if release { "release" } else { "debug" })
+                .join(format!("calve-fixture-ext{}", std::env::consts::EXE_SUFFIX))
+        })
+        .clone()
+}
+
+/// The fixture package: native fixture, fixture guest, fixture metadata.
+pub fn fixture_package() -> tuf::Package<'static> {
+    tuf::Package {
+        id: "org.example.toy",
+        version: "0.1.0",
+        kind: "cic-capable",
+        native: (
+            "calve-fixture-ext",
+            fs::read(fixture_ext()).expect("fixture ext"),
+        ),
+        cic: Some(cic::guest("fixture")),
+        metadata: Some(
+            fs::read(cic::fixtures().join("fixture-metadata.json")).expect("fixture metadata"),
+        ),
+        refs: Some(TOY_REFS.as_bytes().to_vec()),
+    }
+}
+
+/// A published fixture catalog for tests with their own CLI runner: run [`ToyCatalog::add_args`]
+/// once, then enable with [`ENABLE_TOY`] (`--project <p>` first).
+pub struct ToyCatalog {
+    pub repo: tuf::Repo,
+    root_file: PathBuf,
+    digest: String,
+}
+
+/// `extension enable org.example.toy --acknowledge-native`.
+pub const ENABLE_TOY: [&str; 4] = [
+    "extension",
+    "enable",
+    "org.example.toy",
+    "--acknowledge-native",
+];
+
+impl Default for ToyCatalog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToyCatalog {
+    pub fn new() -> Self {
+        let mut r = tuf::Repo::new();
+        r.add_package("targets", fixture_package());
+        r.targets.insert(
+            "index.json".into(),
+            br#"{"schema":"calve.index/1","ids":["org.example.toy"]}"#.to_vec(),
+        );
+        r.publish();
+        let root = r.root_bytes(1);
+        let root_file = r.path().join("pinned-root.json");
+        fs::write(&root_file, &root).expect("root");
+        ToyCatalog {
+            digest: tuf::sha(&root),
+            root_file,
+            repo: r,
+        }
+    }
+
+    /// `extension catalog add test <dir> --root <file> --root-digest <sha256>`.
+    pub fn add_args(&self) -> Vec<String> {
+        [
+            "extension",
+            "catalog",
+            "add",
+            "test",
+            self.repo.path().to_str().expect("utf-8"),
+            "--root",
+            self.root_file.to_str().expect("utf-8"),
+            "--root-digest",
+            &self.digest,
+        ]
+        .map(String::from)
+        .to_vec()
+    }
+}

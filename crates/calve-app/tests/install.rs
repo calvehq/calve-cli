@@ -1,0 +1,899 @@
+//! Package installation from signed catalogs (rev 10 §8, §9.3–§9.4): the trust, compatibility
+//! and permission gates, publisher identity, revocation, immutability, crash convergence and
+//! retirement — against the independent test publisher and the fixture extension.
+
+use std::fs;
+
+use calve_app::catalog::install::*;
+use calve_testkit::tuf::{Package, Repo};
+
+struct Machine {
+    _t: tempfile::TempDir,
+    paths: Paths,
+}
+
+impl Drop for Machine {
+    fn drop(&mut self) {
+        calve_testkit::make_writable(self._t.path());
+    }
+}
+
+fn machine() -> Machine {
+    let t = tempfile::tempdir().unwrap();
+    let paths = Paths {
+        data: t.path().join("data"),
+        extension_dir: t.path().join("extensions"),
+    };
+    Machine { _t: t, paths }
+}
+
+fn native() -> Vec<u8> {
+    fs::read(calve_testkit::fixture_ext()).unwrap()
+}
+
+fn toy(meta: Option<Vec<u8>>) -> Package<'static> {
+    Package {
+        id: "org.example.toy",
+        version: "0.1.0",
+        kind: "cic-capable",
+        native: ("calve-fixture-ext", native()),
+        cic: Some(calve_testkit::cic::guest("ref-rust")),
+        metadata: Some(meta.unwrap_or_else(|| {
+            fs::read(calve_testkit::cic::fixtures().join("toy-metadata.json")).unwrap()
+        })),
+        refs: Some(calve_testkit::TOY_REFS.as_bytes().to_vec()),
+    }
+}
+
+fn catalog(m: &Machine, name: &str, r: &Repo) {
+    let root = r.root_bytes(1);
+    add_catalog(
+        &m.paths,
+        name,
+        r.path().to_str().unwrap(),
+        &root,
+        &calve_testkit::tuf::sha(&root),
+    )
+    .unwrap();
+}
+
+fn installer(m: &Machine) -> Installer {
+    Installer::new(m.paths.clone(), CicRunner::InProcess)
+}
+
+fn req(ack: bool) -> InstallRequest<'static> {
+    InstallRequest {
+        id: "org.example.toy",
+        version: None,
+        catalog: None,
+        acknowledge_native: ack,
+        switch_publisher: false,
+    }
+}
+
+fn code(r: Result<PackageRecord>) -> &'static str {
+    r.expect_err("expected a refusal").code
+}
+
+fn repo_with_toy() -> Repo {
+    let mut r = Repo::new();
+    r.add_package("targets", toy(None));
+    r.publish();
+    r
+}
+
+#[test]
+fn installs_into_an_immutable_digest_path_and_is_idempotent() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    assert_eq!(
+        (rec.id.as_str(), rec.version.as_str(), rec.kind.clone()),
+        ("org.example.toy", "0.1.0", Kind::CicCapable)
+    );
+    assert_eq!(rec.digests["native"], calve_testkit::tuf::sha(&native()));
+    assert_eq!(
+        rec.entrypoint,
+        format!(
+            "org.example.toy/{}/calve-fixture-ext",
+            rec.digests["native"]
+        )
+    );
+    assert_eq!(rec.manifest.id, "org.example.toy");
+    assert!(rec.native_acknowledged && rec.metadata.is_some());
+    verify_installed(&m.paths, &rec).unwrap();
+    let dir = m
+        .paths
+        .extension_dir
+        .join("org.example.toy")
+        .join(rec.native_digest());
+    assert!(
+        fs::metadata(dir.join("cic.wasm"))
+            .unwrap()
+            .permissions()
+            .readonly(),
+        "read-only after install"
+    );
+    assert_eq!(
+        installer(&m).install(&req(true)).unwrap().digests,
+        rec.digests,
+        "idempotent"
+    );
+    assert_eq!(installed(&m.paths).unwrap().len(), 1);
+    let left: Vec<_> = fs::read_dir(&m.paths.extension_dir)
+        .unwrap()
+        .filter(|e| {
+            e.as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with('.')
+        })
+        .collect();
+    assert!(left.is_empty(), "no staging left");
+}
+
+#[test]
+fn native_code_never_runs_without_the_t2_acknowledgment() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    assert_eq!(
+        code(installer(&m).install(&req(false))),
+        "T2_ACKNOWLEDGMENT_REQUIRED"
+    );
+    assert!(installed(&m.paths).unwrap().is_empty());
+}
+
+#[test]
+fn describe_must_equal_the_signed_metadata() {
+    let m = machine();
+    let mut meta: serde_json::Value = serde_json::from_slice(
+        &fs::read(calve_testkit::cic::fixtures().join("toy-metadata.json")).unwrap(),
+    )
+    .unwrap();
+    meta["display_name"] = "Not the guest".into();
+    let mut r = Repo::new();
+    r.add_package("targets", toy(Some(serde_json::to_vec(&meta).unwrap())));
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "PACKAGE_INVALID");
+}
+
+#[test]
+fn kind_rules_and_compatibility_gates() {
+    // cic.wasm without metadata.
+    let m = machine();
+    let mut r = Repo::new();
+    let mut p = toy(None);
+    p.metadata = None;
+    r.add_package("targets", p);
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "PACKAGE_INVALID");
+    // A required capability the host does not have.
+    let m = machine();
+    let mut meta: serde_json::Value = serde_json::from_slice(
+        &fs::read(calve_testkit::cic::fixtures().join("toy-metadata.json")).unwrap(),
+    )
+    .unwrap();
+    meta["capabilities"]["required"] = serde_json::json!(["capture.v1", "teleport.v9"]);
+    let mut r = Repo::new();
+    r.add_package("targets", toy(Some(serde_json::to_vec(&meta).unwrap())));
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "INCOMPATIBLE_CIC");
+    // No native build for this platform.
+    let m = machine();
+    let mut r = Repo::new();
+    r.add_package("targets", toy(None));
+    let idx = r.targets.get_mut("org.example.toy/package.json").unwrap();
+    *idx = String::from_utf8(idx.clone())
+        .unwrap()
+        .replace(
+            &calve_testkit::tuf::host_platform(),
+            "riscv64gc-unknown-none-elf",
+        )
+        .into_bytes();
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(
+        code(installer(&m).install(&req(true))),
+        "EXTENSION_INCOMPATIBLE"
+    );
+}
+
+#[test]
+fn tampered_target_on_the_mirror_is_refused() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let digest = calve_testkit::tuf::sha(&calve_testkit::cic::guest("ref-rust"));
+    let path = r
+        .path()
+        .join(format!("targets/org.example.toy/0.1.0/{digest}.cic.wasm"));
+    let mut b = fs::read(&path).unwrap();
+    b[100] ^= 1;
+    fs::write(&path, b).unwrap();
+    assert_eq!(code(installer(&m).install(&req(true))), "CATALOG_UNTRUSTED");
+    assert!(installed(&m.paths).unwrap().is_empty());
+}
+
+#[test]
+fn revoked_packages_are_refused() {
+    let m = machine();
+    let mut r = Repo::new();
+    r.add_package("targets", toy(None));
+    r.revoke("org.example.toy", Some("0.1.0"), "compromised build");
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "EXTENSION_REVOKED");
+}
+
+#[test]
+fn publisher_identity_id_policy_and_path_authorization() {
+    // A delegated role signing an id outside its id policy.
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate(
+        "acme",
+        "targets",
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
+        false,
+    );
+    r.add_package("acme", toy(None));
+    r.id_policy("acme", &["com.acme."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(
+        code(installer(&m).install(&req(true))),
+        "PUBLISHER_NOT_AUTHORIZED"
+    );
+    // The same role with a matching policy installs and the record names the role.
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate(
+        "examples",
+        "targets",
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
+        false,
+    );
+    r.add_package("examples", toy(None));
+    r.id_policy("examples", &["org.example."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(installer(&m).install(&req(true)).unwrap().role, "examples");
+    // A role whose paths do not cover the id: its listing is invisible to the verifier.
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate(
+        "evil",
+        "targets",
+        &["com.evil/*", "com.evil/*/*", "com.evil/*/*/*"],
+        false,
+    );
+    r.add_package("evil", toy(None));
+    r.id_policy("evil", &["org."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "NOT_FOUND");
+}
+
+#[test]
+fn second_catalog_offering_a_pinned_id_needs_switch_publisher() {
+    let m = machine();
+    let (r1, r2) = (repo_with_toy(), repo_with_toy());
+    catalog(&m, "first", &r1);
+    catalog(&m, "second", &r2);
+    assert_eq!(code(installer(&m).install(&req(true))), "AMBIGUOUS");
+    let first = InstallRequest {
+        catalog: Some("first"),
+        ..req(true)
+    };
+    installer(&m).install(&first).unwrap();
+    let second = InstallRequest {
+        catalog: Some("second"),
+        ..req(true)
+    };
+    assert_eq!(
+        code(installer(&m).install(&second)),
+        "PUBLISHER_NOT_AUTHORIZED"
+    );
+    let switched = InstallRequest {
+        switch_publisher: true,
+        ..second
+    };
+    assert_eq!(installer(&m).install(&switched).unwrap().catalog, "second");
+}
+
+#[test]
+fn a_crash_at_every_install_step_converges() {
+    for step in [
+        InstallStep::Resolved,
+        InstallStep::Downloaded,
+        InstallStep::Validated,
+        InstallStep::Installed,
+        InstallStep::Recorded,
+    ] {
+        let m = machine();
+        let r = repo_with_toy();
+        catalog(&m, "main", &r);
+        let mut i = installer(&m);
+        i.fault = Some(step);
+        assert_eq!(code(i.install(&req(true))), "CRASH_INJECTED");
+        let recovered = installer(&m).recover().unwrap();
+        assert_eq!(recovered.len(), 1, "{step:?}: one journal reconciled");
+        let outcome = recovered[0]["outcome"].as_str().unwrap();
+        let expect = if matches!(step, InstallStep::Installed | InstallStep::Recorded) {
+            "installed"
+        } else {
+            "abandoned"
+        };
+        assert_eq!(outcome, expect, "{step:?}");
+        let staging: Vec<_> = fs::read_dir(&m.paths.extension_dir)
+            .into_iter()
+            .flatten()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".staging")
+            })
+            .collect();
+        assert!(staging.is_empty(), "{step:?}: staging removed");
+        assert!(
+            installer(&m).recover().unwrap().is_empty(),
+            "{step:?}: idempotent"
+        );
+        let rec = installer(&m).install(&req(true)).unwrap();
+        verify_installed(&m.paths, &rec).unwrap();
+    }
+}
+
+#[test]
+fn tampering_after_install_is_detected_and_retirement_respects_use() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    let dir = m
+        .paths
+        .extension_dir
+        .join("org.example.toy")
+        .join(rec.native_digest());
+    let meta = dir.join("calve-integration.json");
+    let mut perm = fs::metadata(&meta).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perm.set_readonly(false);
+    fs::set_permissions(&meta, perm).unwrap();
+    fs::write(&meta, b"{}").unwrap();
+    assert_eq!(
+        verify_installed(&m.paths, &rec).err().unwrap().code,
+        "PACKAGE_TAMPERED"
+    );
+    assert_eq!(
+        installer(&m).retire(&rec, |_| true).err().unwrap().code,
+        "EXTENSION_IN_USE"
+    );
+    assert!(dir.exists(), "kept while in use");
+    installer(&m).retire(&rec, |_| false).unwrap();
+    assert!(!dir.exists(), "retired");
+}
+
+#[test]
+fn catalog_names_and_ids_are_validated() {
+    let m = machine();
+    let r = repo_with_toy();
+    let root = r.root_bytes(1);
+    assert_eq!(
+        add_catalog(
+            &m.paths,
+            "../x",
+            "/tmp",
+            &root,
+            &calve_testkit::tuf::sha(&root)
+        )
+        .err()
+        .unwrap()
+        .code,
+        "INVALID_INPUT"
+    );
+    assert!(
+        add_catalog(
+            &m.paths,
+            "ok",
+            r.path().to_str().unwrap(),
+            &root,
+            &"0".repeat(64)
+        )
+        .is_err(),
+        "root digest pin"
+    );
+    for bad in ["toy", "Org.Example", "a..b", "a/b.c", "../evil.x"] {
+        assert!(!valid_id(bad), "{bad}");
+    }
+}
+
+/// Security review of 7b12d8e: a role name is chosen by its delegator, so a nested delegation
+/// that reuses the name of a policy-authorized top-level role must not inherit its policy.
+#[test]
+fn nested_role_reusing_an_authorized_name_is_not_that_publisher() {
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate("acme", "targets", &["*", "*/*", "*/*/*", "*/*/*/*"], false);
+    r.delegate(
+        "examples",
+        "acme",
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
+        false,
+    );
+    r.add_package("examples", toy(None));
+    r.id_policy("acme", &["com.acme."]);
+    r.id_policy("examples", &["org.example."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    let e = installer(&m)
+        .install(&req(true))
+        .expect_err("nested name must not match");
+    assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
+    assert!(e.message.contains("acme/examples"), "{e}");
+}
+
+/// Security review of ec59f58: a single role whose name contains `/` must not collide with a
+/// delegation chain of the same text.
+#[test]
+fn slash_in_a_role_name_cannot_impersonate_a_chain() {
+    let m = machine();
+    let mut r = Repo::new();
+    r.delegate(
+        "acme/examples",
+        "targets",
+        &[
+            "org.example.toy/*",
+            "org.example.toy/*/*",
+            "org.example.toy/*/*/*",
+        ],
+        false,
+    );
+    r.add_package("acme/examples", toy(None));
+    r.id_policy("acme/examples", &["org.example."]);
+    r.publish();
+    catalog(&m, "main", &r);
+    let e = installer(&m)
+        .install(&req(true))
+        .expect_err("policy for the chain, not the name");
+    assert_eq!(e.code, "PUBLISHER_NOT_AUTHORIZED", "{e}");
+    assert!(e.message.contains("acme%2Fexamples"), "{e}");
+}
+
+#[test]
+fn an_interrupted_retirement_restores_the_package() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    let mut i = installer(&m);
+    i.fault = Some(InstallStep::Retiring);
+    assert_eq!(
+        i.retire(&rec, |_| false).unwrap_err().code,
+        "CRASH_INJECTED"
+    );
+    let out = installer(&m).recover().unwrap();
+    assert_eq!(out[0]["outcome"], "restored");
+    verify_installed(&m.paths, &rec).unwrap();
+}
+
+#[test]
+fn native_builds_are_selected_by_exact_target_triple_and_digest() {
+    // Two targets ship a binary with the same file name in the same version: distinct paths,
+    // and the host's build is the one installed.
+    let m = machine();
+    let mut r = Repo::new();
+    r.add_package("targets", toy(None));
+    let other = if calve_testkit::tuf::host_platform() == "aarch64-apple-darwin" {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "aarch64-apple-darwin"
+    };
+    r.add_native(
+        "targets",
+        "org.example.toy",
+        "0.1.0",
+        other,
+        "calve-fixture-ext",
+        b"another platform's executable".to_vec(),
+    );
+    r.publish();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    assert_eq!(rec.target, calve_testkit::tuf::host_platform());
+    assert_eq!(rec.digests["native"], calve_testkit::tuf::sha(&native()));
+    assert_eq!(rec.manifest.artifact_digest.hex(), rec.digests["native"]);
+
+    // The package index's native digest must equal the TUF target hash.
+    let m = machine();
+    let mut r = repo_with_toy();
+    let idx = r.targets.get_mut("org.example.toy/package.json").unwrap();
+    *idx = String::from_utf8(idx.clone())
+        .unwrap()
+        .replace(&calve_testkit::tuf::sha(&native()), &"0".repeat(64))
+        .into_bytes();
+    r.publish();
+    catalog(&m, "main", &r);
+    assert_eq!(code(installer(&m).install(&req(true))), "PACKAGE_INVALID");
+    assert!(installed(&m.paths).unwrap().is_empty());
+
+    // An installed record of another target is never activated.
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let mut rec = installer(&m).install(&req(true)).unwrap();
+    rec.target = other.into();
+    assert_eq!(
+        verify_installed(&m.paths, &rec).unwrap_err().code,
+        "EXTENSION_INCOMPATIBLE"
+    );
+}
+
+#[test]
+fn the_registered_manifest_must_be_exactly_the_installed_one() {
+    use calve_app::extensions::registration_matches;
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let rec = installer(&m).install(&req(true)).unwrap();
+    let body = serde_json::to_value(&rec.manifest).unwrap();
+    registration_matches(&rec, &body).unwrap();
+    for (field, value) in [
+        ("id", serde_json::json!("org.example.other")),
+        ("version", serde_json::json!("0.1.1")),
+        (
+            "host_capabilities",
+            if rec.manifest.host_capabilities.is_empty() {
+                serde_json::json!(["process.execute"])
+            } else {
+                serde_json::json!([])
+            },
+        ),
+        (
+            "artifact_digest",
+            serde_json::json!(format!("sha256:{}", "1".repeat(64))),
+        ),
+    ] {
+        let mut b = body.clone();
+        b[field] = value;
+        assert!(registration_matches(&rec, &b).is_err(), "{field}");
+    }
+}
+
+/// N68: the reference schema is bound to the package by the native manifest's content hash.
+/// A package missing the document it declares, shipping a different one, or shipping one its
+/// manifest does not bind is refused and nothing is installed; without either it installs.
+#[test]
+fn the_reference_schema_is_bound_by_the_manifest_hash() {
+    // (native name, case, refs document shipped, expected refusal)
+    type Case = (
+        &'static str,
+        &'static str,
+        Option<Vec<u8>>,
+        Option<&'static str>,
+    );
+    let cases: [Case; 4] = [
+        (
+            "calve-fixture-ext",
+            "missing",
+            None,
+            Some("ships no calve-refs.json"),
+        ),
+        (
+            "calve-fixture-ext",
+            "mismatched",
+            Some(
+                calve_testkit::TOY_REFS
+                    .replace("/digest\"", "/other\"")
+                    .into_bytes(),
+            ),
+            Some("does not match the manifest's calve.refs/1 hash"),
+        ),
+        (
+            "calve-fixture-ext-unbound",
+            "unbound",
+            Some(calve_testkit::TOY_REFS.as_bytes().to_vec()),
+            Some("is not bound by the manifest"),
+        ),
+        ("calve-fixture-ext-unbound", "neither", None, None),
+    ];
+    for (name, case, refs, refusal) in cases {
+        let m = machine();
+        let mut r = Repo::new();
+        let mut p = toy(None);
+        p.native = (name, native());
+        p.refs = refs;
+        r.add_package("targets", p);
+        r.publish();
+        catalog(&m, "main", &r);
+        let result = installer(&m).install(&req(true));
+        match refusal {
+            Some(text) => {
+                let e = result.expect_err(case);
+                assert_eq!(e.code, "PACKAGE_INVALID", "{case}: {e}");
+                assert!(e.message.contains(text), "{case}: {e}");
+                assert!(
+                    !m.paths.extension_dir.join("org.example.toy").exists(),
+                    "{case}: nothing installed"
+                );
+            }
+            None => {
+                result.unwrap_or_else(|e| panic!("{case}: {e}"));
+                assert!(m.paths.extension_dir.join("org.example.toy").is_dir());
+            }
+        }
+    }
+}
+
+/// A-WIN: competing installers of one machine serialize on its install lock: every one
+/// succeeds, and one complete, verifying package results.
+#[test]
+fn competing_installers_on_one_machine_converge() {
+    let m = machine();
+    let r = repo_with_toy();
+    catalog(&m, "main", &r);
+    let records: Vec<_> = std::thread::scope(|s| {
+        let all: Vec<_> = (0..4)
+            .map(|_| s.spawn(|| installer(&m).install(&req(true))))
+            .collect();
+        all.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let first = records[0].as_ref().unwrap();
+    for r in &records {
+        assert_eq!(r.as_ref().unwrap().digests, first.digests);
+    }
+    verify_installed(&m.paths, first).unwrap();
+    let dirs: Vec<_> = fs::read_dir(m.paths.extension_dir.join("org.example.toy"))
+        .unwrap()
+        .collect();
+    assert_eq!(dirs.len(), 1, "one package directory");
+}
+
+/// A-WIN, deterministic Windows holders (owner decision 2026-11-05: 15 s bounded retry).
+#[cfg(windows)]
+mod holders {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::time::{Duration, Instant};
+
+    const SHARE_READ_WRITE: u32 = 0x1 | 0x2; // no FILE_SHARE_DELETE: the directory cannot move
+
+    fn hold(path: &std::path::Path) -> fs::File {
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(SHARE_READ_WRITE)
+            .open(path)
+            .unwrap()
+    }
+
+    fn staged(t: &tempfile::TempDir) -> (std::path::PathBuf, std::path::PathBuf) {
+        let from = t.path().join("staging");
+        fs::create_dir(&from).unwrap();
+        fs::write(from.join("f"), "x").unwrap();
+        (from, t.path().join("final"))
+    }
+
+    #[test]
+    fn a_short_lived_holder_is_waited_out() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let h = hold(&from.join("f"));
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(1500));
+            drop(h);
+        });
+        rename_staged(&from, &to, RENAME_DEADLINE, &|| Ok(())).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(1400));
+        assert_eq!(fs::read_to_string(to.join("f")).unwrap(), "x");
+    }
+
+    #[test]
+    fn a_persistent_holder_fails_at_the_deadline_and_leaves_the_staging() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let _h = hold(&from.join("f"));
+        let started = Instant::now();
+        let e = rename_staged(&from, &to, RENAME_DEADLINE, &|| Ok(()))
+            .unwrap_err()
+            .unwrap();
+        let took = started.elapsed();
+        assert!(matches!(e.raw_os_error(), Some(5 | 32 | 33)), "{e}");
+        assert!(took >= RENAME_DEADLINE, "{took:?}");
+        assert!(took < RENAME_DEADLINE + Duration::from_secs(3), "{took:?}");
+        assert!(from.join("f").is_file() && !to.exists());
+    }
+
+    /// Revalidation before every retry: a destination that appears stops the retry; nothing
+    /// is overwritten and the staging stays.
+    #[test]
+    fn a_destination_that_appears_stops_the_retry() {
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = staged(&t);
+        let _h = hold(&from.join("f"));
+        let other = to.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            fs::create_dir(&other).unwrap();
+            fs::write(other.join("theirs"), "y").unwrap();
+        });
+        let still_valid = || {
+            if to.exists() {
+                Err(InstallError {
+                    code: "PACKAGE_TAMPERED",
+                    message: "destination appeared".into(),
+                })
+            } else {
+                Ok(())
+            }
+        };
+        let started = Instant::now();
+        let e = rename_staged(&from, &to, RENAME_DEADLINE, &still_valid)
+            .unwrap_err()
+            .unwrap_err();
+        assert_eq!(e.code, "PACKAGE_TAMPERED");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(fs::read_to_string(to.join("theirs")).unwrap(), "y");
+        assert!(from.join("f").is_file());
+    }
+
+    /// Holds `calve-integration.json` in the installer's staging directory as soon as it is
+    /// written, for `release_after` (None: until the returned sender fires).
+    fn hold_staging(
+        m: &Machine,
+        release_after: Option<Duration>,
+    ) -> (std::thread::JoinHandle<()>, std::sync::mpsc::Sender<()>) {
+        let ext = m.paths.extension_dir.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let h = std::thread::spawn(move || {
+            let started = Instant::now();
+            let file = loop {
+                assert!(
+                    started.elapsed() < Duration::from_secs(120),
+                    "no staging appeared"
+                );
+                let found = fs::read_dir(&ext)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .find_map(|e| {
+                        let name = e.file_name().to_string_lossy().into_owned();
+                        let f = e.path().join("calve-integration.json");
+                        (name.starts_with(".staging-") && f.metadata().is_ok_and(|m| m.len() > 0))
+                            .then_some(f)
+                    });
+                if let Some(f) = found
+                    && let Ok(h) = fs::OpenOptions::new()
+                        .read(true)
+                        .share_mode(SHARE_READ_WRITE)
+                        .open(&f)
+                {
+                    break h;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            match release_after {
+                Some(d) => std::thread::sleep(d),
+                None => {
+                    let _ = rx.recv();
+                }
+            }
+            drop(file);
+        });
+        (h, tx)
+    }
+
+    #[test]
+    fn an_install_waits_out_a_short_lived_holder() {
+        let m = machine();
+        let r = repo_with_toy();
+        catalog(&m, "main", &r);
+        let (h, _tx) = hold_staging(&m, Some(Duration::from_secs(3)));
+        let rec = installer(&m).install(&req(true)).unwrap();
+        h.join().unwrap();
+        verify_installed(&m.paths, &rec).unwrap();
+    }
+
+    /// A holder past the deadline: the install fails cleanly, naming the holder; nothing is
+    /// installed; recovery after the holder lets go removes the staging; a rerun installs.
+    #[test]
+    fn a_persistent_holder_fails_cleanly_and_recovers() {
+        let m = machine();
+        let r = repo_with_toy();
+        catalog(&m, "main", &r);
+        let (h, tx) = hold_staging(&m, None);
+        let e = installer(&m).install(&req(true)).unwrap_err();
+        assert_eq!(e.code, "IO_ERROR", "{e}");
+        assert!(e.message.contains("rename staging"), "{e}");
+        assert!(e.message.contains("held open by"), "{e}");
+        let installed_dirs = fs::read_dir(m.paths.extension_dir.join("org.example.toy"))
+            .map(|d| d.count())
+            .unwrap_or(0);
+        assert_eq!(installed_dirs, 0, "nothing installed");
+        tx.send(()).unwrap();
+        h.join().unwrap();
+        installer(&m).recover().unwrap();
+        let staging_left = fs::read_dir(&m.paths.extension_dir)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(".staging-"));
+        assert!(!staging_left, "recovery removed the staging");
+        let rec = installer(&m).install(&req(true)).unwrap();
+        verify_installed(&m.paths, &rec).unwrap();
+    }
+}
+
+/// Stress/regression coverage for the OPEN Windows install flake (M5: "Access is denied" at the
+/// staging→final rename in 3 of 7 parallel runs; holder not identified). Many threads install
+/// the same package into separate machines at once, round after round; every failure is
+/// printed with its full message, which on Windows names the processes holding files in the
+/// staging directory. Ignored by default (slow; heavy on disk: one native build per thread per
+/// round). `CALVE_STRESS_THREADS` (default 8), `CALVE_STRESS_ROUNDS` (default 5).
+#[test]
+#[ignore = "stress: run explicitly"]
+fn concurrent_installs_stress() {
+    let threads: usize = std::env::var("CALVE_STRESS_THREADS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let rounds: usize = std::env::var("CALVE_STRESS_ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let r = repo_with_toy();
+    let mut failures = Vec::new();
+    for round in 0..rounds {
+        let machines: Vec<Machine> = (0..threads).map(|_| machine()).collect();
+        for m in &machines {
+            catalog(m, "main", &r);
+        }
+        let results: Vec<std::result::Result<(), String>> = std::thread::scope(|s| {
+            let handles: Vec<_> = machines
+                .iter()
+                .map(|m| {
+                    s.spawn(move || {
+                        installer(m)
+                            .install(&req(true))
+                            .map(|_| ())
+                            .map_err(|e| format!("{}: {}", e.code, e.message))
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        for (i, res) in results.into_iter().enumerate() {
+            if let Err(e) = res {
+                println!("stress round {round} thread {i}: {e}");
+                failures.push(e);
+            }
+        }
+        // Machines (and their installed copies) are removed before the next round.
+        drop(machines);
+    }
+    println!(
+        "stress: {} of {} concurrent installs failed",
+        failures.len(),
+        threads * rounds
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+}

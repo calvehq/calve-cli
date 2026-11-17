@@ -1,0 +1,35 @@
+ Calve  project: openaevc  workspace: main  Baseline bsl_agqykfig5z4rnhbjixbszifs2i   ● healthy
+┌ Navigation ────────┐┌ Baseline bsl_agqykfig5z4rnhbjixbszifs2i ─────────────────────────┐┌ Inspector ─────────────────┐
+│ PROJECT            ││ Graph  Packs  Relations  History  Explain  Raw                   ││Baseline                    │
+│  Overview        5 ││                                                                  ││bsl_…rnhbjixbszifs2i        │
+│  Intents           ││[✓ Update protocol …]                                             ││staging                     │
+│  Work              ││                                                                  ││                            │
+│  Change Graph      ││                                                                  ││Validation  ✓ VALID         │
+│  ChangePacks       ││                                                                  ││Members     1               │
+│› Baselines       1 ││                                                                  ││Heads       1               │
+│  Resources         ││                                                                  ││Active      yes             │
+│  Evidence          ││                                                                  ││                            │
+│  Events            ││                                                                  ││Update protocol schemas     │
+│  Authority         ││                                                                  ││State       ✓ PROMOTED      │
+│                    ││                                                                  ││Pack                        │
+│ SYSTEM             ││                                                                  ││cpk_agqykfiaa54c5gmyaxc2gzmn│
+│  Projects          ││                                                                  ││7e                          │
+│  Inbox           2 ││                                                                  ││Head        yes             │
+│  Providers         ││                                                                  ││                            │
+│  Doctor            ││                                                                  ││Used by                     │
+│  Extensions        ││                                                                  ││  none                      │
+│  Settings          ││                                                                  ││                            │
+│                    ││                                                                  ││Parents                     │
+│                    ││                                                                  ││  none                      │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Dependents                  │
+│                    ││                                                                  ││  none                      │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Intent                      │
+│                    ││                                                                  ││  SDK compatibility         │
+│                    ││                                                                  ││                            │
+│                    ││                                                                  ││Actions                     │
+│                    ││                                                                  ││  Activate                  │
+│                    ││                                                                  ││  Validate                  │
+└────────────────────┘└──────────────────────────────────────────────────────────────────┘└────────────────────────────┘
+ tab tabs  hjkl navigate  v list  z fullscreen  x explain  ^P commands  : command  ? help

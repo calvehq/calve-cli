@@ -1,0 +1,45 @@
+ Calve  project: openaevc  workspace: main  Execution exe_agqykfiyxv5qrdbj22sfes5ou4   ● healthy                                    v0.1.0  ^P Commands  ? Help
+┌ Navigation ────────┐┌ Execution exe_agqykfiyxv5qrdbj22sfes5ou4 ─────────────────────────────────────────────────┐┌ Inspector ────────────────────────────────┐
+│ PROJECT            ││ Summary  Output  Observations  Effects  Events  Raw                                       ││Execution exe_agqykfiyxv5qrdbj22sfes5ou4   │
+│  Overview        5 ││                                                                                           ││                                           │
+│  Intents           ││checking                                                                                   ││State       × FAILED                       │
+│› Work              ││lint: 2 problems                                                                           ││Pack        cpk_agqykfiyqzy2zlzm3bo4xbjbpu │
+│  Change Graph      ││                                                                                           ││Harness     org.calve.harness.lint         │
+│  ChangePacks       ││                                                                                           ││Provider    org.calve.provider.shell       │
+│  Baselines         ││                                                                                           ││Actor       pri_agqykfh2bj3htd7lklnzq6eeeu │
+│  Resources         ││                                                                                           ││Attempt     1 of 3                         │
+│  Evidence          ││                                                                                           ││Generation  2                              │
+│  Events            ││                                                                                           ││Task        —                              │
+│  Authority         ││                                                                                           ││Started     1m ago · 2026-10-29 00:35:14   │
+│                    ││                                                                                           ││UTC                                        │
+│ SYSTEM             ││                                                                                           ││Finished    1m ago · 2026-10-29 00:35:20   │
+│  Projects          ││                                                                                           ││UTC                                        │
+│  Inbox           2 ││                                                                                           ││Duration    6.0s                           │
+│  Providers         ││                                                                                           ││Result      worker exited with status 2    │
+│  Doctor            ││                                                                                           ││Retry of    —                              │
+│  Extensions        ││                                                                                           ││Output      2 lines                        │
+│  Settings          ││                                                                                           ││Effects     0                              │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││Actions                                    │
+│                    ││                                                                                           ││  Retry                                    │
+│                    ││                                                                                           ││  Open ChangePack                          │
+│                    ││                                                                                           ││  a all actions                            │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+│                    ││                                                                                           ││                                           │
+└────────────────────┘└───────────────────────────────────────────────────────────────────────────────────────────┘└───────────────────────────────────────────┘
+ ● LIVE  f follow  / search  n/N matches  w wrap  t timestamps  y copy  ^P commands  : command

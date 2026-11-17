@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clv maintenance rebuild-projections --json",
+  "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "active_items": {
+        "type": "integer"
+      },
+      "at": {
+        "type": "integer"
+      },
+      "rebuilt": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "baselines_reindexed": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "active_items",
+      "at",
+      "rebuilt"
+    ]
+  }
+}

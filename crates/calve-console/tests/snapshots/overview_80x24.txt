@@ -1,0 +1,24 @@
+ Calve  project: openaevc  workspace: main  Overview   ● healthy
+┌ Overview ────────────────────────────────────────────────────────────────────┐
+│Needs attention ─────────────────────────────────────────────────────────────█│
+│    Subject                                                                  █│
+│×   exe_…2sfes5ou4   Execution FAILED                                  1m    █│
+│!   tsk_…43ccc188f   Daemon hardening is blocked                       1m    █│
+│◆   cpk_…k4tzmcxqu   Fix daemon race condition awaits verification an… 1m    █│
+│◆   cpk_…bvmvpg3ea   Add remote conformance runner awaits verificatio… 1m    █│
+│!   cpk_…wnokrbreu   Pack is quarantined                               1m    █│
+│                                                                             █│
+│Active work ─────────────────────────────────────────────────────────────────█│
+│Intent                                           Tasks   Packs  State        █│
+│SDK compatibility                                0/1     1      ● RUNNING    █│
+│HTTP conformance                                 1/4     2      ! BLOCKED    █│
+│                                                                             █│
+│Recent activity ─────────────────────────────────────────────────────────────█│
+│Time      Actor          Event                               Object          ││
+│00:35:20Z pri_…lnzq6eeeu execution.finished                  exe_…2sfes5ou4  ││
+│00:35:20Z pri_…lnzq6eeeu execution.failed                    exe_…2sfes5ou4  ││
+│00:35:14Z pri_…lnzq6eeeu object.imported                     sha256:…4b9ec4  ││
+│00:35:14Z pri_…lnzq6eeeu pack.created                        cpk_…bo4xbjbpu  ││
+│00:35:14Z pri_…lnzq6eeeu changepack.created                  cpk_…bo4xbjbp1/19│
+└──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ navigate  enter open  / filter  a actions  ^P commands  : command  ? help
