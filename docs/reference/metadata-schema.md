@@ -1,6 +1,6 @@
 # Integration metadata schema
 
-`calve-integration.json` is the signed file a cic-capable package uses to declare itself to Calve. Schema: `calve.integration/1`. Types: `calve_integration_contract::metadata`. A package without this file is openaevc-only: Calve then reads its effect kinds from the signed OpenAEVC manifest, and each effect kind is usable with `calve resource set <effect-kind>:<name>=JSON`.
+`calve-integration.json` is the signed file a cic-capable package uses to declare itself to Calve. Schema: `calve.integration/1`. Types: `calve_integration_contract::metadata`. A package without this file is openaevc-only: Calve then reads its effect kinds from the signed OpenAEVC manifest, and each effect kind is usable with `clv resource set <effect-kind>:<name>=JSON`.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -13,7 +13,7 @@
 | `capabilities` | object | yes | `required` and `optional`: `op.vN` strings, equal to what `hello/0` advertises |
 | `ops` | array | no | Operations the module implements |
 | `files` | object | no | The Project's file domain |
-| `resources` | array | no | Non-file kinds for `calve resource set` |
+| `resources` | array | no | Non-file kinds for `clv resource set` |
 | `checks` | object | no | `{verifier}`, judging Calve's check evidence |
 | `relations` | array | no | Derived relation kinds and their payload schemas |
 | `optional_relations` | boolean | no | Whether a failed `relate` drops relations or fails the capture |

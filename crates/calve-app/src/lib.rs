@@ -1419,7 +1419,7 @@ impl Project {
         if !db_path.is_file() {
             return Err(coded(
                 "CORRUPT_PRODUCT_STATE",
-                "project product database is missing; restore a backup, or rebuild with `calve recover apply --rebuild-product --yes`, with `calve recover apply --restore-backup <file>`",
+                "project product database is missing; restore a backup, or rebuild with `clv recover apply --rebuild-product --yes`, with `clv recover apply --restore-backup <file>`",
             ));
         }
         let version = product_schema_version(&db_path)?;
@@ -3667,7 +3667,7 @@ impl Project {
             return Err(detailed(
                 "REOPEN_UNSAFE",
                 format!(
-                    "{id} has {effects} effect(s); after a reopen OpenAEVC v0.1.0 could never promote it. It is unchanged. Continue in a replacement pack: `calve supersede start {id} --keep <0..{effects}> --yes`"
+                    "{id} has {effects} effect(s); after a reopen OpenAEVC v0.1.0 could never promote it. It is unchanged. Continue in a replacement pack: `clv supersede start {id} --keep <0..{effects}> --yes`"
                 ),
                 json!({"pack": id, "generation": pack.generation, "effects": effects,
                     "next": ["supersede", "start", id, "--keep", effects.to_string()]}),
@@ -4782,7 +4782,7 @@ impl Project {
                     format!("capture:{session}"),
                     "recovery_required".into(),
                     c.pack.clone(),
-                    format!("Capture session {session} is {st}; run `calve capture resume {session}` or roll it back"),
+                    format!("Capture session {session} is {st}; run `clv capture resume {session}` or roll it back"),
                     "danger".into(),
                 ));
             }
@@ -4795,7 +4795,7 @@ impl Project {
                     format!("supersede:{saga}"),
                     "recovery_required".into(),
                     sg.pack.clone(),
-                    format!("Supersession {saga} is {st}; run `calve supersede resume {saga}` (the original pack is kept)"),
+                    format!("Supersession {saga} is {st}; run `clv supersede resume {saga}` (the original pack is kept)"),
                     "danger".into(),
                 ));
             }
@@ -4808,9 +4808,9 @@ impl Project {
                 if conflicted { "materialization_divergence" } else { "recovery_required" }.into(),
                 op.into(),
                 if conflicted {
-                    format!("Materialization {op} found concurrent changes; run `calve materialize resolve {op} --keep ours|theirs`")
+                    format!("Materialization {op} found concurrent changes; run `clv materialize resolve {op} --keep ours|theirs`")
                 } else {
-                    format!("Materialization {op} was interrupted; run `calve materialize resume {op}`")
+                    format!("Materialization {op} was interrupted; run `clv materialize resume {op}`")
                 },
                 "danger".into(),
             ));

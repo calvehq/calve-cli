@@ -868,7 +868,7 @@ impl Project {
     /// Execution record, its journal events, resolved observations and produced effects.
     pub async fn view_execution(&self, id: &str) -> Result<Value> {
         // Bounded windows (§96: logs of 1M lines): the newest output lines, observations and
-        // events, with totals; `calve execution logs` returns everything.
+        // events, with totals; `clv execution logs` returns everything.
         const OUTPUT_TAIL: usize = 2000;
         const RECENT: usize = 500;
         let logs = self.execution_logs(id, 0).await?;

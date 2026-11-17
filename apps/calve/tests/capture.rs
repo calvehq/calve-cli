@@ -24,7 +24,7 @@ fn file_capture_is_an_openaevc_effect() {
         ])
         .env("CALVE_ISOLATED_TEST", "1")
         .isolated(data.path(), data.path().join("config"))
-        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
+        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_clv"))
         .status()
         .unwrap();
     assert!(status.success());

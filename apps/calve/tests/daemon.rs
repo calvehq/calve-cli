@@ -22,7 +22,7 @@ impl Drop for Daemon {
 }
 
 fn cli(data: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_calve"))
+    Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data, data.join("config"))
         .env_remove("XDG_RUNTIME_DIR")
         .args(args)

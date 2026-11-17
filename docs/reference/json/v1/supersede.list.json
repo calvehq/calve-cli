@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve supersede list --json",
+  "title": "clv supersede list --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11,7 +11,7 @@
     },
     "$defs": {
       "SupersedeSaga": {
-        "description": "`calve supersede list` item.",
+        "description": "`clv supersede list` item.",
         "type": "object",
         "properties": {
           "saga": {

@@ -1,14 +1,15 @@
 # Shared helpers for Calve examples. Each example builds a fresh Project in a temporary
-# directory, so it never touches your own Workspaces. Set CALVE to a calve binary to test a
-# specific build (the integration test does); otherwise `calve` from PATH is used.
+# directory, so it never touches your own Workspaces. Set CALVE to a clv binary to test a
+# specific build (the integration test does); otherwise `clv` from PATH is used.
 #
 # Extensions come from a signed catalog: set CALVE_CATALOG_ADD to the arguments of
-# `calve extension catalog add` (one per line) for a catalog providing them, e.g. the first-party
+# `clv extension catalog add` (one per line) for a catalog providing them, e.g. the first-party
 # calve-extensions catalog. CALVE_FILES_EXT names the file-domain extension the generic examples
 # enable (default org.calve.software); the integration test uses the fixture `org.example.toy`.
 set -euo pipefail
 
-CALVE_BIN="${CALVE:-calve}"
+# Resolved to a path now: a bare `clv` would run the `clv` function below, not the binary.
+CALVE_BIN="${CALVE:-$(command -v clv || echo clv)}"
 WORK="$(mktemp -d)"
 # Git Bash on Windows: hand Windows programs C:/... paths, not /tmp/... ones.
 if command -v cygpath >/dev/null 2>&1; then WORK="$(cygpath -m "$WORK")"; fi
@@ -23,13 +24,13 @@ export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config"
 if [ -n "${CALVE_TEST_GUARD:-}" ]; then
   export CALVE_TEST_DATA_ROOT="$WORK/data/calve" CALVE_TEST_CONFIG_ROOT="$WORK/config/calve"
   # Windows clients accept only the calved.exe they expect; the console tests run from cargo's
-  # deps directory, so they are told which one (the calved beside this calve).
-  if [ -n "${WINDIR:-}" ]; then export CALVE_TEST_DAEMON_EXE="${CALVE_BIN%calve.exe}calved.exe"; fi
+  # deps directory, so they are told which one (the calved beside this clv).
+  if [ -n "${WINDIR:-}" ]; then export CALVE_TEST_DAEMON_EXE="${CALVE_BIN%clv.exe}calved.exe"; fi
 fi
 PROJECT="$WORK/project"
 
-# calve <args...>: JSON output, never starts a background daemon.
-calve() { "$CALVE_BIN" --json --no-daemon-start --project "$PROJECT" "$@"; }
+# clv <args...>: JSON output, never starts a background daemon.
+clv() { "$CALVE_BIN" --json --no-daemon-start --project "$PROJECT" "$@"; }
 
 # get '<python subscript>': reads JSON on stdin, prints one field, e.g. get '["id"]'.
 # --json output is the envelope {"api_version","command","data"}; get reads data.
@@ -50,13 +51,13 @@ expect() {
 # promote <pack-id>: seal, qualify and promote the pack at its current generation.
 promote() {
   local g
-  g=$(calve pack show "$1" | get '["generation"]')
-  calve pack seal "$1" --generation "$g" >/dev/null
-  calve pack qualify "$1" --generation "$g" >/dev/null
-  calve pack promote "$1" --generation "$g" | get '["promoted_digest"]'
+  g=$(clv pack show "$1" | get '["generation"]')
+  clv pack seal "$1" --generation "$g" >/dev/null
+  clv pack qualify "$1" --generation "$g" >/dev/null
+  clv pack promote "$1" --generation "$g" | get '["promoted_digest"]'
 }
 
-generation() { calve pack show "$1" | get '["generation"]'; }
+generation() { clv pack show "$1" | get '["generation"]'; }
 
 FILES_EXT="${CALVE_FILES_EXT:-org.calve.software}"
 
@@ -69,7 +70,7 @@ sha256() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 25
 
 # enable <extension-id>: enables an extension in the Project, acknowledging that its native
 # component runs unconfined with your permissions.
-enable() { calve extension enable "$1" --acknowledge-native >/dev/null; }
+enable() { clv extension enable "$1" --acknowledge-native >/dev/null; }
 
 if [[ -n "${CALVE_CATALOG_ADD:-}" ]]; then
   # One argument per line (macOS ships bash 3.2, which has no mapfile).

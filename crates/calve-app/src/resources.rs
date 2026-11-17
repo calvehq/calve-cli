@@ -852,7 +852,7 @@ impl Project {
         Ok(out)
     }
 
-    /// `calve ignore check`: the file extension's decision and the rule that made it.
+    /// `clv ignore check`: the file extension's decision and the rule that made it.
     pub async fn check_ignore(&self, path: &Path) -> Result<Value> {
         let text = path
             .to_str()

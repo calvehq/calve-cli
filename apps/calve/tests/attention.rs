@@ -22,7 +22,7 @@ fn kinds(items: &Value) -> Vec<(String, String)> {
 
 #[test]
 fn attention_status_and_gc() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -222,7 +222,7 @@ fn attention_status_and_gc() {
 /// The dry run's count is what OpenAEVC's collector then removes, and the dry run removes nothing.
 #[test]
 fn the_dry_run_counts_with_the_real_collector() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

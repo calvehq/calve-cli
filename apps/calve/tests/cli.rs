@@ -7,7 +7,7 @@ use openaevc_sdk::TypedClient;
 use serde_json::Value;
 
 fn run_cli(data_home: &Path, args: &[&str]) -> Value {
-    let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let output = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data_home, data_home.parent().unwrap().join("config"))
         .arg("--json")
         .args(args)
@@ -791,7 +791,7 @@ fn cli_workflow() {
     assert_eq!(workspaces[0]["name"], "default");
     let copy = temp.path().join("copy");
     copy_tree(&root_path, &copy);
-    let blocked = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let blocked = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(&data_home, temp.path().join("config"))
         .args([
             "--project",
@@ -1125,7 +1125,7 @@ fn cli_operations_surface() {
         calve(&["recover", "plan"])["actions"],
         serde_json::json!([])
     );
-    let refused = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let refused = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(&data_home, data_home.join("config"))
         .args(["--project", root_str, "recover", "apply"])
         .output()

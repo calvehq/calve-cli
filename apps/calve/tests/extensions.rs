@@ -13,7 +13,7 @@ use calve_testkit::tuf::{Package, Repo, sha};
 use serde_json::{Value, json};
 
 fn fixture_ext() -> PathBuf {
-    Path::new(env!("CARGO_BIN_EXE_calve"))
+    Path::new(env!("CARGO_BIN_EXE_clv"))
         .parent()
         .unwrap()
         .join("examples")
@@ -79,7 +79,7 @@ fn trust(env: &Env, name: &str, r: &Repo) {
 
 #[test]
 fn catalog_install_grant_update_rollback_and_uninstall() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut r = Repo::new();
     r.add_package("targets", openaevc_only("1.0.0", &["clock.read"]));
     r.targets.insert(
@@ -229,7 +229,7 @@ fn catalog_install_grant_update_rollback_and_uninstall() {
 
 #[test]
 fn cic_product_paths_on_the_fixture_package() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let project = env.path().join("project");
     let p = project.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -414,7 +414,7 @@ fn cic_product_paths_on_the_fixture_package() {
 #[cfg(unix)]
 #[test]
 fn t2_native_code_is_not_confined_residual() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let project = env.path().join("project");
     let p = project.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -510,7 +510,7 @@ fn scenario_p_a_package_is_judged_on_its_protocol_range() {
         (json!([[0, 0], [0, 1]]), true),
         (json!([[0, 1], [0, 2]]), true),
     ] {
-        let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let mut r = Repo::new();
         let mut bytes = fs::read(fixture_ext()).unwrap();
         bytes.extend(
@@ -566,7 +566,7 @@ fn scenario_p_a_package_is_judged_on_its_protocol_range() {
 /// audited reset, which needs both confirmations.
 #[test]
 fn publisher_switch_and_catalog_reset() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut first = Repo::new();
     let _project = fixture_project(&env, &mut first);
     let mut second = Repo::new();
@@ -644,7 +644,7 @@ fn registered(env: &Env, p: &str) -> Value {
 /// is blocked; approving B updates, and the grant binds to the new version and digest.
 #[test]
 fn scenario_h_permission_widening() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut r = Repo::new();
     // 1–2. v1 installed with capability set A, granted.
     let p = fixture_project(&env, &mut r);
@@ -706,7 +706,7 @@ fn scenario_h_permission_widening() {
 /// version active and valid; recovery cleans up; the catalog stays valid; a retry succeeds.
 #[test]
 fn scenario_l_crash_during_extension_install() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut r = Repo::new();
     let p = fixture_project(&env, &mut r);
     let v1 = registered(&env, &p);
@@ -714,7 +714,7 @@ fn scenario_l_crash_during_extension_install() {
     r.publish();
     env.ok(&["extension", "catalog", "refresh", "example"]);
     // 1. Interrupted after download, before activation.
-    let crashed = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+    let crashed = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(env.path().join("d"), env.path().join("c"))
         .env("CALVE_FAULT", "append.after_fsync")
         .args(["--json", "--no-daemon-start", "--project", &p])
@@ -770,7 +770,7 @@ fn scenario_l_crash_during_extension_install() {
 /// knowing it. DEVIATION: creating resource instances needs integration metadata (acceptance.md).
 #[test]
 fn scenario_n_third_party_extension() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut r = Repo::new();
     // 1–2. Installed and enabled with no Calve metadata beyond the package.
     let p = fixture_project(&env, &mut r);
@@ -873,7 +873,7 @@ fn scenario_n_third_party_extension() {
         "{added}"
     );
     // 4. The generic renderer shows it without any Calve-specific code.
-    let human = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+    let human = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(env.path().join("d"), env.path().join("c"))
         .args([
             "--no-daemon-start",
@@ -900,7 +900,7 @@ fn scenario_n_third_party_extension() {
 /// stays whole, floors never fall, and the package is installed once.
 #[test]
 fn two_processes_share_catalog_state_safely() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let mut r = Repo::new();
     r.add_package("targets", openaevc_only("1.0.0", &["clock.read"]));
     r.targets.insert(
@@ -910,7 +910,7 @@ fn two_processes_share_catalog_state_safely() {
     r.publish();
     trust(&env, "example", &r);
     let spawn = |args: &[&str]| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
             .isolated(env.path().join("d"), env.path().join("c"))
             .args(["--json", "--no-daemon-start"])
             .args(args)
@@ -969,7 +969,7 @@ fn undeclared_verifier_and_evaluator_names_obtain_no_result() {
     use openaevc::protocol::{Command, ObjectKind, PackId, Query};
     use openaevc_sdk::OpenAevcClient;
 
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);

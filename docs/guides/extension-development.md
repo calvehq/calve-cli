@@ -9,7 +9,7 @@ Extensions live outside this repository. Calve has no built-in domain, so a thir
 | The contract itself | [Calve Integration Contract](../reference/integration-contract.md) |
 | Run a local catalog | [catalog operations](catalog-operations.md) |
 
-Start with the smallest thing that works. An **openaevc-only** package is a native OpenAEVC extension and nothing else. Its signed manifest is enough: each effect kind it declares works with `calve resource set <effect-kind>:<name>=JSON`, and its evidence reads generically, with no Calve code.
+Start with the smallest thing that works. An **openaevc-only** package is a native OpenAEVC extension and nothing else. Its signed manifest is enough: each effect kind it declares works with `clv resource set <effect-kind>:<name>=JSON`, and its evidence reads generically, with no Calve code.
 
 Add [`calve-integration.json`](../reference/metadata-schema.md) and a CIC module when you want short names, files, checks or diffs.
 

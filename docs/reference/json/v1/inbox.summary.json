@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve inbox summary --json",
+  "title": "clv inbox summary --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "InboxSummary",
-    "description": "`calve inbox summary`.",
+    "description": "`clv inbox summary`.",
     "type": "object",
     "properties": {
       "projects": {

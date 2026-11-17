@@ -1,4 +1,4 @@
-#[cfg(unix)] // only the Unix guard tests start calve with isolated roots
+#[cfg(unix)] // only the Unix guard tests start clv with isolated roots
 use calve_testkit::Isolated;
 use std::fs;
 use std::path::Path;
@@ -144,7 +144,7 @@ async fn legacy_project_name_remains_readable_after_rename() {
     assert_eq!(reopened.identity.name.as_deref(), Some("Original"));
 }
 
-/// The test guard: under cargo a debug `calve` refuses a data root outside the test roots, so
+/// The test guard: under cargo a debug `clv` refuses a data root outside the test roots, so
 /// a test can never read or write a real user's Calve state. The same command with roots in
 /// the temp directory is not refused, so the refusal is the guard and nothing else.
 #[cfg(unix)]
@@ -157,7 +157,7 @@ fn the_binary_refuses_real_user_state_under_test() {
     let temp = tempfile::tempdir().unwrap();
     let inside = temp.path();
     let calve = |data: &Path, config: &Path| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
             .args(["config", "list", "--json"])
             .isolated(data, config)
             .env("HOME", inside)
@@ -182,7 +182,7 @@ fn the_binary_refuses_real_user_state_under_test() {
     // Linux: the native lookup (XDG, no override) is guarded the same way.
     #[cfg(target_os = "linux")]
     {
-        let out = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
             .args(["config", "list", "--json"])
             .env("XDG_DATA_HOME", outside.join("share"))
             .env("XDG_CONFIG_HOME", inside.join("config"))
@@ -208,7 +208,7 @@ fn the_binary_refuses_real_user_state_under_test() {
 fn the_test_root_override_fails_closed() {
     let temp = tempfile::tempdir().unwrap();
     let calve = |data: &std::ffi::OsStr, guarded: bool| {
-        let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_calve"));
+        let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_clv"));
         cmd.args(["config", "list", "--json"])
             .env("CALVE_TEST_DATA_ROOT", data)
             .env("CALVE_TEST_CONFIG_ROOT", temp.path().join("c/calve"));
@@ -244,7 +244,7 @@ fn the_guard_has_no_runtime_link_or_endpoint_escape() {
     let real = outside.path().join("share");
     std::os::unix::fs::symlink(outside.path(), allowed.join("link")).unwrap();
     let calve = |data: &Path, extra: &[&str]| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
             .args(extra)
             .args(["config", "list", "--json"])
             .env("CALVE_TEST_GUARD", &allowed)
@@ -283,7 +283,7 @@ fn the_guard_has_no_runtime_link_or_endpoint_escape() {
 #[cfg(unix)]
 #[test]
 fn a_project_is_found_by_another_spelling_of_its_path() {
-    let mut env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_clv"));
     let real = env.path().join("project");
     env.ok(&["init", real.to_str().unwrap()]);
     let link = env.path().join("link");
@@ -301,7 +301,7 @@ fn a_project_is_found_by_another_spelling_of_its_path() {
 fn a_project_is_found_by_another_spelling_of_its_path() {
     use std::os::windows::process::CommandExt;
     use std::process::Command;
-    let env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = calve_testkit::Env::new(env!("CARGO_BIN_EXE_clv"));
     let real = env.path().join("project-with-a-long-name");
     let init = env.ok(&["init", real.to_str().unwrap()]);
     let root = init["root"].as_str().unwrap();

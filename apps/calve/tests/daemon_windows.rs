@@ -1,7 +1,7 @@
 //! Native Windows daemon IPC (§16.2): the named pipe accepts this user's client, a daemon from
 //! another image path is refused, a second daemon cannot take the pipe, and `daemon stop` uses
 //! the IPC shutdown frame. Cross-built binaries carry Linux paths in `CARGO_BIN_EXE_*`, so the
-//! runner points `CALVE_WIN_BIN` at the directory holding `calve.exe` and `calved.exe`.
+//! runner points `CALVE_WIN_BIN` at the directory holding `clv.exe` and `calved.exe`.
 #![cfg(windows)]
 
 use std::path::{Path, PathBuf};
@@ -22,7 +22,7 @@ fn bin(name: &str) -> PathBuf {
     match std::env::var_os("CALVE_WIN_BIN") {
         Some(dir) => PathBuf::from(dir).join(name),
         None => PathBuf::from(match name {
-            "calve.exe" => env!("CARGO_BIN_EXE_calve"),
+            "clv.exe" => env!("CARGO_BIN_EXE_clv"),
             _ => env!("CARGO_BIN_EXE_calved"),
         }),
     }
@@ -42,7 +42,7 @@ fn daemon(exe: &Path, data: &Path, pipe: &str) -> Daemon {
 }
 
 fn cli(data: &Path, pipe: &str, args: &[&str]) -> Output {
-    Command::new(bin("calve.exe"))
+    Command::new(bin("clv.exe"))
         .env("LOCALAPPDATA", data)
         .args(["--endpoint", pipe, "--json"])
         .args(args)
@@ -154,7 +154,7 @@ fn a_daemon_from_another_image_path_is_refused() {
 fn daemon_start_with_piped_output_returns_while_the_daemon_runs() {
     let temp = tempfile::tempdir().unwrap();
     let pipe = unique_pipe();
-    let start = Command::new(bin("calve.exe"))
+    let start = Command::new(bin("clv.exe"))
         .env("LOCALAPPDATA", temp.path())
         .args(["--endpoint", &pipe, "--json", "daemon", "start"])
         .stdout(Stdio::piped())

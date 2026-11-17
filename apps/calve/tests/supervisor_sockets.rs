@@ -34,7 +34,7 @@ fn isolated(name: &str, depth: usize, runtime: Runtime) -> bool {
     cmd.args([name, "--exact", "--nocapture"])
         .env("CALVE_ISOLATED_TEST", "1")
         .isolated(&data, t.path().join("config"))
-        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
+        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_clv"))
         .env("WORK", t.path());
     match runtime {
         Runtime::Unset => {

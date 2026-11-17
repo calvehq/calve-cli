@@ -7,7 +7,7 @@ use calve_testkit::Env;
 /// never interprets the relation.
 #[test]
 fn deletes_and_renames_flow_through_the_lifecycle() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

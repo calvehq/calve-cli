@@ -269,7 +269,7 @@ fn confirm_dialog(app: &mut App, title: String, args: Vec<String>, label: String
         key
     });
     lines.push(String::new());
-    lines.push(format!("calve {}", args.join(" ")));
+    lines.push(format!("clv {}", args.join(" ")));
     app.overlays.push(Overlay::Confirm {
         title,
         lines,
@@ -385,7 +385,7 @@ pub fn on_response(app: &mut App, key: &str, result: Result<Value, String>) {
                         "Enter acknowledges that it runs unconfined with your permissions,".into(),
                         "and enables it.".into(),
                         String::new(),
-                        format!("calve {}", args.join(" ")),
+                        format!("clv {}", args.join(" ")),
                     ],
                     args,
                     label: label.to_owned(),
@@ -824,7 +824,7 @@ pub fn nav_matches(query: &str) -> Vec<Route> {
 fn command_tree() -> clap::Command {
     use clap::CommandFactory;
     #[derive(clap::Parser)]
-    #[command(name = "calve", no_binary_name = true)]
+    #[command(name = "clv", no_binary_name = true)]
     struct Line {
         #[command(subcommand)]
         action: calve_api::Action,

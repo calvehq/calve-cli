@@ -20,7 +20,7 @@ Intent → Task → ChangePack → capture / agent run → seal → verify & rev
 ## Build
 
 ```sh
-cargo build --workspace --locked      # Rust 1.95+; builds calve and calved
+cargo build --workspace --locked      # Rust 1.95+; builds clv and calved
 ```
 
 Calve pins OpenAEVC `v0.1.0` from its public tag; see [compatibility](docs/compatibility/openaevc.md). To install a release and verify it, see the [install guide](docs/guides/install.md).
@@ -28,20 +28,20 @@ Calve pins OpenAEVC `v0.1.0` from its public tag; see [compatibility](docs/compa
 ## A first change
 
 ```sh
-calve init my-project && cd my-project
-calve extension catalog add first-party <url> --root root.json --root-digest <sha256>
-calve extension enable org.calve.software --acknowledge-native   # from the signed catalog
-calve intent create "Say hello"
-calve pack create "Add README" --intent <intent> --require-review
+clv init my-project && cd my-project
+clv extension catalog add first-party <url> --root root.json --root-digest <sha256>
+clv extension enable org.calve.software --acknowledge-native   # from the signed catalog
+clv intent create "Say hello"
+clv pack create "Add README" --intent <intent> --require-review
 echo hello > README.md
-calve pack capture <pack> README.md --generation 1
-calve pack seal <pack> --generation <n>
-calve pack approve <pack> --generation <n> --reason "Looks right"
-calve pack qualify <pack> --generation <n>
-calve pack promote <pack> --generation <n>
-calve baseline create v1 <promoted-digest>
-calve baseline activate <baseline-id>
-calve console
+clv pack capture <pack> README.md --generation 1
+clv pack seal <pack> --generation <n>
+clv pack approve <pack> --generation <n> --reason "Looks right"
+clv pack qualify <pack> --generation <n>
+clv pack promote <pack> --generation <n>
+clv baseline create v1 <promoted-digest>
+clv baseline activate <baseline-id>
+clv console
 ```
 
 The [getting-started guide](docs/guides/getting-started.md) explains each step, and [`examples/`](examples) holds six tested end-to-end scripts: general (non-software) Projects, software with language checks and materialization, parallel Intents, multiple Baselines, revisions, and a local agent.

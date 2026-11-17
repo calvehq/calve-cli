@@ -20,7 +20,7 @@ use serde_json::Value;
 const LEASE_MS: &str = "60000";
 
 fn calve(data: &Path, vars: &[(&str, &str)], args: &[&str]) -> (bool, Value, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let output = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .env("CALVE_EXECUTION_LEASE_MS", LEASE_MS)
         .env("CALVE_TEST_KEEPER_LOG", "1")

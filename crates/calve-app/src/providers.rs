@@ -805,7 +805,7 @@ impl Project {
             Some(path) => crate::coded(
                 "CONFIG_UNAPPROVED",
                 format!(
-                    "{} is not approved, so its harnesses are ignored; review it, then run `calve config approve`",
+                    "{} is not approved, so its harnesses are ignored; review it, then run `clv config approve`",
                     path.display()
                 ),
             ),

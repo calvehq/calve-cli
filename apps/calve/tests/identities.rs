@@ -4,7 +4,7 @@ use calve_testkit::Env;
 /// reviewer's grant limits what it can do.
 #[test]
 fn reviewer_identity_and_self_review_rule() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

@@ -52,7 +52,7 @@ impl P<'_> {
 
 #[test]
 fn baselines_come_from_openaevc_derive_and_compare() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let project = root.to_str().unwrap().to_owned();
     env.ok(&["init", &project]);
@@ -163,7 +163,7 @@ fn baselines_come_from_openaevc_derive_and_compare() {
 /// §48.2: `baseline compare` is set logic over members, for every pair of compositions.
 #[test]
 fn compare_is_set_logic_over_every_pair_of_compositions() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     let mut env = env;

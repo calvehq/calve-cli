@@ -2,7 +2,7 @@
 //! test runs. Each succeeds here, so `cargo xtask json-schemas` records its output and its v1
 //! schema is enforced.
 
-#[cfg(unix)] // only the Unix execution test starts calve itself
+#[cfg(unix)] // only the Unix execution test starts clv itself
 use calve_testkit::Isolated;
 use std::fs;
 
@@ -14,7 +14,7 @@ fn id(v: &serde_json::Value) -> String {
 
 #[test]
 fn remaining_commands_succeed_with_json() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -223,7 +223,7 @@ fn remaining_commands_succeed_with_json() {
 #[cfg(unix)]
 #[test]
 fn a_running_execution_is_cancelled_and_linked_to_a_task() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -256,7 +256,7 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
     run(&env, &["config", "approve"]);
     let pack = id(&run(&env, &["pack", "create", "Slow"]));
     env.ok(&["daemon", "start"]);
-    let client = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+    let client = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(env.path().join("d"), env.path().join("c"))
         .args(at(&[
             "--json",
@@ -316,7 +316,7 @@ fn a_running_execution_is_cancelled_and_linked_to_a_task() {
     assert!(log.contains("working"), "{log}");
 
     // A relative path means the caller's directory, not the daemon's.
-    let bundle = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+    let bundle = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(env.path().join("d"), env.path().join("c"))
         .current_dir(env.path())
         .args(at(&[

@@ -854,7 +854,7 @@ fn status_action() -> Action {
 pub fn parse_action(args: &[String]) -> Result<Action, String> {
     use clap::Parser;
     #[derive(Parser)]
-    #[command(name = "calve", no_binary_name = true)]
+    #[command(name = "clv", no_binary_name = true)]
     struct Line {
         #[command(subcommand)]
         action: Action,

@@ -195,7 +195,7 @@ fn record(out: &mut String, obj: &serde_json::Map<String, Value>, indent: usize)
     }
 }
 
-/// Renders a successful result of `calve <key>` for a terminal or a pipe.
+/// Renders a successful result of `clv <key>` for a terminal or a pipe.
 pub fn human(key: &str, value: &Value) -> String {
     let mut out = String::new();
     match value {

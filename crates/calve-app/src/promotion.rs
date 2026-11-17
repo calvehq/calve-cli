@@ -287,17 +287,17 @@ impl Project {
         let mut follow_up = vec![];
         if let Some(a) = &active {
             follow_up.push(format!(
-                "calve baseline derive {a} \"<label>\" --add {promoted}"
+                "clv baseline derive {a} \"<label>\" --add {promoted}"
             ));
             if let Some(rev) = &pack.revision
                 && rev.relation == openaevc::protocol::RevisionRelation::Supersedes
             {
                 follow_up.push(format!(
-                    "calve baseline derive {a} \"<label>\" --replace-with {promoted}"
+                    "clv baseline derive {a} \"<label>\" --replace-with {promoted}"
                 ));
             }
         }
-        follow_up.push(format!("calve baseline create \"<label>\" {promoted}"));
+        follow_up.push(format!("clv baseline create \"<label>\" {promoted}"));
         Ok(json!({
             "pack": pack.id, "generation": pack.generation,
             "promoted_digest": promoted,

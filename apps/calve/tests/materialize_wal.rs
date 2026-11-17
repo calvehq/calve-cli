@@ -85,7 +85,7 @@ fn walk(dir: &Path, prefix: &str, out: &mut Vec<(String, Vec<u8>)>) {
 /// `prims`: `CALVE_FS_PRIMITIVES` for every command (`displace` = the Windows replacement
 /// algorithm on Linux renames), or the probed default.
 fn setup_with(prims: Option<&str>) -> T {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     if let Some(p) = prims {
         env.vars.push(("CALVE_FS_PRIMITIVES".into(), p.into()));
     }

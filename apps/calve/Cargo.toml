@@ -12,7 +12,7 @@ publish = false
 workspace = true
 
 [[bin]]
-name = "calve"
+name = "clv"
 path = "src/main.rs"
 
 [[bin]]

@@ -1,11 +1,12 @@
 name: CI
 
+# Regular CI runs for every pull request and for pushes to master only: not for feature-branch
+# pushes, tags (release.yml owns those) or schedules. `pull_request` (never `pull_request_target`)
+# runs fork PRs with a read-only token and no secrets.
 on:
-  push:
   pull_request:
-  schedule:
-    # Weekly, so advisories and link rot surface without a commit.
-    - cron: "17 4 * * 1"
+  push:
+    branches: [master]
 
 # Actions are pinned to commits (tag in the comment).
 permissions:

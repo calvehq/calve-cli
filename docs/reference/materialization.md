@@ -3,14 +3,14 @@
 Materialization writes accepted file content into the working tree without destroying work that was never captured.
 
 ```sh
-calve baseline materialize <baseline-or-alias>                   # plan only
-calve baseline materialize <baseline> --apply [--activate]
-calve baseline materialize <baseline> --apply --discard path/to/file
-calve resource materialize <path> --from <pack> [--apply] [--discard]
-calve materialize list
-calve materialize resume <op>
-calve materialize resolve <op> --keep ours|theirs
-calve materialize rollback <op> --yes
+clv baseline materialize <baseline-or-alias>                   # plan only
+clv baseline materialize <baseline> --apply [--activate]
+clv baseline materialize <baseline> --apply --discard path/to/file
+clv resource materialize <path> --from <pack> [--apply] [--discard]
+clv materialize list
+clv materialize resume <op>
+clv materialize resolve <op> --keep ours|theirs
+clv materialize rollback <op> --yes
 ```
 
 1. The Baseline is validated through OpenAEVC and its members' file effects are composed; chunked content is read from its blobs and verified chunk by chunk and as a whole (`CONTENT_CORRUPT`, or `MATERIALIZE_CONFLICT(content_unavailable)` when a blob is absent; nothing partial is written).

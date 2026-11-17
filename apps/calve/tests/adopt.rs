@@ -6,7 +6,7 @@ use std::process::Command;
 use serde_json::Value;
 
 fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let output = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .args(["--json", "--no-daemon-start"])
         .args(args)

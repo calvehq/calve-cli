@@ -8,7 +8,7 @@ Calve consumed seven `openaevc-*` crates from `main` over SSH. Upstream #17 merg
 ## Decision
 - Both `openaevc` and `openaevc-sdk` come from `git = "https://github.com/calvehq/openaevc.git", tag = "v0.1.0", version = "=0.1.0", default-features = false`.
 - Only `calve-app` enables `runtime` (and gets `transport` through the SDK). Every other crate uses default features (none).
-- `OPENAEVC_TAG = "v0.1.0"` and `OPENAEVC_REVISION = "5720d3ec…"` are compiled in and shown by `calve version` and doctor.
+- `OPENAEVC_TAG = "v0.1.0"` and `OPENAEVC_REVISION = "5720d3ec…"` are compiled in and shown by `clv version` and doctor.
 - OpenAEVC v0.1.0 is never modified from Calve; gaps become Calve-owned contracts (ADR 0004) or `docs/proposals/openaevc-*.md`.
 
 ## Consequences

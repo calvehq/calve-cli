@@ -2,10 +2,10 @@
 
 | Process | Role |
 |---|---|
-| `calve` | The CLI and terminal console. Serves requests in-process, or sends them to a daemon. |
+| `clv` | The CLI and terminal console. Serves requests in-process, or sends them to a daemon. |
 | `calved` | The optional local daemon. Holds one open runtime per Project and supervises workers. |
-| `calve __cic-sandbox` | A short-lived supervised child running one extension's wasm module. |
-| `calve __exec-limited` | A Unix trampoline that applies resource limits to itself and then `exec`s the worker. |
+| `clv __cic-sandbox` | A short-lived supervised child running one extension's wasm module. |
+| `clv __exec-limited` | A Unix trampoline that applies resource limits to itself and then `exec`s the worker. |
 | Workers and checks | Launched and supervised by Calve. |
 | Native extensions | Spawned directly by OpenAEVC, and not confined by Calve (T2). |
 

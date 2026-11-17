@@ -6,5 +6,5 @@ extension. The pack requires review, is approved, qualified and promoted, and th
 values are then read back from the active Baseline.
 
 ```sh
-CALVE=target/debug/calve examples/general-project/run.sh
+CALVE=target/debug/clv examples/general-project/run.sh
 ```

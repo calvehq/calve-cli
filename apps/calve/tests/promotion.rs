@@ -8,7 +8,7 @@ use calve_testkit::Env;
 
 #[test]
 fn promotion_preflight_expected_candidate_retry_and_result() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -42,7 +42,7 @@ fn promotion_preflight_expected_candidate_retry_and_result() {
     // A candidate other than the reviewed one: STALE_VIEW (exit 3), JSON and human.
     let other = format!("sha256:{}", "0".repeat(64));
     let stale = |json: bool| {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_calve"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_clv"));
         c.isolated(env.path().join("d"), env.path().join("c"))
             .args(["--no-daemon-start", "--project", &p]);
         if json {

@@ -1,6 +1,6 @@
 # Console
 
-`calve console` is a terminal client of the same API as the CLI. `calve-console` depends only on `calve-api` and `calve-client`, so it cannot reach the product store or OpenAEVC; `check-architecture` enforces that.
+`clv console` is a terminal client of the same API as the CLI. `calve-console` depends only on `calve-api` and `calve-client`, so it cannot reach the product store or OpenAEVC; `check-architecture` enforces that.
 
 The console is split into a state engine and a thin terminal loop:
 

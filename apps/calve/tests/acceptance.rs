@@ -42,7 +42,7 @@ impl P<'_> {
 #[test]
 #[cfg(unix)]
 fn scenario_g_capability_denial() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let project = root.to_str().unwrap().to_owned();
     env.ok(&["init", &project]);
@@ -98,7 +98,7 @@ fn scenario_g_capability_denial() {
 /// doctor reports the exact mismatch and the supported range.
 #[test]
 fn scenario_p_version_incompatibility() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let project = root.to_str().unwrap().to_owned();
     env.ok(&["init", &project]);
@@ -145,7 +145,7 @@ fn scenario_p_version_incompatibility() {
 /// or not. The boundary is this machine: another machine holds no authority until it imports one.
 #[test]
 fn test_l_a_copy_is_inactive_until_adopted() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("original");
     env.ok(&["init", root.to_str().unwrap(), "--no-register"]);
     let original = root.to_str().unwrap();
@@ -181,7 +181,7 @@ fn test_l_a_copy_is_inactive_until_adopted() {
 /// A moved Project keeps its identity: the authority follows when the old root is gone.
 #[test]
 fn test_l_a_moved_project_stays_active() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("before");
     env.ok(&["init", root.to_str().unwrap(), "--no-register"]);
     let moved = env.path().join("after");
@@ -198,7 +198,7 @@ fn test_l_a_moved_project_stays_active() {
 /// Another machine: no authority, so nothing opens as this Project until it is imported.
 #[test]
 fn test_l_another_machine_needs_the_authority() {
-    let here = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let here = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = here.path().join("project");
     let p = root.to_str().unwrap();
     here.ok(&["init", p, "--no-register"]);
@@ -212,7 +212,7 @@ fn test_l_another_machine_needs_the_authority() {
         "--yes",
     ]);
 
-    let there = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let there = Env::new(env!("CARGO_BIN_EXE_clv"));
     let copy = there.path().join("project");
     calve_testkit::copy_tree(&root, &copy);
     let c = copy.to_str().unwrap();
@@ -225,7 +225,7 @@ fn test_l_another_machine_needs_the_authority() {
 /// No key material stays where a worker works.
 #[test]
 fn the_project_directory_holds_no_authority() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
@@ -237,7 +237,7 @@ fn the_project_directory_holds_no_authority() {
 /// Keys of a Project from before they moved leave the directory on first open.
 #[test]
 fn legacy_keys_move_out_on_first_open() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
@@ -269,7 +269,7 @@ fn scenario_p_simulated_runtime_ranges() {
         ("0.0-0.1", true),
         ("0.1-0.2", true),
     ] {
-        let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let root = env.path().join("p");
         let p = root.to_str().unwrap().to_owned();
         env.ok(&["init", &p]);
@@ -298,7 +298,7 @@ fn scenario_p_simulated_runtime_ranges() {
 /// §60 Test D: losing the product database with no backup loses product records, never history.
 #[test]
 fn test_d_product_state_rebuilds_without_a_backup() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

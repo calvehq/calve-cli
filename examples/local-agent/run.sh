@@ -17,19 +17,19 @@ chmod +x "$agent"
 # The agent is the provider's program. Windows cannot execute a script directly, so there sh
 # runs it; elsewhere it runs itself (a confined worker may execute and read its own program).
 if [ -n "${WINDIR:-}" ]; then
-  calve provider add fake --kind stdio-agent --executable sh --arg "$agent" >/dev/null
+  clv provider add fake --kind stdio-agent --executable sh --arg "$agent" >/dev/null
 else
-  calve provider add fake --kind stdio-agent --executable "$agent" >/dev/null
+  clv provider add fake --kind stdio-agent --executable "$agent" >/dev/null
 fi
-expect "provider healthy" "$(calve provider test fake | get '["healthy"]')" "true"
-cfg=$(calve config edit-path --scope project | get '["path"]')
+expect "provider healthy" "$(clv provider test fake | get '["healthy"]')" "true"
+cfg=$(clv config edit-path --scope project | get '["path"]')
 printf 'format_version = 1\n[harnesses.changelog]\nprovider = "fake"\nmode = "change"\n' > "$cfg"
-calve config approve >/dev/null
-pack=$(calve pack create "Agent changelog" | get '["id"]')
-run=$(calve execution start "$pack" --harness changelog --generation 1)
+clv config approve >/dev/null
+pack=$(clv pack create "Agent changelog" | get '["id"]')
+run=$(clv execution start "$pack" --harness changelog --generation 1)
 expect "agent run succeeded" "$(get '["state"]' <<<"$run")" "SUCCEEDED"
 expect "agent proposal became an effect" "$(get '["effects"][0]["path"]' <<<"$run")" "CHANGELOG.md"
 execution=$(get '["execution"]' <<<"$run")
-expect "agent log recorded" "$(calve view execution "$execution" | get '["output"][0]["text"]')" "planning"
+expect "agent log recorded" "$(clv view execution "$execution" | get '["output"][0]["text"]')" "planning"
 promote "$pack" >/dev/null
-expect "promoted" "$(calve pack show "$pack" | get '["state"]')" "PROMOTED"
+expect "promoted" "$(clv pack show "$pack" | get '["state"]')" "PROMOTED"

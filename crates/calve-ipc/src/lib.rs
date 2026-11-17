@@ -169,7 +169,7 @@ async fn hello<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Result<()> 
     // A release pins one OpenAEVC revision, so an older daemon is a different runtime too.
     if ack.accepted && ack.product_version != env!("CARGO_PKG_VERSION") {
         return Err(Error::Message(format!(
-            "DAEMON_INCOMPATIBLE: the daemon is Calve {} (OpenAEVC {}) and this client {}; run `calve daemon restart`",
+            "DAEMON_INCOMPATIBLE: the daemon is Calve {} (OpenAEVC {}) and this client {}; run `clv daemon restart`",
             ack.product_version,
             ack.openaevc_revision,
             env!("CARGO_PKG_VERSION")

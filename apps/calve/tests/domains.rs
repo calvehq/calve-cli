@@ -10,7 +10,7 @@ use calve_testkit::Env;
 
 #[test]
 fn language_checks_gate_promotion_through_openaevc() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -191,7 +191,7 @@ fn language_checks_gate_promotion_through_openaevc() {
 
 #[test]
 fn declared_resources_follow_accepted_history() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -278,7 +278,7 @@ fn declared_resources_follow_accepted_history() {
 #[test]
 fn check_plan_approval_is_bound_to_the_resolved_executable() {
     use std::os::unix::fs::PermissionsExt;
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);
@@ -360,7 +360,7 @@ fn check_plan_approval_is_bound_to_the_resolved_executable() {
 /// setting the same resource, the one promoted last wins even if it was created first.
 #[test]
 fn declared_resources_follow_promotion_order() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);

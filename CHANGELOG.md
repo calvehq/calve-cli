@@ -46,6 +46,13 @@ All notable changes to Calve are documented here.
 
 ### Changed
 
+- **The command is `clv`.** The CLI executable is `clv` (`clv init`, `clv status`,
+  `clv pack verify`, …); the daemon stays `calved`. Commands, flags, JSON output and exit codes
+  are unchanged, and so are `.calve/`, the data and configuration directories, `CALVE_*`
+  variables, extension IDs and release archive names (`calve-<version>-<target>`). No `calve`
+  executable ships: no version was released under that name.
+- **Regular CI runs only for pull requests and pushes to `master`**, no longer for every branch
+  push or on a weekly schedule. Tag-triggered releases are unchanged.
 - **`pack reopen` refuses a pack with effects** (`REOPEN_UNSAFE`), leaving it unchanged: OpenAEVC
   v0.1.0 could never promote it afterwards. `supersede start` now also works from SEALED and QUALIFIED.
 

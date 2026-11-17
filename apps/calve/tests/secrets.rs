@@ -13,7 +13,7 @@ use std::process::Command;
 const SECRET: &str = "Sup3r-S3cret/Token+Value=42";
 
 fn calve(data: &Path, args: &[&str]) -> (bool, serde_json::Value, String, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let output = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .env("CALVE_TEST_SECRET", SECRET)
         .args(["--json", "--no-daemon-start"])
@@ -225,7 +225,7 @@ fn secrets_never_reach_any_sink() {
     )
     .1;
     // Human output and errors go through the same redaction.
-    let human = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let human = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .args([
             "--no-daemon-start",
@@ -285,7 +285,7 @@ fn captured_content_stays_in_content_sinks_only() {
     let (pack, _) = ok(data, &["--project", p, "pack", "create", "C"]);
     let pack = pack["id"].as_str().unwrap().to_owned();
     // An interrupted capture leaves its spool and journal; resume finishes it.
-    let crash = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let crash = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .env("CALVE_FAULT", "capture.submit.1.0.after_intent")
         .args([
@@ -326,7 +326,7 @@ fn captured_content_stays_in_content_sinks_only() {
         .1;
     }
     fs::write(root.join("cred.txt"), "local edit\n").unwrap();
-    let conflict = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let conflict = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .env(
             "CALVE_TEST_WRITE",

@@ -3,9 +3,9 @@
 Seal a pack, then register a file against its exact candidate:
 
 ```text
-calve evidence add <pack-id> --generation <sealed-generation> --kind org.example.report --file report.txt --media-type text/plain
-calve evidence show <returned-digest>
-calve evidence list <pack-id> --current
+clv evidence add <pack-id> --generation <sealed-generation> --kind org.example.report --file report.txt --media-type text/plain
+clv evidence show <returned-digest>
+clv evidence list <pack-id> --current
 ```
 
 Relative file paths resolve from the Project root. The file may be outside the Project when given as an absolute path. Calve rejects files under `.calve`, payloads over 1 MiB, and reserved `org.calve.review.*` kinds. OpenAEVC stores the payload as an immutable Blob and binds the evidence record to the pack's sealed candidate digest and generation. A stale generation, unsealed pack, or protocol-invalid evidence request is rejected. `show` returns the OpenAEVC evidence record; it does not write the payload back to disk.

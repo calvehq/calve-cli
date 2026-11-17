@@ -7,7 +7,7 @@ wasmi has no epoch interruption (F13); fuel alone cannot bound wall time for eve
 
 ## Decision
 - Soft deadline on the calling thread: `call_resumable` with fuel slices; between slices the host checks wall time and the per-call fuel budget.
-- Hard deadline: every CIC session runs in a child (`calve __cic-sandbox`) speaking framed messages over stdio; the parent kills it at the wall-clock deadline (process group / Job Object).
+- Hard deadline: every CIC session runs in a child (`clv __cic-sandbox`) speaking framed messages over stdio; the parent kills it at the wall-clock deadline (process group / Job Object).
 - Resource caps: guest memory 64 MiB (StoreLimits, growth denial tracked → `OUT_OF_MEMORY`), module ≤ 8 MiB, tables ≤ 10 000, 1 instance/memory/table.
 
 ## Consequences
@@ -20,7 +20,7 @@ FG3: release soft-deadline overshoot 50 µs (slice 1e5) / 15.6 ms (1e7); bulk op
 wasmi interpreter bugs (tracked by cargo-deny advisories).
 
 ## M2 production implementation (2026-10-15)
-- `calve __cic-sandbox` serves every production CIC session (`domains::open_session`); Linux applies Landlock deny-all in the child. The production host is the one exercised by calve-extensions conformance.
+- `clv __cic-sandbox` serves every production CIC session (`domains::open_session`); Linux applies Landlock deny-all in the child. The production host is the one exercised by calve-extensions conformance.
 
 ## Time budgets (M7 closeout, 2026-11-03)
 Four separate bounds: startup (spawn, read, compile: 60 s, no guest code runs; `CIC_STARTUP_DEADLINE`), guest execution per message (hard 15 s, unchanged), the whole session (600 s from spawn, absolute; `CIC_SESSION_DEADLINE`), and the caller's cancellation (dropping the driver kills the child). This replaces the earlier 60 s allowance on a session's first message, which also covered the guest's first call.

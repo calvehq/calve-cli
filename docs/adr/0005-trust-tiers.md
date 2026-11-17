@@ -8,8 +8,8 @@ Three kinds of extension code run on a user's machine: CIC wasm (planning), nati
 ## Decision
 - **T1** `cic.wasm` in the supervised sandbox: isolation by construction (no imports) plus memory, fuel and hard wall-clock limits.
 - **T2** native OpenAEVC binaries: **elevated trust, not OS-confined.** Enforced only: TUF-verified package, per-spawn re-hash, cleared env, capability ceilings and grants for host-mediated calls. Installing or enabling T2 requires an explicit, recorded acknowledgment ("runs as native code with your user permissions").
-- **T3** workers/checks: runner limits and process containment (ADR 0017); Linux additionally self-applies Landlock through `calve __exec-confined`.
-- Logical purity, observed determinism and enforced isolation are reported separately (docs, `calve extension show`, console).
+- **T3** workers/checks: runner limits and process containment (ADR 0017); Linux additionally self-applies Landlock through `clv __exec-confined`.
+- Logical purity, observed determinism and enforced isolation are reported separately (docs, `clv extension show`, console).
 
 ## Consequences
 - A versioned launcher-hook proposal (`docs/proposals/openaevc-spawn-policy.md`) is kept for a future OpenAEVC release; Calve does not patch OpenAEVC.

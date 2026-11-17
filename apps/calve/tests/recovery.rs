@@ -7,7 +7,7 @@ use calve_testkit::Env;
 use serde_json::Value;
 
 fn calve_env(env: &Env, args: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_calve"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_clv"));
     command
         .isolated(env.path().join("d"), env.path().join("c"))
         .env_remove("XDG_RUNTIME_DIR")
@@ -31,7 +31,7 @@ fn daemon_ok(env: &Env, args: &[&str]) -> Value {
 /// nothing is reported as succeeded.
 #[test]
 fn crash_during_execution_is_reported_lost() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
@@ -136,7 +136,7 @@ fn crash_during_execution_is_reported_lost() {
 /// recovery removes the leftovers.
 #[test]
 fn interrupted_extension_install_is_recoverable() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

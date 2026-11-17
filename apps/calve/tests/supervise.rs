@@ -1,5 +1,5 @@
 //! Unix supervision (rev 10 §16.3, ADR 0017, N32/N41/N48/N61/N72): one process group per
-//! worker under `calve __exec-confined`, result before the group kill, PDEATHSIG and its race,
+//! worker under `clv __exec-confined`, result before the group kill, PDEATHSIG and its race,
 //! the fallback result file under Landlock, termination classification, reaping, and the
 //! residuals that are asserted rather than hidden.
 #![cfg(target_os = "linux")]
@@ -34,7 +34,7 @@ fn isolated(name: &str, extra: &[(&str, &str)]) -> (bool, PathBuf, tempfile::Tem
         .env("CALVE_ISOLATED_TEST", "1")
         .isolated(t.path().join("data"), t.path().join("config"))
         .env("XDG_RUNTIME_DIR", &run)
-        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_calve"))
+        .env("CALVE_SANDBOX_PROGRAM", env!("CARGO_BIN_EXE_clv"))
         .env("CALVE_KEEP_SPAWN_RECORDS", "1")
         .env("WORK", t.path())
         .envs(extra.iter().copied())

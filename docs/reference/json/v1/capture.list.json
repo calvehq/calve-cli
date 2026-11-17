@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve capture list --json",
+  "title": "clv capture list --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11,7 +11,7 @@
     },
     "$defs": {
       "CaptureSession": {
-        "description": "`calve capture list` item.",
+        "description": "`clv capture list` item.",
         "type": "object",
         "properties": {
           "session": {

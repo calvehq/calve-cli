@@ -46,7 +46,7 @@ fn harness(root: &std::path::Path, mode: &str, script: &str) {
 /// Every route to authority fails, with HOME and the data directory inside the worker's roots.
 #[test]
 fn a_worker_cannot_reach_authority_or_the_daemon() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let home = env.path().to_path_buf();
     env.vars.push(("HOME".into(), home.into()));
     let (root, p) = project(&mut env);
@@ -123,7 +123,7 @@ echo ok-in-project > allowed-write; cat allowed-write; rm allowed-write
 /// Configuration a worker could have written is powerless until the host approves those bytes.
 #[test]
 fn unapproved_project_configuration_runs_nothing() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let (root, p) = project(&mut env);
     harness(&root, "check", "echo planted");
     let pack = id(&env.ok(&["--project", &p, "pack", "create", "c"]));
@@ -167,7 +167,7 @@ fn unapproved_project_configuration_runs_nothing() {
 /// A planted check command does not run as approved: it needs the host's approval of the file.
 #[test]
 fn planted_check_commands_are_ignored_until_approved() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let (root, p) = project(&mut env);
     fs::write(
         root.join(".calve/config.toml"),

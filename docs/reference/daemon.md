@@ -1,6 +1,6 @@
 # Daemon
 
-`calved` serves the Calve API on a private Unix socket (`daemon.sock` under `$XDG_RUNTIME_DIR/calve/<digest>/` when that is set, otherwise in the Calve data directory; directory mode `0700`, socket `0600`, peer UID checked), and logs to `<data>/logs/daemon.log`. `calve daemon start|stop|restart|status|logs` manage it; `calve daemon serve` runs it in the foreground.
+`calved` serves the Calve API on a private Unix socket (`daemon.sock` under `$XDG_RUNTIME_DIR/calve/<digest>/` when that is set, otherwise in the Calve data directory; directory mode `0700`, socket `0600`, peer UID checked), and logs to `<data>/logs/daemon.log`. `clv daemon start|stop|restart|status|logs` manage it; `clv daemon serve` runs it in the foreground.
 
 The CLI uses a running daemon automatically and otherwise runs requests in-process with the same code. `--direct` forces in-process execution, `--endpoint <socket>` requires a specific daemon, and `--no-daemon-start` prevents the automatic start that `execution start|retry` and the console otherwise perform. The client makes path arguments absolute, since the daemon has its own working directory. A provider's executable is stored as given, so use an absolute path, and `--env` and `env:` secrets read the daemon's environment.
 

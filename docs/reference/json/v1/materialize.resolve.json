@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve materialize resolve --json",
+  "title": "clv materialize resolve --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "MaterializeCompleted",
-    "description": "`calve materialize resume` / `resolve`: the operation driven to `Completed`.",
+    "description": "`clv materialize resume` / `resolve`: the operation driven to `Completed`.",
     "type": "object",
     "properties": {
       "op": {
@@ -64,12 +64,12 @@
             ]
           },
           {
-            "description": "Steps remain, or provenance is not recorded yet: `calve materialize resume`.",
+            "description": "Steps remain, or provenance is not recorded yet: `clv materialize resume`.",
             "type": "string",
             "const": "Interrupted"
           },
           {
-            "description": "A step found unexpected content: `calve materialize resolve`.",
+            "description": "A step found unexpected content: `clv materialize resolve`.",
             "type": "string",
             "const": "Conflicted"
           }

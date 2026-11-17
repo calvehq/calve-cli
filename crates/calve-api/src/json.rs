@@ -7,7 +7,7 @@
 
 include!("json_commands.rs");
 
-/// Whether `calve <key>` declares JSON output.
+/// Whether `clv <key>` declares JSON output.
 pub fn declares(key: &str) -> bool {
     COMMANDS.binary_search(&key).is_ok()
 }

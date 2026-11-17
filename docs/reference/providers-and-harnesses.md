@@ -5,12 +5,12 @@ A **provider profile** says how to launch a worker. A **harness** says what one 
 ## Provider profiles
 
 ```sh
-calve provider add shell --kind local-process --executable sh
-calve provider add agent --kind stdio-agent --executable /opt/my-agent \
+clv provider add shell --kind local-process --executable sh
+clv provider add agent --kind stdio-agent --executable /opt/my-agent \
   --secret API_TOKEN=env:MY_AGENT_TOKEN --env LANG --timeout-ms 600000
-calve provider edit agent --allow-project <project-id>
-calve provider test agent          # executable, secrets and references, without running
-calve provider disable agent
+clv provider edit agent --allow-project <project-id>
+clv provider test agent          # executable, secrets and references, without running
+clv provider disable agent
 ```
 
 Profiles live in configuration (`[providers.<id>]`, global scope by default; `--scope workspace|project` on `add`). Fields: `kind`, `executable`, `args`, `env` (variables inherited from Calve's environment, everything else is cleared), `secrets` (child variable → `env:NAME` reference, resolved at launch and never stored), `default_harness`, `timeout_ms`, `max_output_bytes`, `projects` (allowed Project IDs; empty allows all), and `limits`.
@@ -25,7 +25,7 @@ Profiles live in configuration (`[providers.<id>]`, global scope by default; `--
 
 `confinement` in the same table is `required` or `best-effort`. On Linux the default is `required`: a worker that cannot get its namespaces and Landlock is refused. Hosts that forbid unprivileged user namespaces can set `best-effort`, per provider or with `CALVE_WORKER_CONFINEMENT=best-effort` for the daemon. Elsewhere the default is `best-effort`. Each run reports `containment`.
 
-A limit the platform cannot enforce is refused when the provider is configured or launched, never ignored. On Unix the limits are applied by `calve __exec-limited`, which sets them on itself and then `exec`s the worker under the same supervision and Landlock rules; a worker that cannot start within its limits fails instead of running unlimited.
+A limit the platform cannot enforce is refused when the provider is configured or launched, never ignored. On Unix the limits are applied by `clv __exec-limited`, which sets them on itself and then `exec`s the worker under the same supervision and Landlock rules; a worker that cannot start within its limits fails instead of running unlimited.
 
 Two adapters ship:
 
@@ -34,7 +34,7 @@ Two adapters ship:
 
 ## Harnesses
 
-Harnesses are declared in configuration and validated on load. In Project configuration they count only once approved with `calve config approve`:
+Harnesses are declared in configuration and validated on load. In Project configuration they count only once approved with `clv config approve`:
 
 ```toml
 format_version = 1
@@ -46,7 +46,7 @@ command = ["-c", "cargo fmt"]
 timeout_ms = 600000
 ```
 
-`calve harness list|show|test` inspect them; the `capture` harness is built in (its protocol ids derive from the enabled file package). Run one with `calve execution start <pack> --harness fmt --generation <n> [--task <id>]`.
+`clv harness list|show|test` inspect them; the `capture` harness is built in (its protocol ids derive from the enabled file package). Run one with `clv execution start <pack> --harness fmt --generation <n> [--task <id>]`.
 
 ## What a run guarantees
 

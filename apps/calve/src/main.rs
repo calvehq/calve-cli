@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "calve",
+    name = "clv",
     version,
     about = "See the whole change. Decide what becomes real."
 )]
@@ -51,7 +51,7 @@ struct Cli {
     /// Never start calved implicitly.
     #[arg(long, global = true)]
     no_daemon_start: bool,
-    /// Act as a local identity (see `calve authority identities`).
+    /// Act as a local identity (see `clv authority identities`).
     #[arg(long = "as", global = true)]
     actor: Option<String>,
     #[command(subcommand)]
@@ -285,7 +285,7 @@ async fn real_main() -> i32 {
         && !(cfg!(debug_assertions) && std::env::var_os("CALVE_JSON_RECORD").is_some())
     {
         eprintln!(
-            "error: --json is not supported by `calve {}` (it declares no JSON schema)",
+            "error: --json is not supported by `clv {}` (it declares no JSON schema)",
             out.key
         );
         return exit::USAGE;

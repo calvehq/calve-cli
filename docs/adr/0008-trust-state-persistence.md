@@ -13,7 +13,7 @@ Catalog trust state must survive crashes and accidental damage without ever lowe
 ## Consequences
 - M0 deltas: raw-byte storage is required for tough as well; floors comparison follows roll-forward; `REPO_ID` file filters candidate generations even when CURRENT is lost.
 - G1-TUF deltas: no separate `raw/` copy (sigstore-tuf stores fetched bytes verbatim); the verifier clock is `max(system clock, last accepted_at)`, so a stepped-back clock cannot revive expired metadata; resolving a target is itself a transition, so lazily loaded delegated roles land in the new generation. Windows: files are synced through a writable handle; directory fsync is Unix-only and rename durability uses `MoveFileExW(MOVEFILE_WRITE_THROUGH)` (M2/M4).
-- The privileged reset (`calve extension catalog reset <name> --root-digest`) archives the old state and logs it; never automatic.
+- The privileged reset (`clv extension catalog reset <name> --root-digest`) archives the old state and logs it; never automatic.
 
 ## Tests / evidence
 FG15 6/6 on tough (M0); G1-TUF rerun 8/8 on sigstore-tuf, Linux and Windows (adds delegated-role replay with repaired digests → RecoveryRequired, and the stepped-back clock case).

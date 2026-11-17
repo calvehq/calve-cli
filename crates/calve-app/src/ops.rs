@@ -314,7 +314,7 @@ impl Project {
             }
         }
         out.push(json!({"pattern":null,"source":format!("defaults of {}", d.extension),"line":null,"ignored":true,
-            "note":"built-in defaults are decided by the extension; check a path with `calve ignore check`"}));
+            "note":"built-in defaults are decided by the extension; check a path with `clv ignore check`"}));
         Ok(json!(out))
     }
 
@@ -541,7 +541,7 @@ pub fn recovery_plan(root: &Path) -> Result<Vec<Value>> {
             .is_ok_and(|age| age.as_secs() > 600);
         if name.starts_with(".calve-init-") && entry.file_type()?.is_dir() && stale {
             actions.push(json!({"action":"remove_staging_dir","path":entry.path(),
-                "reason":"left by an interrupted calve init"}));
+                "reason":"left by an interrupted clv init"}));
         }
     }
     actions.extend(crate::adopt::adoption_leftovers(root)?);

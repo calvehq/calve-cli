@@ -3,13 +3,13 @@
 OpenAEVC owns execution identity, admission, leases and state. Calve starts executions for configured harnesses, supervises the worker process, and presents the result.
 
 ```text
-calve execution start <pack-id> --harness <harness> --generation <n> [--task <task-id>]
-calve execution list [--pack <pack-id>] [--state running]
-calve execution show <execution-id>
-calve execution logs <execution-id>
-calve execution wait <execution-id> --timeout-ms 30000
-calve execution cancel <execution-id> --reason "No longer needed"
-calve execution retry <execution-id>
+clv execution start <pack-id> --harness <harness> --generation <n> [--task <task-id>]
+clv execution list [--pack <pack-id>] [--state running]
+clv execution show <execution-id>
+clv execution logs <execution-id>
+clv execution wait <execution-id> --timeout-ms 30000
+clv execution cancel <execution-id> --reason "No longer needed"
+clv execution retry <execution-id>
 ```
 
 `start` runs a harness (see [providers and harnesses](providers-and-harnesses.md)) as an OpenAEVC execution on an OPEN pack. The worker's output becomes observations, and in `change` mode the files it changes inside the harness scope become snapshot effects with provenance. Changes outside the scope fail the execution and are not recorded. Supervised commands (`start`, `retry`) run under `calved` so the worker survives the CLI exiting; Calve starts the daemon automatically unless `--no-daemon-start` is given, and otherwise runs in-process.

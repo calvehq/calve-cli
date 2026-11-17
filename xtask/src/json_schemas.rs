@@ -249,7 +249,7 @@ pub fn run(root: &Path, write: bool, from: Option<&Path>) -> Result {
     let typed_doc = |command: &str, schema: &Value| {
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "title": format!("calve {command} --json"),
+            "title": format!("clv {command} --json"),
             "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
             "schema": schema,
         })
@@ -344,7 +344,7 @@ pub fn run(root: &Path, write: bool, from: Option<&Path>) -> Result {
         };
         let doc = json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "title": format!("calve {command} --json"),
+            "title": format!("clv {command} --json"),
             "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}. Additional properties may appear within v1.",
             "schema": schema,
         });

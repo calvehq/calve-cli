@@ -178,7 +178,7 @@ pub fn restore(db_path: &Path, backup: &str) -> Result<Value> {
     if backup.contains(['/', '\\']) || !backup.starts_with("product-") {
         return Err(coded(
             "INVALID_ARGUMENT",
-            "name a backup file listed by `calve recover inspect`",
+            "name a backup file listed by `clv recover inspect`",
         ));
     }
     let source = dir(db_path).join(backup);

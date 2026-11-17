@@ -26,7 +26,7 @@ ExtensionLauncher v1
 - The runtime keeps verifying the artifact digest **immediately before** calling the launcher and
   passes the digest, so a launcher cannot run a different file by accident.
 - The embedding application implements the launcher (Linux: Landlock + seccomp in a helper such
-  as `calve __exec-confined`; Windows: AppContainer or a restricted token inside a Job Object;
+  as `clv __exec-confined`; Windows: AppContainer or a restricted token inside a Job Object;
   macOS: sandbox profile), and reports which policy fields it enforced.
 - The hook is versioned (`SpawnPolicy.version`); an unknown version fails closed.
 - Without a launcher, behaviour is exactly v0.1.0's.

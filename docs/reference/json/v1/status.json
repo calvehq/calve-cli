@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve status --json",
+  "title": "clv status --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Status",
-    "description": "`calve status` (§17.5): a derived read model, never a second authority.",
+    "description": "`clv status` (§17.5): a derived read model, never a second authority.",
     "type": "object",
     "properties": {
       "project": {

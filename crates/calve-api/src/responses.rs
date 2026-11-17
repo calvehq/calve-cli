@@ -12,9 +12,9 @@ use serde_json::Value;
 /// State of a materialization operation (§14).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum MaterializeState {
-    /// Steps remain, or provenance is not recorded yet: `calve materialize resume`.
+    /// Steps remain, or provenance is not recorded yet: `clv materialize resume`.
     Interrupted,
-    /// A step found unexpected content: `calve materialize resolve`.
+    /// A step found unexpected content: `clv materialize resolve`.
     Conflicted,
     Completed,
     RolledBack,
@@ -27,7 +27,7 @@ pub struct StepRef {
     pub path: String,
 }
 
-/// `calve materialize list` item.
+/// `clv materialize list` item.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializeOperation {
@@ -39,7 +39,7 @@ pub struct MaterializeOperation {
     pub conflicts: Vec<StepRef>,
 }
 
-/// `calve materialize resume` / `resolve`: the operation driven to `Completed`.
+/// `clv materialize resume` / `resolve`: the operation driven to `Completed`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializeCompleted {
@@ -57,7 +57,7 @@ pub struct MaterializeCompleted {
     pub resolved: Option<Vec<String>>,
 }
 
-/// `calve materialize rollback`.
+/// `clv materialize rollback`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializeRolledBack {
@@ -89,7 +89,7 @@ pub struct InboxSummaryProject {
     pub error: Option<String>,
 }
 
-/// `calve inbox summary`.
+/// `clv inbox summary`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct InboxSummary {
@@ -128,7 +128,7 @@ pub struct GcRemoved {
     pub scanned: Option<u64>,
 }
 
-/// `calve maintenance gc`: with `--dry-run`, `classes`; otherwise `planned` and `removed`.
+/// `clv maintenance gc`: with `--dry-run`, `classes`; otherwise `planned` and `removed`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GcReport {
@@ -159,7 +159,7 @@ pub enum CaptureState {
     Abandoned,
 }
 
-/// `calve capture list` item.
+/// `clv capture list` item.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CaptureSession {
@@ -190,7 +190,7 @@ pub enum SupersedeState {
     RecoveryRequired,
 }
 
-/// `calve supersede list` item.
+/// `clv supersede list` item.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SupersedeSaga {
@@ -259,7 +259,7 @@ pub struct StatusBlockers {
     pub review: Vec<AttentionRef>,
 }
 
-/// `calve status` (§17.5): a derived read model, never a second authority.
+/// `clv status` (§17.5): a derived read model, never a second authority.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Status {

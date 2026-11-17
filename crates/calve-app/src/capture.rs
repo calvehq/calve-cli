@@ -230,7 +230,7 @@ fn sessions(root: &Path) -> Result<Vec<(String, Value, Log)>> {
 }
 
 /// Every capture session with its state (`capture list`).
-/// `calve capture list`, through its contract type (an unknown state is a corrupt journal).
+/// `clv capture list`, through its contract type (an unknown state is a corrupt journal).
 pub fn list(root: &Path) -> Result<Vec<calve_api::responses::CaptureSession>> {
     let rows: Vec<Value> = sessions(root)?
         .into_iter()
@@ -517,7 +517,7 @@ impl Project {
                     return Err(crate::detailed(
                         "CAPTURE_DIVERGED",
                         format!(
-                            "the pack changed under capture {id} (other effects on {} path(s)); roll it back with `calve capture rollback {id}` and capture again",
+                            "the pack changed under capture {id} (other effects on {} path(s)); roll it back with `clv capture rollback {id}` and capture again",
                             paths.len()
                         ),
                         json!({"session": id, "pack": spool.pack, "paths": paths}),
@@ -554,7 +554,7 @@ impl Project {
                         return Err(crate::detailed(
                             "CAPTURE_INCOMPLETE",
                             format!(
-                                "attempt {n} of capture {id} ended {state} after applying effects, which cannot be promoted; roll the capture back with `calve capture rollback {id}`"
+                                "attempt {n} of capture {id} ended {state} after applying effects, which cannot be promoted; roll the capture back with `clv capture rollback {id}`"
                             ),
                             json!({"session": id, "attempt": n, "execution": exe, "execution_state": state,
                                 "failure": shown["failure"], "lease": shown["lease"],
@@ -580,7 +580,7 @@ impl Project {
                         return Err(crate::detailed(
                             "CAPTURE_INCOMPLETE",
                             format!(
-                                "capture {id} failed after {MAX_ATTEMPTS} attempts; roll it back with `calve capture rollback {id}`"
+                                "capture {id} failed after {MAX_ATTEMPTS} attempts; roll it back with `clv capture rollback {id}`"
                             ),
                             json!({"session": id}),
                         ));
@@ -740,7 +740,7 @@ impl Project {
                         return Err(crate::detailed(
                             "CAPTURE_REFUSED",
                             format!(
-                                "{} rejected the change to {}; roll the capture back with `calve capture rollback {id}`",
+                                "{} rejected the change to {}; roll the capture back with `clv capture rollback {id}`",
                                 proposal.target.extension, proposal.target.locator
                             ),
                             json!({"session": id, "path": proposal.target.locator}),

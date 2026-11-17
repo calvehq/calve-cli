@@ -2,7 +2,7 @@
 //! against a real calved serving a Project with the first-party catalog's extensions on
 //! OpenAEVC v0.1.0. Ignored by default; the driver prepares a Project (a trusted catalog, an
 //! enabled file extension, at least three OPEN packs), isolates XDG_DATA_HOME/XDG_CONFIG_HOME/
-//! XDG_RUNTIME_DIR, sets CALVE_E2E_PROJECT and CALVE_BIN (a `calve` with `calved` beside it),
+//! XDG_RUNTIME_DIR, sets CALVE_E2E_PROJECT and CALVE_BIN (a `clv` with `calved` beside it),
 //! and runs `cargo test -p calve-console --test reconnect_e2e -- --ignored`.
 
 use std::path::PathBuf;
@@ -68,7 +68,7 @@ fn daemon(verb: &str) {
         .args(["daemon", verb])
         .status()
         .unwrap();
-    assert!(status.success(), "calve daemon {verb}");
+    assert!(status.success(), "clv daemon {verb}");
 }
 
 fn key(app: &mut App, c: char) {

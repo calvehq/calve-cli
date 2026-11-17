@@ -20,7 +20,7 @@ struct T {
 
 impl T {
     fn new() -> Self {
-        let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let root = env.path().join("project");
         let p = root.to_str().unwrap().to_owned();
         env.ok(&["init", &p]);
@@ -429,7 +429,7 @@ fn a_crash_after_the_remaining_commands_converges() {
 /// with one rename, so the only cross-store crash is after the Namespace exists.
 #[test]
 fn a_crash_during_init_is_recoverable() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("fresh");
     let p = root.to_str().unwrap().to_owned();
     env.vars
@@ -526,12 +526,12 @@ fn a_crash_during_migration_or_restore_converges() {
 #[test]
 fn a_crash_around_a_projection_write_leaves_it_rebuildable() {
     for point in ["projection.after_fetch", "projection.after_commit"] {
-        let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let root = env.path().join("project");
         let p = root.to_str().unwrap();
         env.ok(&["init", p]);
         env.ok(&["--project", p, "pack", "create", "one"]);
-        let died = std::process::Command::new(env!("CARGO_BIN_EXE_calve"))
+        let died = std::process::Command::new(env!("CARGO_BIN_EXE_clv"))
             .isolated(env.path().join("d"), env.path().join("c"))
             .env("CALVE_FAULT", point)
             .args([
@@ -561,12 +561,12 @@ fn a_crash_around_a_projection_write_leaves_it_rebuildable() {
 /// A daemon dying while it opens a Project: nothing is left half open.
 #[test]
 fn a_crash_while_a_daemon_opens_a_project_recovers() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("project");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
     let run = |fault: Option<&str>, args: &[&str]| {
-        let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_calve"));
+        let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_clv"));
         c.isolated(env.path().join("d"), env.path().join("c"));
         if let Some(f) = fault {
             c.env("CALVE_FAULT", f);

@@ -109,7 +109,7 @@ fn output(root: &Path, program: &str, args: &[&str]) -> String {
 /// OS, toolchain, lock hashes and pinned revisions of this run.
 fn fingerprint(root: &Path) -> Result<Value> {
     let lock = std::fs::read(root.join("Cargo.lock"))?;
-    let binary = root.join("target/debug/calve");
+    let binary = root.join("target/debug/clv");
     Ok(json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,

@@ -24,7 +24,7 @@ pub fn json_data(stdout: &[u8]) -> Value {
         .unwrap_or(Value::Null)
 }
 
-/// Points a spawned `calve`, `calved` or re-executed test at isolated roots on every platform:
+/// Points a spawned `clv`, `calved` or re-executed test at isolated roots on every platform:
 /// data in `<data_home>/calve`, configuration in `<config_home>/calve`. They go through Calve's
 /// test-only overrides (`calve_app::paths`), which debug builds honour under `CALVE_TEST_GUARD`
 /// (set for every test by `.cargo/config.toml`); the XDG variables too, for code that reads them.
@@ -57,7 +57,7 @@ pub struct Env {
     pub calve: PathBuf,
     /// The signed fixture catalog trusted by [`Env::trust_fixture`].
     pub catalog: Option<tuf::Repo>,
-    /// Extra environment for every `calve` run (e.g. a test `PATH`).
+    /// Extra environment for every `clv` run (e.g. a test `PATH`).
     pub vars: Vec<(String, std::ffi::OsString)>,
 }
 
@@ -100,7 +100,7 @@ pub struct Run {
 }
 
 impl Env {
-    /// `calve` is the binary under test, normally `env!("CARGO_BIN_EXE_calve")`.
+    /// `calve` is the path of the binary under test, normally `env!("CARGO_BIN_EXE_clv")`.
     pub fn new(calve: &str) -> Self {
         // Cross-built Windows tests carry Linux paths in `CARGO_BIN_EXE_*`; a native run points
         // `CALVE_WIN_BIN` at the directory holding the executables (as `daemon_windows` does).
@@ -151,7 +151,7 @@ impl Env {
         self.temp.path()
     }
 
-    /// Runs `calve --json --no-daemon-start <args>` without asserting success.
+    /// Runs `clv --json --no-daemon-start <args>` without asserting success.
     pub fn run(&self, args: &[&str]) -> Run {
         let mut command = Command::new(&self.calve);
         isolate(&mut command, &self.path().join("d"), &self.path().join("c"));
@@ -160,7 +160,7 @@ impl Env {
             .args(["--json", "--no-daemon-start"])
             .args(args)
             .output()
-            .expect("run calve");
+            .expect("run clv");
         Run {
             success: output.status.success(),
             value: json_data(&output.stdout),

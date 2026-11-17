@@ -1,8 +1,8 @@
 //! Supervised child processes (rev 10 §16.3, ADR 0017).
 //!
-//! Unix: the parent spawns `calve __exec-confined` as the leader of a new process group; the
-//! helper sets PDEATHSIG, closes the registration race, kills its group on SIGTERM/SIGINT/SIGHUP,
-//! applies Landlock (Linux), runs the worker inside its group and **reports the result before
+//! Unix: the parent re-executes itself (`clv` or `calved`) as `__exec-confined`, the leader of a
+//! new process group; the helper sets PDEATHSIG, closes the registration race, kills its group on
+//! SIGTERM/SIGINT/SIGHUP, applies Landlock (Linux), runs the worker inside its group and **reports the result before
 //! killing the group**: over a Unix socket the parent acks after journaling it, or, if the parent
 //! is gone, through a result file the helper opened before Landlock (CLOEXEC, so the worker never
 //! holds it). Every spawn has a journal in the runtime directory (`spawn/<id>.journal`), so a
@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use crate::{Error, Result};
 
-/// The hidden helper mode: `calve __exec-confined <parent pid> <spawn dir> <id> -- <argv>`.
+/// The hidden helper mode: `clv __exec-confined <parent pid> <spawn dir> <id> -- <argv>`.
 pub const HELPER_MODE: &str = "__exec-confined";
 /// Trampoline that sets the worker's resource limits on itself, then becomes the worker.
 pub const RLIMIT_MODE: &str = "__exec-limited";
@@ -925,7 +925,7 @@ fn limit_arg(limits: &crate::config::ResourceLimits) -> String {
     format!("{},{}", part(limits.memory_bytes), part(limits.cpu_seconds))
 }
 
-/// `calve __exec-limited <limits> -- <argv>`: sets the limits on itself (hard and soft, so the
+/// `clv __exec-limited <limits> -- <argv>`: sets the limits on itself (hard and soft, so the
 /// worker cannot raise them) and replaces itself with the worker; limits survive `exec`.
 /// The worker's command is built before the limits apply, so nothing here allocates after.
 #[cfg(unix)]

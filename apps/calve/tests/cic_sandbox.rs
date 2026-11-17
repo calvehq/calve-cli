@@ -1,4 +1,4 @@
-//! Supervised CIC sandbox (`calve __cic-sandbox`, rev 10 §6.7, ADR 0018): the child serves the
+//! Supervised CIC sandbox (`clv __cic-sandbox`, rev 10 §6.7, ADR 0018): the child serves the
 //! same bytes as the in-process host, refuses a module whose digest differs from the installed
 //! one, and is killed on the hard wall-clock deadline even when the guest evades fuel slicing.
 
@@ -11,7 +11,7 @@ use calve_testkit::cic::*;
 use serde_json::json;
 
 fn calve() -> &'static Path {
-    Path::new(env!("CARGO_BIN_EXE_calve"))
+    Path::new(env!("CARGO_BIN_EXE_clv"))
 }
 
 fn supervised(path: &Path, cfg: &HostConfig) -> SandboxDriver {

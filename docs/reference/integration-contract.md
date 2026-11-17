@@ -34,7 +34,7 @@ Stateless: `describe`, `detect{markers}`, `check_plan`, `diff`, `classify`. Stre
 ## Declarations (`calve.integration/1`)
 The host has no domain knowledge (INV-022); everything comes from the package's signed metadata:
 - `files` — the Project's file domain: `resource_kind`, `put` (`{digest, size, content}`), `delete` (`{previous_digest}`), `history` (kinds valid only in recorded history, read as moves `{from, digest, size, content}`), `write_action`, optional `verifier`, `evaluator`, and `ignore_files` (plain names whose text the host passes to `classify`). Requires `capture.v1` and `classify.v1`. Exactly one active package may declare it.
-- `resources[]` — `{short, kind, set, remove, write_action}` for `calve resource set <short>:<name>=JSON`.
+- `resources[]` — `{short, kind, set, remove, write_action}` for `clv resource set <short>:<name>=JSON`.
 - `checks` — `{verifier}` judging Calve's `org.calve.check-result/v1` evidence; requires `detect.v1` and `check_plan.v1`.
 Every kind must be prefixed with the extension id. Harness and provider ids are derived (`<id>.capture`, `.materialize`, `.edit`, `.local`).
 

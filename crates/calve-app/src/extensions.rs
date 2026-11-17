@@ -237,7 +237,7 @@ fn require_fresh(catalog: Option<&str>) -> Result<()> {
             return Err(crate::coded(
                 "CATALOG_STALE",
                 format!(
-                    "catalog {name} has expired revocation data; run `calve extension catalog refresh {name}`"
+                    "catalog {name} has expired revocation data; run `clv extension catalog refresh {name}`"
                 ),
             ));
         }
@@ -325,7 +325,7 @@ pub fn uninstall(id: &str, version: Option<&str>) -> Result<Value> {
     Ok(json!({"removed": removed}))
 }
 
-/// Crash reconciliation of unfinished install/retire journals (`calve recover`).
+/// Crash reconciliation of unfinished install/retire journals (`clv recover`).
 pub fn recover_installs() -> Result<Value> {
     Ok(json!(installer()?.recover()?))
 }
@@ -556,7 +556,7 @@ impl Project {
                     format!("EXTENSION_IDENTITY_MISMATCH: {why}; the registration was removed")
                 }
                 Err(e) => format!(
-                    "EXTENSION_IDENTITY_MISMATCH: {why}; removing the registration FAILED ({e}) — run `calve extension disable {}` before using this Project",
+                    "EXTENSION_IDENTITY_MISMATCH: {why}; removing the registration FAILED ({e}) — run `clv extension disable {}` before using this Project",
                     r.manifest.id
                 ),
             }));

@@ -1180,7 +1180,7 @@ fn execution(app: &App, id: &str) -> Screen {
                             app,
                             Tone::Warning,
                             format!(
-                                "Showing the last {} lines · full log: calve execution logs {id}",
+                                "Showing the last {} lines · full log: clv execution logs {id}",
                                 value["output"].as_array().map_or(0, Vec::len)
                             ),
                         )]
@@ -3340,12 +3340,12 @@ fn projects(app: &App) -> Screen {
     let empty = if app.welcome.is_some() {
         (
             "No Calve project found.".into(),
-            "Run calve init <path>, or :project register <path>.".into(),
+            "Run clv init <path>, or :project register <path>.".into(),
         )
     } else {
         (
             "No registered Projects.".into(),
-            "Run calve init in a directory, or :project register <path>.".into(),
+            "Run clv init in a directory, or :project register <path>.".into(),
         )
     };
     let mut screen = Screen::new(Body::Table(Table {
@@ -3586,7 +3586,7 @@ fn inbox(app: &App) -> Screen {
     screen
 }
 
-/// The remedy commands of a recovery item, by its source (`calve capture|materialize|supersede`).
+/// The remedy commands of a recovery item, by its source (`clv capture|materialize|supersede`).
 fn recovery_actions(key: &str) -> Vec<PaletteItem> {
     let Some((source, id)) = key.split_once(':') else {
         return vec![];

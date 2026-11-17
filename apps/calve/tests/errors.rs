@@ -24,7 +24,7 @@ struct Failure {
 
 impl T {
     fn new() -> Self {
-        let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let root = env.path().join("project");
         let p = root.to_str().unwrap().to_owned();
         env.ok(&["init", &p]);

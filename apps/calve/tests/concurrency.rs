@@ -18,7 +18,7 @@ struct T {
 
 impl T {
     fn new(harnesses: &str) -> Self {
-        let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+        let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
         let root = env.path().join("project");
         let p = root.to_str().unwrap().to_owned();
         env.ok(&["init", &p]);
@@ -59,7 +59,7 @@ impl T {
     }
     /// `execution start` as its own process; the worker outlives this call.
     fn start(&self, pack: &str, harness: &str) -> Child {
-        Command::new(env!("CARGO_BIN_EXE_calve"))
+        Command::new(env!("CARGO_BIN_EXE_clv"))
             .isolated(self.env.path().join("d"), self.env.path().join("c"))
             .envs(self.env.vars.iter().map(|(k, v)| (k, v)))
             .args(self.args(&["--json", "--no-daemon-start", "execution", "start", pack]))

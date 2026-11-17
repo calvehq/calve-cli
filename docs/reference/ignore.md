@@ -4,6 +4,6 @@ Which paths a scan skips is decided by the enabled file package (its `classify` 
 
 The package declares its ignore-file names; Calve reads those files (at the root and in ancestor directories of each scanned entry) and passes their text to `classify`, one directory batch at a time, so ignored directories are never traversed or hashed.
 
-- `calve ignore check <path>`: the package's decision and the rule it reports (a trailing `/` checks a directory).
-- `calve ignore list`: Calve's hard rule, then each line of the root ignore file; built-in defaults are applied by the package.
-- `calve ignore add <pattern>` / `remove <pattern>`: edit the root ignore file; the package validates the new rules before the file is replaced.
+- `clv ignore check <path>`: the package's decision and the rule it reports (a trailing `/` checks a directory).
+- `clv ignore list`: Calve's hard rule, then each line of the root ignore file; built-in defaults are applied by the package.
+- `clv ignore add <pattern>` / `remove <pattern>`: edit the root ignore file; the package validates the new rules before the file is replaced.

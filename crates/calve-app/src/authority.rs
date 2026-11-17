@@ -140,7 +140,7 @@ pub(crate) fn ensure_instance(root: &Path) -> Result<()> {
             Err(crate::detailed(
                 "PROJECT_IDENTITY_CONFLICT",
                 format!(
-                    "{} is an inactive copy of Project {id}, which is active at {}; it is read-only until `calve project adopt-copy` gives it its own identity",
+                    "{} is an inactive copy of Project {id}, which is active at {}; it is read-only until `clv project adopt-copy` gives it its own identity",
                     here.display(),
                     bound.display()
                 ),
@@ -155,7 +155,7 @@ pub(crate) fn unavailable(project_id: &str) -> crate::Error {
     coded(
         "PROJECT_IDENTITY_CONFLICT",
         format!(
-            "this machine holds no authority for Project {project_id}; adopt the copy with `calve project adopt-copy` after `calve project authority-import`"
+            "this machine holds no authority for Project {project_id}; adopt the copy with `clv project adopt-copy` after `clv project authority-import`"
         ),
     )
 }

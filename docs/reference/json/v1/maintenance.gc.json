@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "calve maintenance gc --json",
+  "title": "clv maintenance gc --json",
   "description": "The `data` of the v1 envelope {\"api_version\":\"1\",\"command\",\"data\"}, generated from its response type (calve-api `responses`).",
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "GcReport",
-    "description": "`calve maintenance gc`: with `--dry-run`, `classes`; otherwise `planned` and `removed`.",
+    "description": "`clv maintenance gc`: with `--dry-run`, `classes`; otherwise `planned` and `removed`.",
     "type": "object",
     "properties": {
       "dry_run": {

@@ -347,7 +347,7 @@ impl ConfigPaths {
                     file.integrations.clear();
                     result.unapproved = Some(path.clone());
                     result.warnings.push(format!(
-                        "{}: providers, harnesses and check commands are ignored until `calve config approve`",
+                        "{}: providers, harnesses and check commands are ignored until `clv config approve`",
                         path.display()
                     ));
                 }

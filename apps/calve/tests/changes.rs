@@ -5,7 +5,7 @@ use calve_testkit::Env;
 /// The change feed returns immediately on change and waits otherwise.
 #[test]
 fn change_feed_long_polls() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);

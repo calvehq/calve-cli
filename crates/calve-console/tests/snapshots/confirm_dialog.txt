@@ -12,7 +12,7 @@
 │  Events            ││ │Target      cpk_agqykfiufbyifoybnnpkrzexje                            │10-29 00:35:13 UTC by  │
 │  Authority         ││ │× sealed candidate                                                    │d7lklnzq6eeeu          │
 │                    ││ │                                                                      │ed     1 files  +1 -0  │
-│ SYSTEM             ││ │calve pack abandon cpk_agqykfiufbyifoybnnpkrzexje --generation 2      │nce    0               │
+│ SYSTEM             ││ │clv pack abandon cpk_agqykfiufbyifoybnnpkrzexje --generation 2        │nce    0               │
 │  Projects          ││ │                                                                      │                       │
 │  Inbox           2 ││ │Enter confirm     Esc cancel                                          │mote: pack is OPEN;    │
 │  Providers         ││ └──────────────────────────────────────────────────────────────────────┘and qualify it first   │

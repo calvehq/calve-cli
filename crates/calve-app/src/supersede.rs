@@ -129,7 +129,7 @@ pub(crate) fn finished(path: &Path) -> bool {
     Journal::read(path).is_ok_and(|o| read_saga(&o.records).state == DONE)
 }
 
-/// `calve supersede list`, through its contract type (an unknown state is a corrupt journal).
+/// `clv supersede list`, through its contract type (an unknown state is a corrupt journal).
 pub fn list(root: &Path) -> Result<Vec<calve_api::responses::SupersedeSaga>> {
     let mut out: Vec<Value> = vec![];
     let Ok(rd) = fs::read_dir(dir(root)) else {
@@ -264,7 +264,7 @@ impl Project {
             return Err(crate::detailed(
                 "SUPERSEDE_CONFLICT",
                 format!(
-                    "{pack} is already being superseded by {saga} ({state}); resume it with `calve supersede resume {saga}`"
+                    "{pack} is already being superseded by {saga} ({state}); resume it with `clv supersede resume {saga}`"
                 ),
                 json!({"saga": saga, "state": state}),
             ));

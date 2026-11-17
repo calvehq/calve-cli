@@ -1,6 +1,6 @@
 //! CIC host (rev 10 §6.2, §6.7; ADR 0004, ADR 0018): module validation, one fresh wasmi
 //! instance per session, fuel slices with a soft wall-clock deadline, the exact buffer and
-//! bounds rules, and the supervised child (`calve __cic-sandbox`) that the parent kills on the
+//! bounds rules, and the supervised child (`clv __cic-sandbox`) that the parent kills on the
 //! hard deadline. Isolation comes from wasm without imports; the child's self-restriction is
 //! defense in depth only.
 
@@ -592,7 +592,7 @@ impl Driver for SandboxDriver {
     }
 }
 
-/// The Calve executable that serves `__cic-sandbox` (the running binary: `calve` or `calved`).
+/// The Calve executable that serves `__cic-sandbox` (the running binary: `clv` or `calved`).
 pub fn sandbox_program() -> Result<PathBuf, HostError> {
     // Debug builds only: in-process library tests run inside a test binary that has no sandbox
     // mode, so they point at a built `calve`. Release binaries never read the variable.
@@ -618,7 +618,7 @@ pub fn hidden_mode() -> Option<i32> {
     }
 }
 
-/// Child entry point: `calve __cic-sandbox <wasm> <sha256> <fuel_slice> <fuel_per_call>
+/// Child entry point: `clv __cic-sandbox <wasm> <sha256> <fuel_slice> <fuel_per_call>
 /// <soft_ms> <max_memory> <max_request> <max_response>`. Reads the module, checks its digest,
 /// self-restricts (Linux: Landlock deny-all + no_new_privs), then serves frames on stdio.
 pub fn serve_child(args: &[String]) -> i32 {
@@ -745,7 +745,7 @@ pub fn restrict_self() -> &'static str {
     "unsupported"
 }
 
-/// What `calve __cic-sandbox` measures on this host.
+/// What `clv __cic-sandbox` measures on this host.
 pub fn probe_landlock() -> Option<String> {
     let out = Command::new(sandbox_program().ok()?)
         .args([SANDBOX_MODE, "--probe"])

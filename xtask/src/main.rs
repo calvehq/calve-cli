@@ -220,7 +220,7 @@ fn dist(args: &[String]) -> DynResult {
         ""
     };
     // Test hooks are compiled out of release builds; a protocol-check bypass must never ship.
-    for binary in ["calve", "calved"] {
+    for binary in ["clv", "calved"] {
         let bytes = fs::read(bin_dir.join(format!("{binary}{exe}")))?;
         if let Some(hook) = release::forbidden_hook(&bytes) {
             return Err(format!("{binary} contains the test hook {hook}").into());
@@ -258,7 +258,7 @@ fn dist(args: &[String]) -> DynResult {
     let name = format!("calve-{version}-{triple}");
     let inventory = dist.join(format!("{name}.THIRD-PARTY-LICENSES.txt"));
     fs::write(&inventory, release::license_inventory(&packages))?;
-    let mut files: Vec<(PathBuf, String, bool)> = ["calve", "calved"]
+    let mut files: Vec<(PathBuf, String, bool)> = ["clv", "calved"]
         .iter()
         .map(|b| (bin_dir.join(format!("{b}{exe}")), format!("{b}{exe}"), true))
         .collect();
@@ -483,9 +483,9 @@ fn smoke_test(dist: &Path, sums: &BTreeMap<String, String>) -> DynResult {
     release::unpack(&archive, &work)?;
     let dir = fs::read_dir(&work)?.next().ok_or("empty archive")??.path();
     let exe = if cfg!(windows) { ".exe" } else { "" };
-    let calve = dir.join(format!("calve{exe}"));
+    let clv = dir.join(format!("clv{exe}"));
     let run = |args: &[&str]| -> DynResult<String> {
-        let out = std::process::Command::new(&calve)
+        let out = std::process::Command::new(&clv)
             .env_clear()
             .env("HOME", work.join("home"))
             .env("XDG_DATA_HOME", work.join("data"))
@@ -501,7 +501,7 @@ fn smoke_test(dist: &Path, sums: &BTreeMap<String, String>) -> DynResult {
             .args(args)
             .output()?;
         if !out.status.success() {
-            return Err(format!("calve {args:?}: {}", String::from_utf8_lossy(&out.stderr)).into());
+            return Err(format!("clv {args:?}: {}", String::from_utf8_lossy(&out.stderr)).into());
         }
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     };
@@ -525,6 +525,10 @@ fn smoke_test(dist: &Path, sums: &BTreeMap<String, String>) -> DynResult {
         if !dir.join(f).is_file() {
             return Err(format!("archive lacks {f}").into());
         }
+    }
+    // `clv` is the only CLI executable; the pre-release name must not ship beside it.
+    if dir.join(format!("calve{exe}")).exists() {
+        return Err(format!("archive ships the retired executable calve{exe}").into());
     }
     println!(
         "clean install from {}: version, init, intent, pack, status OK ({} bytes of status)",
@@ -553,7 +557,7 @@ fn cli_reference(check: bool) -> Result<(), Box<dyn std::error::Error>> {
     use clap::CommandFactory;
     #[derive(clap::Parser)]
     #[command(
-        name = "calve",
+        name = "clv",
         about = "See the whole change. Decide what becomes real."
     )]
     struct Cli {
@@ -603,17 +607,17 @@ fn cli_reference(check: bool) -> Result<(), Box<dyn std::error::Error>> {
         .filter(|s| !s.is_hide_set() && s.get_name() != "help")
     {
         body.push_str(&format!(
-            "\n## `calve {}`\n\n| Command | Description |\n|---|---|\n",
+            "\n## `clv {}`\n\n| Command | Description |\n|---|---|\n",
             top.get_name()
         ));
         if top.get_subcommands().next().is_none() {
             walk(
                 &clap::Command::new("").subcommand(top.clone()),
-                "calve",
+                "clv",
                 &mut body,
             );
         } else {
-            walk(top, &format!("calve {}", top.get_name()), &mut body);
+            walk(top, &format!("clv {}", top.get_name()), &mut body);
         }
     }
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../docs/reference/cli.md");

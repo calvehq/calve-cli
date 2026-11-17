@@ -33,7 +33,7 @@ fn walk(env: &Env, p: &str, noun: &str) -> Vec<String> {
 
 #[test]
 fn intents_and_packs_page_without_gaps_or_repeats() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
@@ -56,7 +56,7 @@ fn intents_and_packs_page_without_gaps_or_repeats() {
 /// outside the time bounds.
 #[test]
 fn indexed_activity_filters_match_their_definitions() {
-    let env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap();
     env.ok(&["init", p]);
@@ -98,7 +98,7 @@ fn indexed_activity_filters_match_their_definitions() {
 /// authoritative per-object reads.
 #[test]
 fn console_views_are_keyset_pages() {
-    let mut env = Env::new(env!("CARGO_BIN_EXE_calve"));
+    let mut env = Env::new(env!("CARGO_BIN_EXE_clv"));
     let root = env.path().join("p");
     let p = root.to_str().unwrap().to_owned();
     env.ok(&["init", &p]);

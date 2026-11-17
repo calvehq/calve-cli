@@ -6,10 +6,10 @@ use std::process::Command;
 use serde_json::Value;
 
 fn calve(data: &Path, args: &[&str]) -> (bool, Value, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+    let output = Command::new(env!("CARGO_BIN_EXE_clv"))
         .isolated(data.join("d"), data.join("c"))
         .env("CALVE_TEST_SECRET", "s3cret")
-        // Set for calve, never for its workers: proves their environment is cleared (HOME
+        // Set for clv, never for its workers: proves their environment is cleared (HOME
         // cannot, as the MSYS shell on Windows sets one when it is missing).
         .env("CALVE_LEAK_PROBE", "leaked")
         .args(["--json", "--no-daemon-start"])
@@ -347,7 +347,7 @@ fn keyring_secrets_resolve_at_launch() {
         fs::set_permissions(&store, fs::Permissions::from_mode(0o755)).unwrap();
     }
     let run = |args: &[&str]| {
-        let output = Command::new(env!("CARGO_BIN_EXE_calve"))
+        let output = Command::new(env!("CARGO_BIN_EXE_clv"))
             .isolated(data.join("d"), data.join("c"))
             .env("CALVE_KEYRING_COMMAND", &store)
             .args(["--json", "--no-daemon-start"])

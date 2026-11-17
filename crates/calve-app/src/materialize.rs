@@ -418,7 +418,7 @@ impl Project {
         crate::detailed(
             "MATERIALIZE_CONFLICT",
             format!(
-                "{}: {reason}; nothing was reversed. Inspect {} and run `calve materialize resolve {} --keep ours|theirs`",
+                "{}: {reason}; nothing was reversed. Inspect {} and run `clv materialize resolve {} --keep ours|theirs`",
                 m.path,
                 artifacts
                     .strip_prefix(&self.root)

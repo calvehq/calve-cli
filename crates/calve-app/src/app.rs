@@ -131,7 +131,7 @@ pub fn fault(error: Error) -> Fault {
             (
                 "CAPABILITY_DENIED",
                 format!(
-                    "extension {extension} lacks the host capability {capability}, so OpenAEVC denied the operation; grant it with `calve extension grant {extension} {capability}`"
+                    "extension {extension} lacks the host capability {capability}, so OpenAEVC denied the operation; grant it with `clv extension grant {extension} {capability}`"
                 ),
                 false,
                 Some(
@@ -1885,8 +1885,10 @@ async fn dispatch(request: Request) -> Result<Value> {
                     "workers cannot be fully confined here: {containment}")}));
             }
             if product_db["ok"] != true {
-                findings.push(json!({"code":"PRODUCT_DB","message":"product database integrity check failed",
-                    "remedy":"calve maintenance check; restore .calve/product.sqlite3 from backup"}));
+                findings.push(
+                    json!({"code":"PRODUCT_DB","message":"product database integrity check failed",
+                    "remedy":"clv maintenance check; restore .calve/product.sqlite3 from backup"}),
+                );
             }
             for item in extensions
                 .as_array()
@@ -1895,19 +1897,19 @@ async fn dispatch(request: Request) -> Result<Value> {
                 .filter(|e| e["healthy"] != true)
             {
                 findings.push(json!({"code":"EXTENSION","message":format!("extension {} is unhealthy", item["id"]),
-                    "remedy":format!("calve extension health; calve extension enable {}", item["id"].as_str().unwrap_or(""))}));
+                    "remedy":format!("clv extension health; clv extension enable {}", item["id"].as_str().unwrap_or(""))}));
             }
             if !recovery.is_empty() {
                 findings.push(json!({"code":"RECOVERY","message":format!("{} disposable leftover(s) found", recovery.len()),
-                    "remedy":"calve recover plan"}));
+                    "remedy":"clv recover plan"}));
             }
             if let Err(error) = &registration {
                 findings.push(json!({"code":"REGISTRATION","message":error.to_string(),
-                    "remedy":"calve project health <path>"}));
+                    "remedy":"clv project health <path>"}));
             }
             for warning in &settings.warnings {
                 findings.push(
-                    json!({"code":"CONFIG","message":warning,"remedy":"calve config validate"}),
+                    json!({"code":"CONFIG","message":warning,"remedy":"clv config validate"}),
                 );
             }
             let metrics = crate::observe::metrics(project.root.to_str());
@@ -2095,17 +2097,17 @@ fn init_report(project: &Project, registered: bool) -> Result<Value> {
     let integrity = project.check_product_db()?;
     let mut next: Vec<String> = if recommended.is_empty() {
         vec![
-            "calve extension catalog list".into(),
-            "calve extension search".into(),
+            "clv extension catalog list".into(),
+            "clv extension search".into(),
         ]
     } else {
         recommended
             .iter()
-            .map(|id| format!("calve extension enable {id} --acknowledge-native"))
+            .map(|id| format!("clv extension enable {id} --acknowledge-native"))
             .collect()
     };
-    next.push("calve intent create \"<goal>\"".into());
-    next.push("calve pack create \"<change>\"".into());
+    next.push("clv intent create \"<goal>\"".into());
+    next.push("clv pack create \"<change>\"".into());
     Ok(
         json!({"project_id":project.identity.project_id,"namespace_id":project.identity.namespace_id,
         "root":project.root,"registered":registered,"integrity":integrity,
@@ -2132,7 +2134,7 @@ async fn recover(root: &Path, command: &RecoverCommand) -> Result<Value> {
         RecoverCommand::Apply { yes: false, .. } => Err(crate::coded(
             "CONFIRMATION_REQUIRED",
             format!(
-                "recover apply would perform {} action(s); rerun with --yes after reviewing `calve recover plan` (and `recover inspect` for backups)",
+                "recover apply would perform {} action(s); rerun with --yes after reviewing `clv recover plan` (and `recover inspect` for backups)",
                 crate::recovery::plan(root)?.len()
             ),
         )),

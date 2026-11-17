@@ -48,7 +48,7 @@ fn run_example(name: &str) {
     let (out, err) = (logs.path().join("stdout"), logs.path().join("stderr"));
     let mut child = command
         .arg(&root)
-        .env("CALVE", env!("CARGO_BIN_EXE_calve"))
+        .env("CALVE", env!("CARGO_BIN_EXE_clv"))
         .stdout(std::fs::File::create(&out).unwrap())
         .stderr(std::fs::File::create(&err).unwrap())
         .spawn()

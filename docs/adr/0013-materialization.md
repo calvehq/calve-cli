@@ -22,7 +22,7 @@ Lost updates by writers outside Calve's control (e.g. a writer that overwrites C
 
 ## M4 implementation (2026-10-17)
 - `wal.rs` implements the WAL on Linux with `renameat2` EXCHANGE/NOREPLACE (probed in `.calve/tmp`), the post-mutation inode/digest check and displaced-content verification; conflicts keep `displaced`, `ours`, `current` and `meta.json` (0600 in 0700) and are never removed automatically (`maintenance gc --conflicts` only for resolved operations).
-- `calve materialize list|resume|resolve --keep ours|theirs|rollback --yes`; rollback revalidates the parent chain (nofollow), current content and backup per step.
+- `clv materialize list|resume|resolve --keep ours|theirs|rollback --yes`; rollback revalidates the parent chain (nofollow), current content and backup per step.
 - Provenance: one OpenAEVC execution per operation (`p.intent`/`p.ack`, interrupted attempts found by `changepack.created` discovery and acked or abandoned).
 - **Platform status:** macOS and Windows use the fallback primitives until M5 (`renamex_np`, `ReplaceFileW`/`MoveFileExW` are not wired yet), so on those platforms replace and delete are **refused by default** and need `--allow-unsafe-fs`. This is a behaviour change from M3 (plain rename) on Windows.
 - **Not yet covered:** ENOSPC injection; symlink, chmod, mkdir and rmdir steps (file domains produce file writes and deletes only; parents are created on demand).
