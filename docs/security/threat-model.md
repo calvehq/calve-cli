@@ -60,6 +60,6 @@ This document states what Calve defends, what it deliberately does not, and wher
 | Platform | Status |
 |---|---|
 | Linux x86_64 | Tested locally: full suites on WSL2 kernel 6.6, ext4 and tmpfs |
-| Windows x86_64 (gnu) | Tested natively from cross-compiled binaries. Other-user, squatting and remote checks are not tested; see [Windows boundary](windows-boundary.md) |
+| Windows x86_64 (gnu) | Tested natively from cross-compiled binaries, including other-user, squatting and loopback-remote checks with a second account; see [Windows boundary](windows-boundary.md) |
 | Windows MSVC | Not built yet |
 | macOS, aarch64 | Not built or tested yet |

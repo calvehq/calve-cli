@@ -665,11 +665,12 @@ mod acl {
     use windows_sys::Win32::Security::Authorization::{
         ConvertSecurityDescriptorToStringSecurityDescriptorW,
         ConvertStringSecurityDescriptorToSecurityDescriptorW, GetNamedSecurityInfoW,
-        SDDL_REVISION_1, SE_FILE_OBJECT,
+        SDDL_REVISION_1, SE_FILE_OBJECT, SetNamedSecurityInfoW,
     };
     use windows_sys::Win32::Security::{
-        DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
-        SECURITY_ATTRIBUTES,
+        ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, GetSecurityDescriptorOwner,
+        OWNER_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+        PSID, SECURITY_ATTRIBUTES,
     };
     use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
 
@@ -679,20 +680,15 @@ mod acl {
         p.encode_wide().chain(Some(0)).collect()
     }
 
-    /// `path` as a private directory, creating missing parents the ordinary way first.
-    pub fn create_private_dir(path: &Path) -> io::Result<()> {
-        if path.is_dir() {
-            return Ok(());
-        }
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+    /// The owner-only descriptor (owner: this user; protected DACL: this user and SYSTEM,
+    /// inherited by everything below), LocalAlloc'ed: the caller frees it with `LocalFree`.
+    fn private_descriptor() -> io::Result<PSECURITY_DESCRIPTOR> {
         let sid = sid_string(&own_sid()?)?;
         let sddl = wide(OsStr::new(&format!(
             "O:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)"
         )));
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
-        // SAFETY: `sddl` is NUL-terminated; `sd` receives a LocalAlloc'ed descriptor freed below.
+        // SAFETY: `sddl` is NUL-terminated; `sd` receives a LocalAlloc'ed descriptor.
         if unsafe {
             ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 sddl.as_ptr(),
@@ -704,6 +700,58 @@ mod acl {
         {
             return Err(io::Error::last_os_error());
         }
+        Ok(sd)
+    }
+
+    /// Makes an existing directory private, as Unix's chmod 0700 does: sets the owner and the
+    /// protected DACL of `private_descriptor`, which Windows propagates to existing children
+    /// (their ACEs inherited from a broader parent are replaced). Fails where this user may not
+    /// take ownership, e.g. a directory another user created.
+    fn make_private(path: &Path) -> io::Result<()> {
+        let sd = private_descriptor()?;
+        let (mut owner, mut dacl): (PSID, *mut ACL) = (std::ptr::null_mut(), std::ptr::null_mut());
+        let (mut defaulted, mut present) = (0, 0);
+        // SAFETY: `sd` is a valid descriptor; the out-pointers point into it and stay valid
+        // until it is freed below, after the last use.
+        let status = unsafe {
+            if GetSecurityDescriptorOwner(sd, &mut owner, &mut defaulted) == 0
+                || GetSecurityDescriptorDacl(sd, &mut present, &mut dacl, &mut defaulted) == 0
+            {
+                LocalFree(sd);
+                return Err(io::Error::last_os_error());
+            }
+            let p = wide(path.as_os_str());
+            let status = SetNamedSecurityInfoW(
+                p.as_ptr(),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION
+                    | DACL_SECURITY_INFORMATION
+                    | PROTECTED_DACL_SECURITY_INFORMATION,
+                owner,
+                std::ptr::null_mut(),
+                dacl,
+                std::ptr::null(),
+            );
+            LocalFree(sd);
+            status
+        };
+        if status != 0 {
+            return Err(io::Error::from_raw_os_error(status as i32));
+        }
+        Ok(())
+    }
+
+    /// `path` as a private directory, creating missing parents the ordinary way first. An
+    /// existing directory is made private too: something else may have created it first (the
+    /// logger creates the data root's `logs`, and with it the data root).
+    pub fn create_private_dir(path: &Path) -> io::Result<()> {
+        if path.is_dir() {
+            return make_private(path);
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let sd = private_descriptor()?;
         let sa = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: sd,
@@ -718,7 +766,7 @@ mod acl {
         if ok == 0 {
             // Lost a race to another creator: the directory exists, as with create_dir_all.
             if error.raw_os_error() == Some(ERROR_ALREADY_EXISTS as i32) && path.is_dir() {
-                return Ok(());
+                return make_private(path);
             }
             return Err(error);
         }
@@ -1216,7 +1264,9 @@ mod tests {
         } else {
             sid
         };
-        let own = security_sddl(&dir).unwrap();
+        // Protected (`P`); `AI` (auto-inherited) is added when an existing directory is made
+        // private, and changes neither the owner nor the ACEs.
+        let own = security_sddl(&dir).unwrap().replacen("D:PAI(", "D:P(", 1);
         assert_eq!(
             own,
             format!("O:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)"),
@@ -1224,8 +1274,48 @@ mod tests {
         );
         // The file inside carries only the inherited ACEs (ID flag), nothing broader.
         let file = security_sddl(&dir.join("f")).unwrap();
-        let dacl = &file[file.find("D:").unwrap()..];
+        let dacl = file[file.find("D:").unwrap()..].replacen("D:AI(", "D:(", 1);
         assert_eq!(dacl, format!("D:(A;ID;FA;;;{sid})(A;ID;FA;;;SY)"), "{file}");
+    }
+
+    /// A directory something else created first (the logger creates the data root through
+    /// `logs`) is made private too, and so is what it already holds (other-user check on
+    /// Windows 11 found `workspace.sqlite3` and `logs\calve.jsonl` readable).
+    #[test]
+    fn an_existing_directory_and_its_contents_are_made_private() {
+        let d = tempfile::tempdir().unwrap();
+        let dir = d.path().join("data");
+        std::fs::create_dir_all(dir.join("logs")).unwrap();
+        std::fs::write(dir.join("logs").join("calve.jsonl"), b"x").unwrap();
+        std::fs::write(dir.join("workspace.sqlite3"), b"x").unwrap();
+        create_private_dir(&dir).unwrap();
+        let sid = user_sid().unwrap();
+        let sid = if sid.ends_with("-500") {
+            "LA".to_owned()
+        } else {
+            sid
+        };
+        // Protected (`P`); `AI` (auto-inherited) is added when an existing directory is made
+        // private, and changes neither the owner nor the ACEs.
+        let own = security_sddl(&dir).unwrap().replacen("D:PAI(", "D:P(", 1);
+        assert_eq!(
+            own,
+            format!("O:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)"),
+            "{own}"
+        );
+        for child in [
+            dir.join("workspace.sqlite3"),
+            dir.join("logs").join("calve.jsonl"),
+        ] {
+            let s = security_sddl(&child).unwrap();
+            let dacl = s[s.find("D:").unwrap()..].replacen("D:AI(", "D:(", 1);
+            assert_eq!(
+                dacl,
+                format!("D:(A;ID;FA;;;{sid})(A;ID;FA;;;SY)"),
+                "{}: {s}",
+                child.display()
+            );
+        }
     }
 
     fn open_dir(path: &std::path::Path) -> std::fs::File {

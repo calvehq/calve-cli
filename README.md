@@ -29,7 +29,8 @@ Calve pins OpenAEVC `v0.1.0` from its public tag; see [compatibility](docs/compa
 
 ```sh
 clv init my-project && cd my-project
-clv extension catalog add first-party <url> --root root.json --root-digest <sha256>
+curl -fsSLO https://calvehq.github.io/calve-extensions/metadata/1.root.json
+clv extension catalog add first-party https://calvehq.github.io/calve-extensions/ --root 1.root.json --root-digest 35eb235e04e8c5417a762193ed137cb83d0ffcd96a2773378298b220e4f96fe7
 clv extension enable org.calve.software --acknowledge-native   # from the signed catalog
 clv intent create "Say hello"
 clv pack create "Add README" --intent <intent> --require-review

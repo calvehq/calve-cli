@@ -35,6 +35,7 @@ ignore = [
     # Bundled SQLite < 3.54 (libsqlite3-sys 0.35 via rusqlite 0.37). OpenAEVC v0.1.0 requires
     # rusqlite 0.37 and only one crate may link sqlite3, so Calve cannot move alone. Owner-accepted
     # 2026-11-11 while Calve stays on OpenAEVC v0.1.0; remove with a release on rusqlite >= 0.41.
+    # Owner decision 2026-11-17: Calve v0.1.0 ships with it; Calve v0.2.0 is planned to fix it.
     { id = "RUSTSEC-2026-0459", reason = "fixed only past OpenAEVC v0.1.0's rusqlite 0.37; owner-accepted until an OpenAEVC release moves to rusqlite >= 0.41" },
 ]
 

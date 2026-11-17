@@ -50,7 +50,8 @@ All notable changes to Calve are documented here.
   `clv pack verify`, …); the daemon stays `calved`. Commands, flags, JSON output and exit codes
   are unchanged, and so are `.calve/`, the data and configuration directories, `CALVE_*`
   variables, extension IDs and release archive names (`calve-<version>-<target>`). No `calve`
-  executable ships: no version was released under that name.
+  executable ships: no version was released under that name. In PowerShell, `clv` is a built-in
+  alias for `Clear-Variable`: type `clv.exe` or remove the alias in your profile (install guide).
 - **Regular CI runs only for pull requests and pushes to `master`**, no longer for every branch
   push or on a weekly schedule. Tag-triggered releases are unchanged.
 - **`pack reopen` refuses a pack with effects** (`REOPEN_UNSAFE`), leaving it unchanged: OpenAEVC
@@ -58,6 +59,12 @@ All notable changes to Calve are documented here.
 
 ### Fixed
 
+- **Windows: the data root is owner-only even when something created it first.** A private
+  directory that already existed kept the permissions it inherited, so when the logger created the
+  data root (through `logs`), `workspace.sqlite3` and `logs\calve.jsonl` were readable by other
+  users wherever the parent folder allowed it (the default `%LOCALAPPDATA%` does not). Existing
+  directories now get the owner-only DACL too, propagated to what they hold, as `chmod 0700` does
+  on Unix; a directory you cannot take ownership of is refused.
 - A pack refresh no longer holds a transaction across awaits, which made concurrent writes fail.
 - **`execution cancel` works on a running execution.** It needed the Project writer lock, which the
   run holds until it ends, so it always failed with `PROJECT_LOCKED`.
@@ -158,6 +165,11 @@ All notable changes to Calve are documented here.
 
 ### Security
 
+- **Known issue: RUSTSEC-2026-0459.** The bundled SQLite (through OpenAEVC v0.1.0's
+  `rusqlite 0.37`) can disclose uninitialized memory when opening a crafted database or WAL file.
+  Calve reaches it only through files someone else wrote: `project adopt-copy` of a copied
+  Project and restoring a backup. Adopt or restore only copies you trust. Calve v0.2.0 is planned
+  to fix it ([OpenAEVC compatibility](docs/compatibility/openaevc.md)).
 - **Check plans need approval.** A checks package's own plan (from its CIC module) runs with your
   permissions, so `pack check` refuses with `CHECK_PLAN_UNAPPROVED` and prints each plan with its
   digest until you approve it with `--approve-plan <digest>`; the approval covers that exact plan
