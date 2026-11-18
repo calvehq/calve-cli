@@ -2,7 +2,7 @@
 
 Calve ships two binaries, `clv` (the command-line interface) and `calved` (the daemon), and no extensions. Extensions come from a signed catalog.
 
-> No version has been released yet. Until one is, [build from source](#from-source).
+> Releases: <https://github.com/calvehq/calve-cli/releases>. The latest is v0.1.0.
 
 ## From a release archive
 
