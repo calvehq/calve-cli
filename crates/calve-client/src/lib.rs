@@ -32,11 +32,21 @@ pub struct Client {
 /// The daemon socket (§12.2): in the platform runtime directory when there is one
 /// (`$XDG_RUNTIME_DIR/calve/<data root digest>/daemon.sock`, so each data root has its own
 /// daemon), otherwise in the data directory. The pid file sits beside the socket.
+/// When that path is too long for a socket (a deep data root), it is `daemon/daemon.sock` in the
+/// owner-only per-user socket directory ([`calve_app::paths::socket_dir`]).
 ///
 /// On Windows it is a named pipe per user and data root (§16.2): `\\.\pipe\calve-<digest>`.
 #[cfg(not(windows))]
 pub fn default_endpoint() -> Result<PathBuf> {
-    Ok(calve_app::registry::runtime_dir()?.join("daemon.sock"))
+    let endpoint = calve_app::registry::runtime_dir()?.join("daemon.sock");
+    // `sun_path` holds 104 bytes on macOS (108 on Linux), NUL included.
+    if endpoint.as_os_str().len() < 104 {
+        return Ok(endpoint);
+    }
+    // Its own subdirectory: the supervisor sweep removes stale `*.sock` files in socket_dir.
+    Ok(calve_app::paths::socket_dir()?
+        .join("daemon")
+        .join("daemon.sock"))
 }
 
 #[cfg(windows)]
@@ -226,6 +236,8 @@ impl Client {
                     return Ok(json!({"running":true,"already_running":true,"version":version}));
                 }
                 let log_path = daemon_log()?;
+                // Owner-only first: calved refuses a socket in a data root others can enter.
+                calve_app::journal::private_dir(&calve_app::registry::default_data_root()?)?;
                 if let Some(parent) = log_path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }

@@ -59,6 +59,14 @@ All notable changes to Calve are documented here.
 
 ### Fixed
 
+- **The daemon starts under a deep data root.** A socket path is limited to 104 bytes on macOS
+  (108 on Linux), so `calved` exited when `daemon.sock` in the data directory was longer (a home
+  path over about 56 bytes on macOS). The socket then lives in the owner-only per-user directory
+  `/tmp/calve-<uid>/<digest>/daemon/`, beside the supervisor sockets and hidden from confined
+  workers like them.
+- **`daemon start` works as the first command.** It created the data root with default
+  permissions, and calved refused to serve from it where the socket lives there (macOS); it now
+  creates it owner-only first.
 - **Windows: the data root is owner-only even when something created it first.** A private
   directory that already existed kept the permissions it inherited, so when the logger created the
   data root (through `logs`), `workspace.sqlite3` and `logs\calve.jsonl` were readable by other

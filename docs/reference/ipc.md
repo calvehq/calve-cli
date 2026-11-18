@@ -4,7 +4,7 @@ The CLI and console talk to `calved` over a local, private channel. Nothing list
 
 | Platform | Transport | Access control |
 |---|---|---|
-| Unix | Socket `daemon.sock` under `$XDG_RUNTIME_DIR/calve/<digest>/`, or in the data directory | Directory `0700`, socket `0600`, peer UID checked |
+| Unix | Socket `daemon.sock` under `$XDG_RUNTIME_DIR/calve/<digest>/`, or in the data directory, or under `/tmp/calve-<uid>/<digest>/daemon/` when that path is too long for a socket | Directory `0700`, socket `0600`, peer UID checked |
 | Windows | Named pipe `\\.\pipe\calve-<hash>` | Explicit user-only DACL, first-instance flag, remote clients rejected, impersonation SID check, client checks of the server's SID and image path |
 
 **Version.** The handshake carries `api_version`, currently **1**. A client refuses a daemon with a different API or product version (`DAEMON_INCOMPATIBLE`); `clv daemon restart` fixes it.

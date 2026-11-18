@@ -295,3 +295,44 @@ fn daemon_stop_uses_the_ipc_shutdown_frame() {
     assert!(status.success(), "{status}");
     assert!(!endpoint.exists());
 }
+
+#[test]
+fn the_daemon_starts_under_a_data_root_too_deep_for_a_socket() {
+    let temp = tempfile::tempdir().unwrap();
+    // `<data>/calve/daemon.sock` would exceed macOS's 104-byte sun_path (the release smoke test
+    // on a macOS runner, whose temporary directory is long).
+    let data = temp.path().join("d".repeat(110));
+    let json = |args: &[&str]| {
+        let out = cli(&data, &[&["--json"], args].concat());
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()
+    };
+    json(&["daemon", "start"]);
+    let status = json(&["daemon", "status"]);
+    assert_eq!(status["data"]["running"], true, "{status}");
+    json(&["daemon", "stop"]);
+    assert!(!data.join("calve/daemon.sock").exists());
+}
+
+#[test]
+fn daemon_start_is_the_first_command_on_a_fresh_machine() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("data");
+    // No XDG_RUNTIME_DIR (macOS): the socket lives in the data root, which this creates.
+    let start = cli(&data, &["--json", "daemon", "start"]);
+    assert!(
+        start.status.success(),
+        "{}",
+        String::from_utf8_lossy(&start.stderr)
+    );
+    let mode = std::fs::metadata(data.join("calve"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o700);
+    assert!(cli(&data, &["daemon", "stop"]).status.success());
+}
